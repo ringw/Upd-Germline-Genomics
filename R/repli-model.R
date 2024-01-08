@@ -1,4 +1,4 @@
-source('C:/Users/dringwa1/OneDrive - Johns Hopkins/Documents/scTJ/Rollutils.R')
+#source('C:/Users/dringwa1/OneDrive - Johns Hopkins/Documents/scTJ/Rollutils.R')
 
 repli_fit_hmm = function(repli, ident='Tj') {
   chrs = rowData(repli)$chr %>% recode(
@@ -7,11 +7,11 @@ repli_fit_hmm = function(repli, ident='Tj') {
   # chrs are continuous
   chr_lens = table(chrs)
   repli = assay(repli, 'pct')[, repli$ident == ident]
-  repli = repli %>% replace(!is.finite(repli), 0)
-  repli_kmeans = kmeans(repli, 3)
+  repli_kmeans = kmeans(repli[is.finite(repli[,1]), ], 3)
+  repli = na.approx(repli, na.rm=F) %>% replace(is.na(.), 0)
   
-  hmmlearn = import('hmmlearn')
-  np = import('numpy')
+  hmmlearn = reticulate::import('hmmlearn')
+  np = reticulate::import('numpy')
   np$random$seed(0L)
   hmm_dirichlet = 1000*diag(nrow=3) + matrix(0.0001, 3, 3)
   hmm = hmmlearn$hmm$GaussianHMM(n_components=3L, init_params='stc', transmat_prior = hmm_dirichlet, 
