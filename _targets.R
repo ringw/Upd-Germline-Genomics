@@ -263,20 +263,6 @@ list(
     publish_excel_results(Upd_glm, Upd_regression_somatic, Upd_regression_spmtc, Upd_regression_muscle, metafeatures, 'scRNA-seq-Regression/Enriched-Genes.xlsx'),
     format='file'
   ),
-  # tar_target(
-  #   germline_fpkm,
-  #   create_fpkm_reference_longest_isoform(
-  #     metafeatures, Upd_glm, c(1,0,0,0,0,0,0), 'scRNA-seq-Regression/Germline-FPKM.bed'
-  #   ),
-  #   format='file'
-  # ),
-  # tar_target(
-  #   somatic_fpkm,
-  #   create_fpkm_reference_longest_isoform(
-  #     metafeatures, Upd_glm, c(1,1,0,0,0,0,0), 'scRNA-seq-Regression/Somatic-FPKM.bed'
-  #   ),
-  #   format='file'
-  # ),
   tar_map(
     chic.fpkm.data,
     names = name,
