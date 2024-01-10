@@ -1,5 +1,6 @@
 # Stack feature TSS (as in bed format with flybase id) from BigWig. The required
-# features columns are: flybase, chr (as in load_flybase_bed).
+# features columns are:
+#     flybase, chr (as in load_flybase_bed), strand, start, end.
 flybase_big_matrix <- function(
   features, bw_path,
   before = 500, after = 1500
@@ -7,6 +8,7 @@ flybase_big_matrix <- function(
   coverage <- import(bw_path, "bigwig") %>% coverage(weight="score")
   mat_colnames <- seq(before+after) %>%
                       replace(. == before+1, "TSS")
+  chr_data <- split(features, features$chr)
   chr_data <- mapply(
     \(chr_bed, chr_coverage, chr_length) {
       data_rows <- expand.grid(
@@ -41,9 +43,9 @@ flybase_big_matrix <- function(
       )
       chr_data
     },
-    split(features, features$chr),
-    coverage[names(chr.lengths)],
-    chr.lengths,
+    chr_data,
+    coverage[names(chr_data)],
+    chr.lengths[names(chr_data)],
     SIMPLIFY=F
   )
   chr_data <- chr_data %>% do.call(rbind, .)
