@@ -16,6 +16,7 @@ repli_coverage_contrast <- function(
     min_rpkm=200,
     num_sorted_bases=10000
 ) {
+    if (file.exists(repli_hdf5)) file.rename(repli_hdf5, paste0(repli_hdf5, "~"))
     names(contrast) <- levels(colData$frac)
     contrast = contrast[contrast != 0]
     rpkm_data = matrix(

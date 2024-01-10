@@ -6,9 +6,24 @@ cluster_colors = list(
   others=hsv(0,0,0.9)
 )
 
+sc_quartile_colors = c(
+  low = hcl(252, 66, 37),
+  hcl(200, 37, 60),
+  hcl(137, 37, 80),
+  high = hcl(77, 87, 87)
+)
+
+sc_quartile_annotations = c(
+  low = hcl(252, 66, 50),
+  hcl(200, 37, 60),
+  hcl(137, 37, 80),
+  high = hcl(77, 87, 87)
+)
+
+# Single-cell dim reduc figure generator. Returns list of filenames.
 Upd_sc_figures = function(figures_dir, Upd_sc) {
   Upd_sc = Upd_sc %>% NormalizeData
-  dir.create(figures_dir, showWarnings = F)
+  dir.create(figures_dir, showW = F)
   cbind(Upd_sc@meta.data, Upd_sc[['umap']]@cell.embeddings, ident=Idents(Upd_sc)) %>% ggplot(
     aes(UMAP_1, UMAP_2, color=ident)
   ) + rasterize(geom_point(
@@ -24,7 +39,9 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
   ) + scale_x_continuous(
     breaks=c(-10,0,10)
   ) + scale_y_continuous(breaks=c(-7,0,10)) + theme_cowplot()
-  ggsave(paste(figures_dir, 'UMAP.svg', sep='/'), width=8, height=4.5)
+  filenames <- NULL
+  filenames <- c(paste(figures_dir, 'UMAP.svg', sep='/'), filenames)
+  ggsave(filenames[1], width=8, height=4.5)
 
   for (gene in c('vas','tj','lncRNA:roX2','Mst87F','soti','sunz','Act57B')) {
     gene.save = gene %>% str_replace('lncRNA:', '')
@@ -35,7 +52,7 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
         LogNormalize=Upd_sc[['RNA']][gene,] %>% as.numeric
       )
     gene.max.intensity = quantile(gene.data$LogNormalize, 0.99)
-    gene.max.intensity = c(Mst87F=5, Act57B=4)[gene] %>% replace(is.na(.), gene.max.intensity)
+    gene.max.intensity = c(Mst87F=5, Act57B=4, soti=3, sunz=2)[gene] %>% replace(is.na(.), gene.max.intensity)
     gene.data %>% ggplot(
       aes(UMAP_1, UMAP_2, color=LogNormalize)
     ) + rasterize(geom_point(
@@ -44,12 +61,12 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
       # option='magma', limits=c(0,gene.max.intensity), oob=squish
     scale_color_gradientn(
       colors = c(
-        low = hcl(170, 15, 90),
-        hcl(241, 50, 68),
-        hcl(255, 80, 60),
-        hcl(275, 100, 58),
-        hcl(285, 131, 51)
-      )
+        low = hcl(252, 66, 37),
+        hcl(200, 37, 60),
+        hcl(137, 37, 80),
+        hcl(77, 87, 87)
+      ),
+      limits = c(0, gene.max.intensity), oob = squish
     ) + scale_x_continuous(
       breaks=c(-10,0,10)
     ) + scale_y_continuous(breaks=c(-7,0,10)) + theme_cowplot(
@@ -58,8 +75,10 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
     ) + theme(
       plot.tag.position = c(0.1, 0.94)
     )
-    ggsave(paste0(figures_dir, '/UMAP-', gene.save, '.svg'), width=8, height=4.5)
+    filenames <- c(paste0(figures_dir, '/UMAP', gene.save, '.svg'), filenames)
+    ggsave(filenames[1], width=8, height=4.5)
   }
+  filenames
 }
 
 load_cell_cycle_score = function(Upd_sc, supplemental_data_xlsx) {
@@ -278,4 +297,51 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
     paste(figures_dir, 'Germline-Somatic-Pairs.png', sep='/'),
     width=15, height=10, dpi=100,
     bg='white')
+}
+
+fpkm_quarter_density <- function(Upd_fpkm, output_file, clusters = c('germline', 'somatic')) {
+  Upd_fpkm <- Upd_fpkm %>% subset(rowAlls((. > 0) %>% replace(is.na(.), FALSE)))
+  names(dimnames(Upd_fpkm)) <- c('gene', 'cluster')
+  log_fpkm <- log(Upd_fpkm) / log(10)
+  density_data <- apply(
+    log_fpkm,
+    2,
+    \(v) density(v, n=1000),
+    simplify = F
+  )
+  density_cut <- apply(
+    log_fpkm,
+    2,
+    \(v) c(-Inf, quantile(v, c(0.25, 0.50, 0.75)), Inf)
+  )
+  density_melt <- mapply(
+      \(d, density_cut) d %>%
+        with(data.frame(x, y, quartile=cut(x, density_cut))) %>%
+        within(levels(quartile) <- factor(paste0('Q', 1:4))),
+      density_data,
+      density_cut %>% asplit(2),
+      SIMPLIFY = F) %>%
+    bind_rows(.id = "cluster")
+  density_melt$cluster <- density_melt$cluster %>% factor(sce.clusters$cluster)
+  density_melt <- density_melt %>%
+    left_join(density_melt %>% group_by(cluster) %>% summarise(max_density = max(y), res = diff(x)[1]), "cluster") %>%
+    within(violinwidth <- y / max_density) %>%
+    subset(cluster %in% clusters)
+  density_melt %>%
+    ggplot(
+      aes(cluster, x, height=res, width=y, fill=cluster, group=cluster)
+    ) + geom_tile()
+  density_melt %>%
+    ggplot(
+      aes(cluster, x, violinwidth=violinwidth, fill=quartile, group=interaction(quartile, cluster))
+    ) + geom_violin(stat='identity')
+  density_melt %>%
+    ggplot(
+      aes(cluster, x, height=res, width=violinwidth * 0.95, fill=quartile)
+    ) + rasterise(geom_tile(), dpi=240) + scale_fill_manual(values = sc_quartile_colors %>% setNames(NULL)) + coord_cartesian(
+      NULL, c(-5,NA)
+    ) + theme_bw() + labs(
+      x = 'Cluster', y = bquote(log[10]*"(FPKM)")
+    )
+  ggsave(output_file, width = 4, height = 4)
 }

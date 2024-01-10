@@ -11,6 +11,7 @@ library(magrittr)
 library(targets)
 library(tarchetypes)
 library(tibble)
+library(viridis)
 
 # Set target options:
 tar_option_set(
@@ -48,6 +49,7 @@ tar_option_set(
     'SingleCellExperiment',
     'stringr',
     'tibble',
+    'viridis',
     'withr',
     'zoo'
   )
@@ -93,6 +95,10 @@ repli.processing = data.frame(
   name=c('.q20.bedgraph', '.q20.markdup.bedgraph', '.q20.p10.markdup.bedgraph', '.q20.near10.bedgraph', '.q20.near25.bedgraph'),
   display=c('OrigPileup', 'DupePosition', 'DownsampleAndDupePosition', 'DeleteNearbyPositions', 'DeleteNearbyPositions25')
 )
+repli.processing = data.frame(
+  name='.q20.near10.bedgraph',
+  display='DeleteNearbyPositions'
+)
 
 repli.coverage.contrasts = list(
   EarlyLate = c(1,0,0,-1),
@@ -115,7 +121,11 @@ chic.mark.data = tribble(~mark, 'H3K4', 'H3K27', 'H3K9')
 sce_targets <- tar_map(
   unlist = FALSE,
   sce.data,
-  tar_target(tenx_file, tenx_path, format='file'),
+  tar_target(
+    tenx_file, tenx_path, format='file',
+    # Don't checksum the 10X outputs, 
+    cue = tar_cue('never')
+  ),
   tar_target(sce, load_flybase(tenx_file, batch, sce.present.features, sce.mt.features, metafeatures)),
 
   # Map over clusters (below, from metadata) and extract pseudobulk counts.
@@ -278,6 +288,10 @@ list(
       ),
       format = "file"
     ),
+    tar_target(
+      quartile.factor,
+      bed_flybase_quartile_factor(bed, metafeatures)
+    ),
     tar_map(
       chic.mark.data,
       names = mark,
@@ -322,12 +336,10 @@ list(
     repli.pct.track,
     write_repli_pct(repli_.q20.near10.bedgraph_DeleteNearbyPositions, 'repli/bedgraph.out')
   ),
-  tar_target(repli.concat.markdup, pseudobulk_repli(load_concat('repli/bedgraph.in'))),
   tar_target(
     repli_qc,
     repli_qc_make_figures(
       list(
-        DupePositionReplicated=repli.concat.markdup,
         DupePosition=repli_.q20.markdup.bedgraph_DupePosition,
         DownsampleAndDupePosition=repli_.q20.p10.markdup.bedgraph_DownsampleAndDupePosition,
         DeleteNearbyPositions=repli_.q20.near10.bedgraph_DeleteNearbyPositions,
@@ -369,6 +381,41 @@ list(
       'tj',
       'repli/heatmap/tj',
       num_sorted_bases = 10000
+    ),
+    format = 'file'
+  ),
+  tar_target(
+    name = repli.chic.quarter_Somatic,
+    chic_average_profiles(
+      repli.quarters_Tj_Weighted %>%
+        rownames_to_column %>%
+        pull(quarter, rowname) %>%
+        # Some genes were not quantified in 10X Genomics BAM TX. The reason why
+        # those genomic features were unsuitable for quantifying at the isoform
+        # level by 10X Cell Ranger is unclear. To make Repli and FPKM somewhat
+        # more comparable (although there may still be genomic features with low
+        # read count in the Repli window and we will remove those features
+        # before any Repli computation), we will filter Repli features using 10X
+        # FPKM feature criteria.
+        subset(names(.) %in% names(quartile.factor_Somatic)),
+      'chic',
+      metafeatures,
+      'tj',
+      'Repli Quartile',
+      setNames(repli_quartile_fills, NULL),
+      'repli/profile/Somatic_marks.png'
+    )
+  ),
+  tar_target(
+    name = fpkm.chic.quarter_Somatic,
+    chic_average_profiles(
+      quartile.factor_Somatic,
+      'chic',
+      metafeatures,
+      'tj',
+      'FPKM Quartile',
+      setNames(sc_quartile_annotations, NULL),
+      'scRNA-seq-Figure/profile/Somatic_marks.png'
     ),
     format = 'file'
   )

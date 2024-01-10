@@ -1,4 +1,5 @@
 # Analysis with replication timing on x-axis, ChIC tracks stacked.
+repli_quartile_fills <- rev(turbo(4, begin=0.65, end=1))
 
 analyze_repli_chic <- function(
     repli.hdf5,
@@ -24,6 +25,11 @@ analyze_repli_chic <- function(
     HDF5ArraySeed(name = '/rank_split') %>%
     DelayedArray %>%
     repli_rank_projection(num_sorted_bases=num_sorted_bases)
+  base_pairs_mb <- proj_matrices %>%
+    sapply(\(m) length(m@x)) %>%
+    sum %>%
+    `/`(1000 * 1000) %>%
+    round
   chic_enr <- chic_coverage %>%
     sapply(
       \(rle) apply_repli_bins(proj_matrices, rle[names(chr.lengths)]) %>% rowSums
@@ -31,17 +37,18 @@ analyze_repli_chic <- function(
     log %>%
     `/`(log(2))
   names(dimnames(chic_enr)) <- c('replication', 'mark')
+  rownames(chic_enr) = seq(0, 1, length.out=nrow(chic_enr))
 
   timing_heatmap <- rasterise(
     ggplot(
-      melt(chic_enr, value.name='log2(mark/input)')
+      melt(chic_enr, value.name='log2(mark/input)', variable.factor = FALSE)
       %>% within(
         mark <- mark %>% factor(c('Timing Ratio','H3K4','H3K27','H3K9'))
       )
       %>% rbind(
         data.frame(
           mark=factor('Timing Ratio', c('Timing Ratio','H3K4','H3K27','H3K9')),
-          replication=seq(nrow(chic_enr)),
+          replication=seq(0, 1, length.out=nrow(chic_enr)),
           `log2(mark/input)`=NA,
           check.names=F
         )
@@ -52,15 +59,81 @@ analyze_repli_chic <- function(
     geom_tile()
     + scale_fill_viridis_c(option='magma', limits=c(-1,1), oob=squish)
     + scale_y_discrete(limits=rev, expand=c(0,0))
-    + scale_x_continuous(expand=c(0,0))
+    + scale_x_continuous(expand=c(0,0), limits=c(0,1), labels=percent)
     + new_scale_fill()
     + geom_tile(aes(replication,mark, fill=replication), \(df) df %>% subset(mark == 'Timing Ratio'))
-    + scale_fill_gradient(limits=c(1,nrow(chic_enr)), breaks=c(0.05,0.95)*nrow(chic_enr), labels=c('Late','Early'))
+    + scale_fill_viridis_c(
+      option='turbo', begin=0.65, end=1, direction=-1,
+      breaks=c(0.05,0.95), labels=c('Late','Early')
+    )
+    + labs(
+      x = paste0('Avg track value for base pairs (count = ', base_pairs_mb, ' Mb)'),
+      y = 'Track'
+    )
   )
   print(timing_heatmap)
   ggsave(
     paste0(output_path, '/', 'Timing-BP-Heatmap.png'),
     timing_heatmap,
+    width=8,
+    height=6,
+    dpi=120
+  )
+
+  timing_heatmap_bin <- rasterise(
+    ggplot(
+      melt(chic_enr, value.name='log2(mark/input)', variable.factor = FALSE)
+      %>% within(
+        {
+          mark <- mark %>% factor(c('Timing Ratio','Quartile','H3K4','H3K27','H3K9'))
+          annot_fill <- NA
+        }
+      )
+      %>% rbind(
+        data.frame(
+          mark=factor('Timing Ratio', c('Timing Ratio','Quartile','H3K4','H3K27','H3K9')),
+          replication=seq(0, 1, length.out=nrow(chic_enr)),
+          `log2(mark/input)`=NA,
+          annot_fill=NA,
+          check.names=F
+        )
+      )
+      %>% rbind(
+        data.frame(
+          mark=factor('Quartile', c('Timing Ratio','Quartile','H3K4','H3K27','H3K9')),
+          replication=seq(1/8, 7/8, length.out=4),
+          `log2(mark/input)`=NA,
+          annot_fill=seq(0, 1, length.out=4),
+          check.names=F
+        )
+      ),
+      aes(replication,mark,fill=`log2(mark/input)`)
+    )
+    +
+    geom_tile()
+    + scale_fill_viridis_c(option='magma', limits=c(-1,1), oob=squish)
+    + scale_y_discrete(limits=rev, expand=c(0,0))
+    + scale_x_continuous(expand=c(0,0), limits=c(0,1), labels=percent)
+    + new_scale_fill()
+    + geom_tile(aes(replication,mark, fill=replication), \(df) df %>% subset(mark == 'Timing Ratio'))
+    + geom_tile(aes(replication,mark, fill=annot_fill), \(df) df %>% subset(mark == 'Quartile'))
+    + annotate("text", x = 1/8, y = 4, label = "Q1", color = "white")
+    + annotate("text", x = 3/8, y = 4, label = "Q2", color = "white")
+    + annotate("text", x = 5/8, y = 4, label = "Q3")
+    + annotate("text", x = 7/8, y = 4, label = "Q4")
+    + scale_fill_viridis_c(
+      option='turbo', begin=0.65, end=1, direction=-1,
+      breaks=c(0.05,0.95), labels=c('Late','Early')
+    )
+    + labs(
+      x = paste0('Avg track value for base pairs (count = ', base_pairs_mb, ' Mb)'),
+      y = 'Track'
+    )
+  )
+  print(timing_heatmap_bin)
+  ggsave(
+    paste0(output_path, '/', 'Timing-BP-Heatmap-Quartile.png'),
+    timing_heatmap_bin,
     width=8,
     height=6,
     dpi=120
@@ -74,60 +147,6 @@ analyze_repli_chic <- function(
   )
   levels(timing_heatmap_binname) = c('late', 'mid', 'veryearly')
   bin_colors <- list(late=hcl(247,23,29), mid=hcl(235,50,50), veryearly=hcl(226,74,74))
-  timing_heatmap_bin <- rasterise(
-    ggplot(
-      melt(chic_enr, value.name='log2(mark/input)')
-      %>% within(
-        mark <- mark %>% factor(c('Timing Ratio','Cls(threshold)','H3K4','H3K27','H3K9'))
-      )
-      %>% rbind(
-        data.frame(
-          mark=factor('Timing Ratio', c('Timing Ratio','Cls(threshold)','H3K4','H3K27','H3K9')),
-          replication=seq(nrow(chic_enr)),
-          `log2(mark/input)`=NA,
-          check.names=F
-        )) %>%
-      rbind(
-        data.frame(
-          mark=factor('Cls(threshold)', c('Timing Ratio','Cls(threshold)','H3K4','H3K27','H3K9')),
-          replication=seq(nrow(chic_enr)),
-          `log2(mark/input)`=NA,
-          check.names=F
-        )
-      ),
-      aes(replication,mark)
-    )
-    +
-    geom_tile(aes(fill=`log2(mark/input)`))
-    + scale_fill_viridis_c(option='magma', limits=c(-1,1), oob=squish)
-    + scale_y_discrete(limits=rev, expand=c(0,0))
-    + scale_x_continuous(expand=c(0,0))
-    + new_scale_fill()
-    + geom_tile(aes(replication,mark, fill=replication), \(df) df %>% subset(mark == 'Timing Ratio'))
-    + scale_fill_gradient(limits=c(1,nrow(chic_enr)), breaks=c(0.05,0.95)*nrow(chic_enr), labels=c('Late','Early'))
-    + new_scale_fill()
-    + geom_tile(
-        aes(replication,mark, fill=class),
-        data.frame(
-            mark='Cls(threshold)',
-            replication=seq(nrow(chic_enr)),
-            class=timing_heatmap_binname,
-          `log2(mark/input)`=NA,
-          check.names=F
-        )
-    )
-    + scale_fill_manual(
-        values=unlist(bin_colors)
-    )
-  )
-  print(timing_heatmap_bin)
-  ggsave(
-    paste0(output_path, '/', 'Timing-BP-Heatmap-Eyeball.png'),
-    timing_heatmap_bin,
-    width=8,
-    height=6,
-    dpi=120
-  )
 
   repli_data = repli.hdf5 %>%
     HDF5ArraySeed(name = '/array') %>%
