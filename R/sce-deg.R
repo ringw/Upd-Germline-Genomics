@@ -434,6 +434,7 @@ reference_sort_by_fpkm_table <- function(
     replace(. == cluster_name, "fpkm")
 
   bed = features %>% subset(
+    fpkm > 0,
     select=c(chr,start,end,flybase,fpkm,strand)
   )
   bed = bed %>% arrange(desc(fpkm))

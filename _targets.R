@@ -242,11 +242,12 @@ list(
     Upd_fpkm_longest_isoform,
     longest_isoform_fpkm(Upd_glm, metafeatures)
   ),
-  tar_target(
-    Upd_fpkm,
-    Upd_fpkm_bam %>%
-      replace(!is.finite(.), Upd_fpkm_longest_isoform[!is.finite(.)])
-  ),
+  # tar_target(
+  #   Upd_fpkm,
+  #   Upd_fpkm_bam %>%
+  #     replace(!is.finite(.), Upd_fpkm_longest_isoform[!is.finite(.)])
+  # ),
+  tar_target(Upd_fpkm, Upd_fpkm_bam),
   tar_target(
     sc_excel,
     publish_excel_results(Upd_glm, Upd_regression_somatic, Upd_regression_spmtc, Upd_regression_muscle, metafeatures, 'scRNA-seq-Regression/Enriched-Genes.xlsx'),
@@ -272,7 +273,7 @@ list(
     tar_target(
       bed,
       reference_sort_by_fpkm_table(
-        Upd_fpkm, tolower(name), metafeatures,
+        Upd_fpkm_bam, tolower(name), metafeatures,
         paste0("scRNA-seq-Regression/", name, "-FPKM.bed")
       ),
       format = "file"
