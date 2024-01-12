@@ -17,6 +17,7 @@ bed_flybase_quartile_factor <- function(bed_path, metafeatures_path, nquartiles=
 }
 
 # Analysis with TSS profile as x-axis, with ChIC tracks.
+chic_average_profile_limits <- c(-1.25, 0.75)
 chic_average_profiles <- function(
   chic_factor,
   chic_path,
@@ -89,6 +90,9 @@ chic_average_profiles <- function(
   ) + scale_linewidth_manual(
     values = c(0.5, 0.75, 1.5, 1.75),
     guide = guide_legend(title = legend_title)
+  ) + scale_y_continuous(
+    limits = chic_average_profile_limits,
+    expand = c(0, 0)
   ) + labs(
     x = "bp (from TSS)", y = "mean(log2(mark/input))"
   )
@@ -97,7 +101,7 @@ chic_average_profiles <- function(
     output_path,
     facet_plot,
     width=9,
-    height=3,
+    height=4,
     dpi=300
   )
   facet_plot
