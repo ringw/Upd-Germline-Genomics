@@ -263,6 +263,44 @@ list(
     publish_excel_results(Upd_glm, Upd_regression_somatic, Upd_regression_spmtc, Upd_regression_muscle, metafeatures, 'scRNA-seq-Regression/Enriched-Genes.xlsx'),
     format='file'
   ),
+
+  # Section: Parameter selection for omics data, tuning MAPQ threshold and
+  # estimated fragment size using cross-correlation.
+  tar_target(
+    chic.pileup_tj,
+    read_pileup_df("chic_tj_sample_reads.markdup.bam")
+  ),
+  tar_target(
+    chic.coverage_tj,
+    list(watson = mapq_table_strand(chic.pileup_tj, "A"), crick = mapq_table_strand(chic.pileup_tj, "a"))
+  ),
+  tar_target(
+    chic.coverage.corr.plot_tj,
+    analyze_mapq(chic.coverage_tj, test_mapq=c(0, 5, 10, 15, 20, 30))
+  ),
+  tar_target(
+    chic.coverage.corr.plot.png_tj,
+    ggsave('QC-ChIC-tj-Direction-Corr.png', chic.coverage.corr.plot_tj, width=8, height=6, dpi=80),
+    format = "file"
+  ),
+  tar_target(
+    repli.pileup_tj_202310,
+    read_pileup_df("repli_tj_sample_reads.markdup.bam")
+  ),
+  tar_target(
+    repli.coverage_tj_202310,
+    list(watson = mapq_table_strand(repli.pileup_tj_202310, "A"), crick = mapq_table_strand(repli.pileup_tj_202310, "a"))
+  ),
+  tar_target(
+    repli.coverage.corr.plot_tj_202310,
+    analyze_mapq(repli.coverage_tj_202310)
+  ),
+  tar_target(
+    repli.coverage.corr.plot.png_tj_202310,
+    ggsave('QC-Repli-202310-tj-Corr.png', repli.coverage.corr.plot_tj_202310, width=8, height=6, dpi=80),
+    format = "file"
+  ),
+
   tar_map(
     chic.fpkm.data,
     names = name,
