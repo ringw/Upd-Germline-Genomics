@@ -53,8 +53,31 @@ flybase_big_matrix <- function(
   chr_data[features$flybase, ]
 }
 
+smooth_image_columns <- function(
+  image, image_filter
+) {
+  orig_height <- nrow(image)
+  image <- rbind(image, matrix(0, nrow=nrow(image), ncol=ncol(image)))
+  origin <- ceiling(length(image_filter) / 2)
+  image_filter <- c(
+    image_filter[origin:length(image_filter)],
+    rep(0, nrow(image) - length(image_filter)),
+    if (origin != 1)
+      image_filter[1:(origin-1)]
+    else NULL
+  )
+  image %>%
+    fft %>%
+    `*`(fft(image_filter)) %>%
+    fft(inverse=T) %>%
+    Re %>%
+    `/`(nrow(image) * ncol(image)) %>%
+    head(orig_height)
+}
+
 display_tss_tile_matrix <- function(
   data, output_path,
+  scale_image_filter = 1,
   fc_max = 5,
   fc_filter = 10
 ) {
@@ -63,7 +86,10 @@ display_tss_tile_matrix <- function(
   which_tss <- which(colnames(data) == 'TSS')
   newData <- data %>%
     subset(rowMaxs(.) < fc_filter) %>%
-    resizeImage(1000, ncol(.), "bilinear") %>%
+    replace(. > fc_max * 2, fc_max * 2) %>%
+    smooth_image_columns(scale_image_filter) %>%
+    replace(. > fc_max, fc_max) %>%
+    resizeImage(1000, ncol(.), "nearest") %>%
     melt(varnames = c('row', 'bp'))
   p <- (
     ggplot(newData, aes(bp, row, fill=value))

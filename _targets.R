@@ -8,6 +8,7 @@
 
 # Load packages required to define the pipeline:
 library(magrittr)
+library(reshape2)
 library(targets)
 library(tarchetypes)
 library(tibble)
@@ -24,6 +25,7 @@ tar_option_set(
     'dplyr',
     'drosophila2.db',
     'forcats',
+    'GenomicRanges',
     'ggnewscale',
     'ggpattern',
     'ggplot2',
@@ -37,11 +39,13 @@ tar_option_set(
     'OpenImageR',
     'openxlsx',
     'orthogene',
+    'processx',
     'purrr',
     'readxl',
     'reshape2',
     'reticulate',
     'rtracklayer',
+    'S4Vectors',
     'scales',
     'scran',
     'scuttle',
@@ -65,11 +69,6 @@ options(clustermq.scheduler = "multiprocess")
 
 # Run the R scripts in the R/ folder with your custom functions:
 tar_source()
-
-# chr lengths from dmel r6.47
-chr.lengths = c(
-  `2L`=23513712, `2R`=25286936, `3L`=28110227, `3R`=32079331, `4`=1348131, X=23542271, Y=3667352
-)
 
 sce.data = data.frame(
   batch=c('nos.1','nos.2','tj.1','tj.2'),
@@ -110,13 +109,79 @@ repli.coverage <- list(
   contrast = c('EarlyLate', 'Weighted','EarlyLate','Weighted')
 )
 
-chic.fpkm.data = tribble(
+chic.samples = read.csv('chic/chic_samples.csv') %>%
+  subset(sample != "") %>%
+  # Further subsetting due to a sample with small library count
+  subset(sample != "GC3768013_S13_L001")
+
+chic.fpkm.data <- tribble(
   ~name, ~contrast, ~driver,
   'Germline', c(1,0,0,0,0,0,0), 'Nos',
   'Somatic', c(1,1,0,0,0,0,0), 'tj'
 )
+# We are going to pull a "bed" target in the cross product below, which defines
+# the genomic features shown in a heatmap for this particular experiment.
+chic.fpkm.data$bed_sym <- rlang::syms(paste0("bed_", chic.fpkm.data$name))
 
 chic.mark.data = tribble(~mark, 'H3K4', 'H3K27', 'H3K9')
+
+chic.raw.tracks <- tar_map(
+  chic.samples,
+  names = sample,
+  unlist = FALSE,
+  tar_target(
+    chic.bam,
+    {
+      filename <- paste0("chic/", group, "/", sample, ".bam")
+      run(
+        "bash",
+        c(
+          "-i",
+          align_chic_make_pileup,
+          paste0(batch, "/", sample, "_R1_001.fastq.gz"),
+          paste0(batch, "/", sample, "_R2_001.fastq.gz"),
+          filename
+        )
+      )
+      filename
+    },
+    format = "file",
+    cue = tar_cue("never")
+  ),
+  tar_target(chic.raw, bam_paired_fragment_ends(chic.bam))
+)
+
+# ChIC lookup: For every driver x mark x input/mod aggregation.
+chic.lookup <- chic.fpkm.data %>%
+  cross_join(chic.mark.data) %>%
+  cross_join(tribble(~input, "input", "mod"))
+# Pull the sample names from the sample sheet csv, and generate an R symbol for
+# the "raw" fragment ends sparse vector target.
+chic.lookup$samples <- mapply(
+  \(mark, driver, input) chic.samples[
+    chic.samples$driver == driver
+      & chic.samples$group == mark
+      & if (input == "input") chic.samples$molecule == "H3" else chic.samples$molecule != "H3",
+    "sample"
+  ] %>%
+    paste0("chic.raw_", .) %>%
+    (rlang::syms),
+  chic.lookup$mark,
+  chic.lookup$driver,
+  chic.lookup$input,
+  SIMPLIFY = FALSE
+)
+chic.lookup <- chic.lookup %>% within(
+  lookup_name <- paste(input, mark, name, sep="_")
+)
+# ChIC experiments: For every driver x mark.
+chic.experiments <- chic.fpkm.data %>% cross_join(chic.mark.data)
+# Pull the "chic" (track) target by name for the driver x mark targets.
+chic.experiments <- chic.experiments %>% within({
+  experiment_name <- paste(mark, name, sep="_")
+  chic_input_sym <- rlang::syms(paste("chic", "input", mark, name, sep="_"))
+  chic_mod_sym <- rlang::syms(paste("chic", "mod", mark, name, sep="_"))
+})
 
 sce_targets <- tar_map(
   unlist = FALSE,
@@ -252,11 +317,7 @@ list(
     Upd_fpkm_longest_isoform,
     longest_isoform_fpkm(Upd_glm, metafeatures)
   ),
-  # tar_target(
-  #   Upd_fpkm,
-  #   Upd_fpkm_bam %>%
-  #     replace(!is.finite(.), Upd_fpkm_longest_isoform[!is.finite(.)])
-  # ),
+  # Do not use calculation based on gene body and longest isoform.
   tar_target(Upd_fpkm, Upd_fpkm_bam),
   tar_target(
     sc_excel,
@@ -301,6 +362,21 @@ list(
     format = "file"
   ),
 
+  # ChIC paired-end alignment targets.
+  tar_target(align_chic_make_pileup, "scripts/align_chic_make_pileup.sh", format = "file"),
+  chic.raw.tracks,
+
+  # ChIC coverage tracks.
+  tar_target(chic.kde.filter, make_frag_end_filter(bw = 25)),
+  tar_map(
+    chic.lookup,
+    names = lookup_name,
+    tar_target(
+      chic,
+      fpkm_aggregate(samples) %>% smooth_chr_bp(chic.kde.filter)
+    )
+  ),
+
   tar_map(
     chic.fpkm.data,
     names = name,
@@ -315,33 +391,49 @@ list(
     tar_target(
       quartile.factor,
       bed_flybase_quartile_factor(bed, metafeatures)
+    )
+  ),
+
+  tar_map(
+    chic.experiments,
+    names = experiment_name,
+
+    # Molecule/input FPKM ratio track, in bigwig format.
+    tar_target(
+      chic.bw,
+      {
+        filename <- paste0('chic/', driver, '_', mark, '.FE.bw')
+        export(chic_mod_sym / chic_input_sym, filename, 'bigwig')
+        filename
+      },
+      format = 'file'
     ),
-    tar_map(
-      chic.mark.data,
-      names = mark,
-      tar_target(
-        tss_mark_matrix,
-        flybase_big_matrix(
-          load_flybase_bed(bed),
-          paste0("chic/", driver, "_", mark, ".q5.bw")
-        )
-      ),
-      tar_target(
-        tss_mark_heatmap,
-        display_tss_tile_matrix(
-          tss_mark_matrix,
-          paste0("figure/", name, "/FPKM-", mark, ".pdf")
-        ),
-        format = "file"
-      ),
-      tar_target(
-        tss_mark_heatmap_png,
-        display_tss_tile_matrix(
-          tss_mark_matrix,
-          paste0("figure/", name, "/FPKM-", mark, ".png")
-        ),
-        format = "file"
+    tar_target(
+      tss_mark_matrix,
+      flybase_big_matrix(
+        load_flybase_bed(bed_sym),
+        chic.bw
       )
+    ),
+    tar_target(
+      tss_mark_heatmap,
+      display_tss_tile_matrix(
+        tss_mark_matrix,
+        paste0("figure/", name, "/FPKM-", mark, ".pdf"),
+        scale_image_filter = rep(1/20, 20),
+        fc_filter = Inf
+      ),
+      format = "file"
+    ),
+    tar_target(
+      tss_mark_heatmap_png,
+      display_tss_tile_matrix(
+        tss_mark_matrix,
+        paste0("figure/", name, "/FPKM-", mark, ".png"),
+        scale_image_filter = rep(1/20, 20),
+        fc_filter = Inf
+      ),
+      format = "file"
     )
   ),
 
