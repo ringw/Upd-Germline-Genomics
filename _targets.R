@@ -420,7 +420,8 @@ list(
       display_tss_tile_matrix(
         tss_mark_matrix,
         paste0("figure/", name, "/FPKM-", mark, ".pdf"),
-        scale_image_filter = rep(1/20, 20),
+        scale_image_filter = rep(1/50, 50),
+        fc_max = 4,
         fc_filter = Inf
       ),
       format = "file"
@@ -430,7 +431,8 @@ list(
       display_tss_tile_matrix(
         tss_mark_matrix,
         paste0("figure/", name, "/FPKM-", mark, ".png"),
-        scale_image_filter = rep(1/20, 20),
+        scale_image_filter = rep(1/50, 50),
+        fc_max = 4,
         fc_filter = Inf
       ),
       format = "file"
