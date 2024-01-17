@@ -2,8 +2,14 @@ cluster_colors = list(
   germline=hsv(0.35,0.9,0.6),
   somatic=hsv(0.5,0.75,0.95),
   spermatocyte=hcl(86, 93, 85),
+  differentiated=hcl(86, 20, 75),
   muscle=hcl(17, 112, 58),
   others=hsv(0,0,0.9)
+)
+
+cluster_contrast = list(
+  germline = hcl(124, 55, 38),
+  somatic = hcl(214, 37, 45)
 )
 
 sc_quartile_colors = c(
@@ -12,6 +18,8 @@ sc_quartile_colors = c(
   hcl(137, 37, 80),
   high = hcl(77, 87, 87)
 )
+sc_quartile_colors = viridis(5)[-1]
+names(sc_quartile_colors)[c(1,4)] = c('low', 'high')
 
 sc_quartile_annotations = c(
   low = hcl(252, 66, 50),
@@ -24,17 +32,19 @@ sc_quartile_annotations = c(
 Upd_sc_figures = function(figures_dir, Upd_sc) {
   Upd_sc = Upd_sc %>% NormalizeData
   dir.create(figures_dir, showW = F)
-  cbind(Upd_sc@meta.data, Upd_sc[['umap']]@cell.embeddings, ident=Idents(Upd_sc)) %>% ggplot(
+  # Rename spermatocyte to differentiated
+  cbind(
+    Upd_sc@meta.data,
+    Upd_sc[['umap']]@cell.embeddings,
+    ident=Idents(Upd_sc) %>%
+      recode(spermatocyte='differentiated') %>%
+      fct_relevel(c('germline', 'somatic', 'muscle', 'differentiated'))
+  ) %>% ggplot(
     aes(UMAP_1, UMAP_2, color=ident)
   ) + rasterize(geom_point(
     size = 0.01
   ), dpi=120, scale=0.5) + scale_color_manual(
-    values=c(
-      germline=hsv(0.35,0.9,0.6),
-      somatic=hsv(0.5,0.75,0.95),
-      spermatocyte=hcl(86, 93, 85),
-      muscle=hcl(17, 112, 58),
-      others=hsv(0,0,0.9)),
+    values=unlist(cluster_colors),
     guide=guide_legend(title=NULL, override.aes = list(size=4))
   ) + scale_x_continuous(
     breaks=c(-10,0,10)
@@ -43,7 +53,7 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
   filenames <- c(paste(figures_dir, 'UMAP.svg', sep='/'), filenames)
   ggsave(filenames[1], width=8, height=4.5)
 
-  for (gene in c('vas','tj','lncRNA:roX2','Mst87F','soti','sunz','Act57B')) {
+  for (gene in c('RpL22-like','vas','tj','lncRNA:roX1','lncRNA:roX2','Mst87F','soti','sunz','w-cup','Act57B')) {
     gene.save = gene %>% str_replace('lncRNA:', '')
     gene.data = Upd_sc@meta.data %>%
       cbind(
@@ -59,13 +69,8 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
       size = 0.01
     ), dpi=240) + # + scale_color_viridis_c(
       # option='magma', limits=c(0,gene.max.intensity), oob=squish
-    scale_color_gradientn(
-      colors = c(
-        low = hcl(252, 66, 37),
-        hcl(200, 37, 60),
-        hcl(137, 37, 80),
-        hcl(77, 87, 87)
-      ),
+    scale_color_viridis_c(
+      begin = 0.2,
       limits = c(0, gene.max.intensity), oob = squish
     ) + scale_x_continuous(
       breaks=c(-10,0,10)
@@ -75,7 +80,7 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
     ) + theme(
       plot.tag.position = c(0.1, 0.94)
     )
-    filenames <- c(paste0(figures_dir, '/UMAP', gene.save, '.svg'), filenames)
+    filenames <- c(paste0(figures_dir, '/UMAP-', gene.save, '.svg'), filenames)
     ggsave(filenames[1], width=8, height=4.5)
   }
   filenames
