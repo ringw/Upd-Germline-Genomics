@@ -128,7 +128,7 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
   )
   Upd_sc@meta.data = Upd_sc@meta.data %>% cbind(logUMI = log(Upd_sc$nCount_RNA) / log(2))
   expl.stats = sapply(
-    c('Mst84Da','MtnA','lncRNA:Hsromega','lncRNA:roX2','RpL22-like','pct.mito','pct.ribo','logUMI'),
+    c('Mst84Da','MtnA','lncRNA:Hsromega','lncRNA:roX2','RpL22-like','pct.mito','pct.ribo','logUMI','phase','driver'),
     \(name) mn.expl(
       manova(
         pca ~ gene,
@@ -138,7 +138,9 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
             list(
               pct.mito=Upd_subset$pct.mito,
               pct.ribo=Upd_subset$pct.ribo,
-              logUMI=log(Upd_subset$nCount_RNA)
+              logUMI=log(Upd_subset$nCount_RNA),
+              phase=model.matrix(~ 0 + Phase, Upd_subset@meta.data),
+              driver=factor(ifelse(grepl("nos", Upd_subset$batch), "nos", "tj"))
             ),
             (Upd_subset[['integrated']]@scale.data
             %>% subset(rownames(.) == name) %>% t %>% as.data.frame)
@@ -167,16 +169,22 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
       %>% subset(Idents(Upd_subset) == 'somatic')
     ) * mean(
       Idents(Upd_subset) == 'somatic'
-    ) / colVars(Upd_subset[['pca.subset']]@cell.embeddings[,1:5])
+    ) / colVars(Upd_subset[['pca.subset']]@cell.embeddings[,1:5]),
+    germline.phase.var = mn.expl(manova(pca ~ Phase, list(pca = Upd_subset[["pca.subset"]]@cell.embeddings[, 1:5], Phase = model.matrix(~ Phase, Upd_subset@meta.data)), subset = Idents(Upd_subset) == "germline"))
+    * mean(Idents(Upd_subset) == 'germline'),
+    somatic.phase.var = mn.expl(manova(pca ~ Phase, list(pca = Upd_subset[["pca.subset"]]@cell.embeddings[, 1:5], Phase = model.matrix(~ Phase, Upd_subset@meta.data)), subset = Idents(Upd_subset) == "germline"))
+    * mean(Idents(Upd_subset) == 'somatic')
   ) %>% as.data.frame
   DimPlot(Upd_subset, red='pca.subset')
 
   bar.data = expl.stats %>% with(
     data.frame(
       component=paste0('PC_', 1:5),
-      SSB=between.sum.squares,
+      `SSB(clusters)`=between.sum.squares,
       `within(germline)`=germline.var,
       `within(somatic)`=somatic.var,
+      `SSB(G1/S/G2M) germline`=germline.phase.var,
+      `SSB(G1/S/G2M) somatic`=somatic.phase.var,
       roX2=`lncRNA:roX2`,
       Hsromega=`lncRNA:Hsromega`,
       Mst84Da=Mst84Da,
@@ -187,17 +195,21 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
     variable.name = 'variance'
   )
   bar.data$variance = bar.data$variance %>% factor(., unique(.)) %>% fct_relevel(
-    'within(germline)', 'within(somatic)', 'SSB'
+    'within(germline)', 'within(somatic)', 'SSB(clusters)'
   )
   bar.display.data = data.frame(
     variance=character(),
     group=character()
   ) %>% add_row(
-    variance='SSB', group='clusters'
+    variance='SSB(clusters)', group='clusters'
   ) %>% add_row(
     variance='within(germline)', group='clusters'
   ) %>% add_row(
     variance='within(somatic)', group='clusters'
+  ) %>% add_row(
+    variance='SSB(G1/S/G2M) germline', group='Phase (G1/S/G2M)'
+  ) %>% add_row(
+    variance='SSB(G1/S/G2M) somatic', group='Phase (G1/S/G2M)'
   )
   bar.display.data = bar.display.data %>% rbind(
     sapply(
@@ -211,10 +223,16 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
   )
 
   pc_expl_plot <- function(pc) ggplot(
-    bar.data %>% subset(component == pc) %>% left_join(bar.display.data, 'variance'),
+    # bar.data %>% subset(component == pc) %>% left_join(bar.display.data, 'variance') %>%
+    # within(variance <- variance %>% factor(c("within(germline)", "within(somatic)", "SSB(clusters)", "SSB(G1/S/G2M germline)", "SSB(G1/S/G2M) somatic", "roX2", "Hsromega", "Mst84Da")))
+    bar.display.data %>% left_join(bar.data %>% subset(component == pc), by = "variance") %>%
+    within(variance <- variance %>% factor(c("within(germline)", "within(somatic)", "SSB(clusters)", "SSB(G1/S/G2M) germline", "SSB(G1/S/G2M) somatic", "roX2", "Hsromega", "Mst84Da")))
+    ,
     aes(fill=variance, pattern_fill=variance, x=value, y=group)
   ) + geom_bar_pattern(
-    position='stack', stat='identity',
+    # Odd quirk in horizontal bars. We want the reverse order to stack from left to right.
+    position=position_stack(reverse = T),
+    stat='identity',
     pattern_color=NA,
     pattern_angle=45,
     pattern_spacing=0.05,
@@ -224,7 +242,9 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
     values=c(
       `within(germline)`=cluster_colors$germline,
       `within(somatic)`=cluster_colors$somatic,
-      `SSB`=cluster_colors$germline,
+      `SSB(clusters)`=cluster_colors$germline,
+      `SSB(G1/S/G2M) somatic`=cluster_contrast$somatic,
+      `SSB(G1/S/G2M) germline`=cluster_contrast$germline,
       roX2=hcl(298, 100, 65),
       Hsromega=hcl(346, 100, 65),
       Mst84Da=hcl(50, 100, 65)
@@ -233,7 +253,9 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
     values=c(
       `within(germline)`=cluster_colors$germline,
       `within(somatic)`=cluster_colors$somatic,
-      `SSB`=cluster_colors$somatic,
+      `SSB(clusters)`=cluster_colors$somatic,
+      `SSB(G1/S/G2M) somatic`=cluster_contrast$somatic,
+      `SSB(G1/S/G2M) germline`=cluster_contrast$germline,
       roX2=hcl(298, 100, 65),
       Hsromega=hcl(346, 100, 65),
       Mst84Da=hcl(50, 100, 65)
@@ -254,7 +276,7 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
       coef(
         lm(
           idents ~ pcasubset_1,
-          cbind(idents=Idents(Upd_subset), Upd_subset[['pca.subset']]@cell.embeddings[,'pcasubset_1',drop=F])
+          cbind(data.frame(idents=Idents(Upd_subset) == "somatic"), Upd_subset[['pca.subset']]@cell.embeddings[,'pcasubset_1',drop=F])
         )
       )['pcasubset_1']
     )
@@ -265,13 +287,6 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
   )
   ggarrange(
     pc_expl_plot('PC_1')
-    + theme(plot.background = element_rect(color='black', linewidth=1))
-    ,
-    pc_expl_plot('PC_2')
-    + theme(plot.background = element_rect(color='black', linewidth=1))
-  )
-  ggarrange(
-    pc_expl_plot('PC_1')
     + theme_bw() + pairs_borders,
     DimPlot(Upd_subset, red='pca.subset', com=F)[[1]]
     + scale_color_manual(values=unlist(cluster_colors[1:2]))
@@ -279,23 +294,33 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
     DimPlot(Upd_subset, c(1,3), red='pca.subset', com=F)[[1]]
     + scale_color_manual(values=unlist(cluster_colors[1:2]))
     + pairs_borders,
-
-    FeaturePlot(Upd_subset, 'lncRNA:roX2', red='pca.subset', com=F)[[1]]
-    + scale_color_viridis_c(option='magma')
+    plot_grid(
+      FeaturePlot(Upd_subset, 'RpL22-like', red='pca.subset', com=F)[[1]]
+      + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
+      + scale_color_viridis_c(option='magma'),
+      FeaturePlot(Upd_subset, 'lncRNA:roX2', red='pca.subset', com=F)[[1]]
+      + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
+      + scale_color_viridis_c(option='magma'),
+      FeaturePlot(Upd_subset, 'lncRNA:Hsromega', red='pca.subset', com=F)[[1]]
+      + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
+      + scale_color_viridis_c(option='magma'),
+      DimPlot(Upd_subset, gr='Phase', red='pca.subset', com=F)[[1]]
+      + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
+    )
     + pairs_borders,
     pc_expl_plot('PC_2')
-    + pairs_borders,
+    + theme_bw() + pairs_borders,
     DimPlot(Upd_subset, c(2,3), red='pca.subset', com=F)[[1]]
     + scale_color_manual(values=unlist(cluster_colors[1:2]))
     + pairs_borders,
-    FeaturePlot(Upd_subset, 'lncRNA:Hsromega', red='pca.subset', dim=c(1,3), com=F)[[1]]
+    FeaturePlot(Upd_subset, 'vas', red='pca.subset', dim=c(1,3), com=F)[[1]]
     + scale_color_viridis_c(option='magma')
     + pairs_borders,
     FeaturePlot(Upd_subset, 'Mst84Da', red='pca.subset', dim=c(2,3), com=F)[[1]]
     + scale_color_viridis_c(option='magma')
     + pairs_borders,
     pc_expl_plot('PC_3')
-    + pairs_borders,
+    + theme_bw() + pairs_borders,
     nrow=3,ncol=3
   )
   ggsave(
