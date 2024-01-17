@@ -86,7 +86,8 @@ display_tss_tile_matrix <- function(
   which_tss <- which(colnames(data) == 'TSS')
   newData <- data %>%
     subset(rowMaxs(.) < fc_filter) %>%
-    replace(. > fc_max * 2, fc_max * 2) %>%
+    # Clip some extrema
+    replace(. > fc_max * 4, fc_max * 4) %>%
     smooth_image_columns(scale_image_filter) %>%
     replace(. > fc_max, fc_max) %>%
     resizeImage(1000, ncol(.), "nearest") %>%
