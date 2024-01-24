@@ -102,11 +102,16 @@ create_meta_features <- function(
   output_path
 }
 
-load_flybase <- function(tenx_path, batch, features_keep, mt_features, meta_path, mt_pct=10, ribo_pct=40) {
+load_flybase <- function(
+  tenx_path, batch, features_keep, mt_features, meta_path, mt_pct=10, ribo_pct=40,
+  return.only.var.genes = TRUE, run_pca = TRUE
+) {
   sce = Read10X(tenx_path)
 
   rownames(sce) = map_feature_names(rownames(sce))
   seur = CreateSeuratObject(sce)
+  # Every cell will have a nos.1_ prefix, etc.
+  seur = seur %>% RenameCells(add.cell.id = batch)
   seur[['RNA']]@meta.features = read.csv(meta_path, row.names=1)
   seur$pct.mito = seur %>% PercentageFeatureSet(features = mt_features)
   seur$pct.ribo = seur %>% PercentageFeatureSet('^Rp[SL]')
@@ -119,10 +124,14 @@ load_flybase <- function(tenx_path, batch, features_keep, mt_features, meta_path
   # Include H3-GFP as a scale.data gene, past the end of the original 3000 HVGs
   # so that it is easy to remove when integrating the data.
   VariableFeatures(seur) = VariableFeatures(seur) %>% union('H3-GFP')
-  seur[['SCT']]@scale.data = seur[['SCT']]@scale.data %>% subset(
-    rownames(.) %in% VariableFeatures(seur)
-  )
-  seur = seur %>% RunPCA(verbose = F)
+  # Subset the residuals matrix now that we have selected our custom
+  # VariableFeatures.
+  if (return.only.var.genes)
+    seur[['SCT']]@scale.data = seur[['SCT']]@scale.data %>% subset(
+      rownames(.) %in% VariableFeatures(seur)
+    )
+  if (run_pca) seur <- seur %>% RunPCA(verbose = F)
+  seur
 }
 
 call_nos.1 <- function(nos.1) {
@@ -217,7 +226,6 @@ filter_integrate_data = function(seurats) {
       \(n) ifelse(grepl('[0-9]', n),
                   paste(seurats[[i]]$batch[1], n, sep='.'),
                   n))
-    seurats[[i]] = seurats[[i]] %>% RenameCells(add.cell.id = seurats[[i]]$batch[1])
   }
   rna.key = Key(seurats[[1]]@assays[['RNA']])
   merge_RNA = CreateAssayObject(
