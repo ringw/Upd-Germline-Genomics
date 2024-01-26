@@ -261,6 +261,11 @@ list(
   tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2)), cue=tar_cue('never')),
   tar_target(scRNA_seq_figures, Upd_sc_figures('scRNA-seq-Figure', Upd_sc), format='file'),
   tar_target(metadata, analyze_sce_to_csv(list(nos.1=nos.1, nos.2=nos.2, tj.1=tj.1, tj.2=tj.2), 'scRNA-seq-Metadata.csv'), format='file'),
+  tar_combine(
+    sctransform_quantile,
+    sce_targets$sctransform_quantile,
+    command = combine_gene_quantiles(list(!!!.x))
+  ),
   tar_target(
     Upd_glm,
     fit_glm(

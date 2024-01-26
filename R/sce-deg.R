@@ -296,7 +296,10 @@ pseudobulk_cpm <- function(
     tx_files$tx_file %>% str_extract('([a-z]+)\\.txt', group=1),
     sce.clusters$cluster
   )
+  if (all(!is.na(cluster_name)))
   pseudobulk_colData = cbind(size_factors, ident = cluster_name)
+  else
+    pseudobulk_colData = cbind(size_factors, ident = 'intercept')
   # Use nos.2 as reference level for FPKM calculation
   pseudobulk_colData$batch = pseudobulk_colData$batch %>%
     factor(
@@ -309,8 +312,11 @@ pseudobulk_cpm <- function(
     as.matrix %>%
     replace(is.na(.), 0)
   colnames(pseudobulk_counts) = rownames(pseudobulk_colData)
+  if (length(unique(pseudobulk_colData$batch)) > 1 && length(unique(pseudobulk_colData$ident)) > 1)
   dds <- DESeqDataSetFromMatrix(
     pseudobulk_counts, pseudobulk_colData, ~ 0 + ident + batch)
+  else
+    dds <- DESeqDataSetFromMatrix(pseudobulk_counts, pseudobulk_colData, ~ 1)
   sizeFactors(dds) <- pseudobulk_colData$size_factor
   dds <- dds %>% DESeq(fitType = 'local')
 
@@ -335,6 +341,7 @@ pseudobulk_cpm <- function(
     gene_id = gtf$gene_id,
     length = abs(gtf$end - gtf$start + 1)
   )
+  if (length(resultsNames(dds)) > 1)
   for (cluster_name in sce.clusters$cluster) {
     res <- results(dds, name = paste0("ident", cluster_name))
     cpm_table <- cpm_table %>%
@@ -346,6 +353,17 @@ pseudobulk_cpm <- function(
         "tx"
       )
     colnames(cpm_table)[ncol(cpm_table)] <- cluster_name
+    }
+  else {
+    cpm_table <- cpm_table %>%
+      left_join(
+        data.frame(
+          tx = rownames(results(dds)),
+          clust = exp(results(dds)$log2FoldChange * log(2) + log(1000) * 2)
+        ),
+        "tx"
+      )
+    colnames(cpm_table)[4] = "cpm"
   }
   cpm_table %>%
     column_to_rownames("tx") %>% replace(is.na(.), 0)
@@ -479,4 +497,93 @@ dot_plot_fpkm <- function(genotypes, gene_list, logfpkm_min=0, logfpkm_max=3, oo
   ) + labs(
     x = NULL, y = NULL, color = bquote(log[10]*"(FPKM)"), size = "expression"
   ) + theme_cowplot()
+}
+
+# Another cluster-gene quantification method: Take the quantile of interest for
+# the scaled data.
+quantify_quantiles <- function(
+  seurat, metadata, assay = "SCT", slot = "scale.data",
+  per_million = FALSE
+) {
+  metadata <- metadata %>% read.csv(row.names = 1) %>%
+    rownames_to_column %>%
+    right_join(data.frame(rowname = colnames(seurat)), by="rowname")
+  clusters_of_interest <- c("germline", "somatic")
+  cells <- clusters_of_interest %>%
+    sapply(
+      \(n) GetAssayData(
+        seurat[[assay]],
+        slot
+      )[
+        ,
+        as.character(metadata$ident) == n
+        & metadata$nCount_RNA_filter == "nCount_RNA_pass"
+      ],
+      simplify = FALSE
+    )
+  qs <- sapply(
+    cells,
+    \(m) rowQuantiles(m, p=seq(1, 100) / 100, na.rm = TRUE),
+    simplify = FALSE
+  )
+  if (per_million) {
+    qs <- qs %>%
+      sapply(
+        \(mat) {
+          scale_multiplier <- diag(
+            1000 * 1000 / colSums(mat)
+          )
+          rownames(scale_multiplier) = colnames(mat)
+          colnames(scale_multiplier) = colnames(mat)
+          mat %*% scale_multiplier
+        },
+        simplify = FALSE
+      )
+  }
+  qs
+}
+
+combine_gene_quantiles <- function(nested_list) {
+  clusters_of_interest <- c("germline", "somatic")
+  sapply(
+    clusters_of_interest,
+    \(n) purrr::reduce(
+      sapply(nested_list, \(l) l[[n]], simplify=F),
+      `+`
+    ) / length(nested_list),
+    simplify=F
+  )
+}
+
+venn_q_parameter_search <- function(qs, q = seq(5, 95), v = seq(100, 1000, by = 25)) {
+  grid <- expand.grid(
+    q = paste0(q, "%"),
+    v = v
+  )
+  q_parameter <- q
+  grid <- grid %>% split(
+    cut(seq(nrow(grid)), c(seq(0, nrow(grid), by=10), Inf))
+  )
+  grid <- grid %>% sapply(
+    \(grid) grid %>%
+      rowwise %>%
+      mutate(
+        germline = list(qs$germline[, q %>% as.character] %>% replace(is.na(.), 0) %>% `>=`(v)),
+        somatic = list(qs$somatic[, q %>% as.character] %>% replace(is.na(.), 0) %>% `>=`(v))
+      ) %>%
+      mutate(
+        smaller = min(sum(germline), sum(somatic)),
+        larger = max(sum(germline), sum(somatic)),
+        overlap = sum(germline & somatic) / smaller,
+        smaller_unique = min(sum(germline & !somatic), sum(somatic & !germline))
+      ) %>%
+      ungroup %>%
+      subset(select = -c(germline, somatic)) %>%
+      mutate(q = q_parameter[as.numeric(q)]),
+    simplify = FALSE
+  ) %>%
+    do.call(rbind, .)
+  grid %>% ggplot(aes(q, v, fill=overlap)) + geom_tile() %>% rasterise(dpi = 300) + scale_fill_viridis_c() + coord_cartesian(expand=FALSE)
+  # germline_genes = names(which(sctransform_quantile$germline[, "90%"] >= 1))
+  grid
 }
