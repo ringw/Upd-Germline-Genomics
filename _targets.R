@@ -7,6 +7,7 @@
 # HDF5Array::setHDF5DumpDir('D:/HDF5Array_dump')
 
 # Load packages required to define the pipeline:
+library(grDevices)
 library(magrittr)
 library(reshape2)
 library(targets)
@@ -14,12 +15,16 @@ library(tarchetypes)
 library(tibble)
 library(viridis)
 
+pdfFonts(sans = pdfFonts()$Helvetica)
+postscriptFonts(sans = postscriptFonts()$Helvetica)
+
 # Set target options:
 tar_option_set(
   packages = c(
     'AnnotationDbi',
     'apeglm',
     'BiocIO',
+    'Cairo',
     'cowplot',
     'DESeq2',
     'dplyr',
@@ -305,6 +310,139 @@ list(
     sce_targets[["pseudobulk.library.size_spermatocyte"]],
     sce_targets[["pseudobulk.library.size_muscle"]],
     command = cbind(sce.data, size_factor = c(!!!.x))
+  ),
+  # Pseudobulk by the genotype (Nos-GAL4 or tj-GAL4).
+  tar_target(
+    supplemental_genes,
+    "tj,vas" %>% strsplit(",") %>% unlist
+  ),
+  tar_map(
+    tribble(
+      ~name, ~batch_names, ~seurats,
+      "nos", list("nos.1", "nos.2"), rlang::syms(c("nos.1", "nos.2")),
+      "tj", list("tj.1", "tj.2"), rlang::syms(c("tj.1", "tj.2"))
+    ),
+    names = name,
+    tar_target(
+      supplemental_bulk_fpkm,
+      gene_pseudobulk_fpkm(
+        paste0(
+          "scRNA-seq-Regression/pseudobulk_",
+          name,
+          c(".1", ".2"),
+          "_filtered.txt"
+        ),
+        seurats,
+        unlist(batch_names),
+        flybase.gtf,
+        metadata,
+        metafeatures
+      )
+    )
+  ),
+  tar_target(
+    supplemental_gene_list,
+    c(
+      "Act5C", "Act42A", "AGO3", "vas", "tj", "zfh1", "lncRNA:roX1",
+      "lncRNA:roX2", "soti", "w-cup", "Act57B", "Mlp60A", "lncRNA:Hsromega"
+    )
+  ),
+  tar_target(
+    supplemental_bulk_figure,
+    dot_plot_fpkm(
+      list(Nos=supplemental_bulk_fpkm_nos, tj=supplemental_bulk_fpkm_tj),
+      supplemental_gene_list
+    )
+  ),
+  tar_map(
+    sce.clusters,
+    names = cluster,
+    tar_target(
+      supplemental_cluster_fpkm,
+      gene_cluster_fpkm(
+        Upd_fpkm,
+        list(nos.1=nos.1, nos.2=nos.2, tj.1=tj.1, tj.2=tj.2),
+        cluster,
+        metadata
+      )
+    )
+  ),
+  tar_target(
+    supplemental_cluster_dot_plot_figure,
+    dot_plot_fpkm(
+      list(
+        GSC=supplemental_cluster_fpkm_germline,
+        CySC=supplemental_cluster_fpkm_somatic,
+        `other(germ)`=supplemental_cluster_fpkm_spermatocyte,
+        mus=supplemental_cluster_fpkm_muscle
+      ),
+      supplemental_gene_list,
+      oob_squish=TRUE
+    )
+  ),
+  tar_target(
+    supplemental_elbow_figure,
+    data.frame(stdev = Upd_sc_2200[['pca.subset']]@stdev, x = 1:50) %>%
+      head(10) %>%
+      ggplot(aes(x, stdev^2))
+      + geom_point(color = "#06470c", size = 3)
+      + scale_x_continuous(breaks = c(1, 5, 10))
+      + scale_y_continuous(
+        trans = "sqrt", breaks = c(4, 36, 100, 150), limits = c(3, 155)
+      )
+      + labs(x = "Principal Component (Validation PCA)", y = "Explained Variance")
+      + theme_cowplot()
+  ),
+  # For cell cycle scoring.
+  tar_download(
+    cell_cycle_scoring_human_supplemental,
+    "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4481139/bin/NIHMS687993-supplement-supp_data_2.xlsx",
+    "scRNA-seq/NIHMS687993-supplement-supp_data_2.xlsx"
+  ),
+  tar_download(
+    cell_cycle_drosophila,
+    "https://github.com/hbc/tinyatlas/raw/add6f25/cell_cycle/Drosophila_melanogaster.csv",
+    "cell_cycle_drosophila.csv"
+  ),
+  tar_target(
+    cell_cycle_scoring_excel,
+    {
+      filename <- "scRNA-seq-Regression/Cell-Cycle-Scoring.xlsx"
+      write_excel_tables_list(
+        write_Upd_sc_cell_cycle_phases(Upd_sc_2200, cell_cycle_drosophila, metafeatures),
+        filename
+      )
+      filename
+    },
+    format = "file"
+  ),
+  tar_target(
+    supplemental_pca_figure,
+    {
+      filename <- "figure/Single-Cell/Germline-Somatic-Pairs.pdf"
+      dir.create(dirname(filename), recursive = TRUE, showW = FALSE)
+      CairoPDF(filename, width = 16, height = 9)
+      print(plot_Upd_pca_components(Upd_sc_2200, load_cell_cycle_score_drosophila(cell_cycle_drosophila, metafeatures)))
+      dev.off()
+      filename
+    },
+    format = "file"
+  ),
+  tar_map(
+    tibble(extension = c(".pdf", ".png", ".svg")),
+    tar_target(
+      supplemental_figures,
+      save_figures(
+        "figure/Single-Cell", extension,
+        tribble(
+          ~name, ~figure, ~width, ~height,
+          "Bulk-Dots", supplemental_bulk_figure, 4, 9,
+          "Cluster-Dots", supplemental_cluster_dot_plot_figure, 6, 9,
+          "Validation-Elbow", supplemental_elbow_figure, 5, 2.5
+        )
+      ),
+      format = "file"
+    )
   ),
   tar_target(
     Upd_cpm,
