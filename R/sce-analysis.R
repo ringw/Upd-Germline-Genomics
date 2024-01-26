@@ -86,7 +86,57 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
   filenames
 }
 
-load_cell_cycle_score = function(Upd_sc, supplemental_data_xlsx) {
+# Plots for the replicates, using our filter by pct.mito and pct.ribo but no
+# clustering or downstream doublet removal.
+gene_pseudobulk_fpkm <- function(tx_files, seurats, seurat_names, gtf_path, metadata_path, metafeatures_path) {
+  metadata <- read.csv(metadata_path, row.names = 1)
+  size_factors <- seurat_names %>%
+    sapply(\(n) metadata %>% subset(batch == n & nCount_RNA_filter == "nCount_RNA_pass") %>% pull(nCount_RNA) %>% sum)
+  cpm_table <- pseudobulk_cpm(data.frame(batch = 'nos.1', tx_file = tx_files), data.frame(batch = 'nos.1', size_factor = size_factors), gtf_path)
+  fpkm_table <- cpm_table %>% tx_cpm_to_fpkm(metafeatures_path)
+  data.frame(
+    fpkm = fpkm_table[rownames(seurats[[1]][['RNA']]), 1],
+    percent_expressed = rowMeans(
+      seurats %>%
+        mapply(
+          \(seur, n) seur[['RNA']]@counts[
+            ,
+            metadata %>%
+              subset(batch == n & nCount_RNA_filter == "nCount_RNA_pass") %>%
+              rownames %>%
+              str_replace(paste0(n, "_"), "")
+          ] %>%
+            `!=`(0) %>%
+            rowMeans,
+          .,
+          seurat_names)
+    )
+  )
+}
+
+gene_cluster_fpkm <- function(Upd_fpkm, seurats, ident.quantify, metadata_path) {
+  metadata <- read.csv(metadata_path, row.names = 1)
+  data.frame(
+    fpkm = Upd_fpkm[rownames(seurats[[1]]), ident.quantify],
+    percent_expressed = rowMeans(
+      seurats %>%
+        mapply(
+          \(seur, n) seur[['RNA']]@counts[
+            ,
+            metadata %>%
+              subset(batch == n & ident == ident.quantify & nCount_RNA_filter == "nCount_RNA_pass") %>%
+              rownames %>%
+              str_replace(paste0(n, "_"), "")
+          ] %>%
+            `!=`(0) %>%
+            rowMeans,
+          .,
+          names(.))
+    )
+  )
+}
+
+load_cell_cycle_score_orthologs = function(Upd_sc, supplemental_data_xlsx) {
   cell_cycle_features = read_excel(
     supplemental_data_xlsx, sheet='Gene Sets Used in Analysis'
   )
@@ -108,17 +158,26 @@ load_cell_cycle_score = function(Upd_sc, supplemental_data_xlsx) {
   rownames(cell_cycle_features) %>% split(cell_cycle_features$feature_set)
 }
 
-Upd_pca_figures = function(figures_dir, Upd_sc) {
+load_cell_cycle_score_drosophila <- function(cell_cycle_drosophila_path, metafeatures_path) {
+  cell_cycle_drosophila <- cell_cycle_drosophila_path %>% read.csv
+  metafeatures <- metafeatures_path %>% read.csv(row.names=1)
+  colnames(cell_cycle_drosophila) <- colnames(cell_cycle_drosophila) %>%
+    replace(. == "geneID", "flybase")
+  cell_cycle_drosophila <- cell_cycle_drosophila %>%
+    inner_join(metafeatures %>% rownames_to_column, by="flybase")
+  cell_cycle_drosophila %>% pull(rowname) %>% split(cell_cycle_drosophila %>% pull(phase))
+}
+
+plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
   Upd_sc = Upd_sc %>% NormalizeData
-  cell_cycle = load_cell_cycle_score(Upd_sc, supplemental_data_xlsx)
   Upd_sc = Upd_sc %>% CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
   Upd_subset = Upd_sc[, !is.na(Upd_sc[['pca.subset']]@cell.embeddings[,1])]
 
   meta.data = cbind(
     Upd_subset@meta.data,
-    Mst84Da=Upd_subset[['integrated']]@scale.data['Mst84Da',],
-    MtnA=Upd_subset[['integrated']]@scale.data['MtnA',],
-    Hsromega=Upd_subset[['integrated']]@scale.data['lncRNA:Hsromega',]
+    Mst84Da=Upd_subset[['RNA']]@data['Mst84Da',],
+    MtnA=Upd_subset[['RNA']]@data['MtnA',],
+    Hsromega=Upd_subset[['RNA']]@data['lncRNA:Hsromega',]
   )
   mn.expl = function(mn) (
     colVars(mn$fitted.values, useNames = T) / (
@@ -128,7 +187,7 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
   )
   Upd_sc@meta.data = Upd_sc@meta.data %>% cbind(logUMI = log(Upd_sc$nCount_RNA) / log(2))
   expl.stats = sapply(
-    c('Mst84Da','MtnA','lncRNA:Hsromega','lncRNA:roX2','RpL22-like','pct.mito','pct.ribo','logUMI','phase','driver'),
+    c('Mst84Da','MtnA','lncRNA:Hsromega','lncRNA:roX2','AGO3','pct.mito','pct.ribo','logUMI','phase','driver','batch'),
     \(name) mn.expl(
       manova(
         pca ~ gene,
@@ -140,7 +199,8 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
               pct.ribo=Upd_subset$pct.ribo,
               logUMI=log(Upd_subset$nCount_RNA),
               phase=model.matrix(~ 0 + Phase, Upd_subset@meta.data),
-              driver=factor(ifelse(grepl("nos", Upd_subset$batch), "nos", "tj"))
+              driver=factor(ifelse(grepl("nos", Upd_subset$batch), "nos", "tj")),
+              batch=factor(Upd_subset$batch)
             ),
             (Upd_subset[['integrated']]@scale.data
             %>% subset(rownames(.) == name) %>% t %>% as.data.frame)
@@ -207,9 +267,9 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
   ) %>% add_row(
     variance='within(somatic)', group='clusters'
   ) %>% add_row(
-    variance='SSB(G1/S/G2M) germline', group='Phase (G1/S/G2M)'
+    variance='SSB(G1/S/G2M) germline', group='Phase'
   ) %>% add_row(
-    variance='SSB(G1/S/G2M) somatic', group='Phase (G1/S/G2M)'
+    variance='SSB(G1/S/G2M) somatic', group='Phase'
   )
   bar.display.data = bar.display.data %>% rbind(
     sapply(
@@ -222,6 +282,26 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
     ., unique(.)
   )
 
+  pc_expl_bar_values1 <- c(
+    `within(germline)`=cluster_bar_color1$germline,
+    `within(somatic)`=cluster_bar_color1$somatic,
+    `SSB(clusters)`=cluster_bar_color1$germline,
+    `SSB(G1/S/G2M) somatic`=cluster_bar_color2$somatic,
+    `SSB(G1/S/G2M) germline`=cluster_bar_color2$germline,
+    roX2=hcl(42, 96, 68),
+    Hsromega=hcl(13, 138, 49),
+    Mst84Da=hcl(275, 114, 49)
+  )
+  pc_expl_bar_values2 <- c(
+    `within(germline)`=cluster_bar_color1$germline,
+    `within(somatic)`=cluster_bar_color1$somatic,
+    `SSB(clusters)`=cluster_bar_color1$somatic,
+    `SSB(G1/S/G2M) somatic`=cluster_bar_color2$somatic,
+    `SSB(G1/S/G2M) germline`=cluster_bar_color2$germline,
+    roX2=hcl(42, 96, 68),
+    Hsromega=hcl(13, 138, 49),
+    Mst84Da=hcl(275, 114, 49)
+  )
   pc_expl_plot <- function(pc) ggplot(
     # bar.data %>% subset(component == pc) %>% left_join(bar.display.data, 'variance') %>%
     # within(variance <- variance %>% factor(c("within(germline)", "within(somatic)", "SSB(clusters)", "SSB(G1/S/G2M germline)", "SSB(G1/S/G2M) somatic", "roX2", "Hsromega", "Mst84Da")))
@@ -239,34 +319,26 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
     pattern_density=0.5,
     pattern_key_scale_factor=0.25
   ) + scale_fill_manual(
-    values=c(
-      `within(germline)`=cluster_colors$germline,
-      `within(somatic)`=cluster_colors$somatic,
-      `SSB(clusters)`=cluster_colors$germline,
-      `SSB(G1/S/G2M) somatic`=cluster_contrast$somatic,
-      `SSB(G1/S/G2M) germline`=cluster_contrast$germline,
-      roX2=hcl(298, 100, 65),
-      Hsromega=hcl(346, 100, 65),
-      Mst84Da=hcl(50, 100, 65)
-    )
+    values = pc_expl_bar_values1,
+    labels = names(pc_expl_bar_values1) %>%
+      replace(. == "Hsromega", "Hsr\u03C9")
   ) + scale_pattern_fill_manual(
-    values=c(
-      `within(germline)`=cluster_colors$germline,
-      `within(somatic)`=cluster_colors$somatic,
-      `SSB(clusters)`=cluster_colors$somatic,
-      `SSB(G1/S/G2M) somatic`=cluster_contrast$somatic,
-      `SSB(G1/S/G2M) germline`=cluster_contrast$germline,
-      roX2=hcl(298, 100, 65),
-      Hsromega=hcl(346, 100, 65),
-      Mst84Da=hcl(50, 100, 65)
-    )
+    values = pc_expl_bar_values2,
+    labels = names(pc_expl_bar_values1) %>%
+      replace(. == "Hsromega", "Hsr\u03C9")
   ) + scale_x_continuous(
     expand=c(0,0), labels=percent
   ) + scale_y_discrete(
-    limits=rev
+    limits=rev, labels=\(v) v %>% replace(. == "Hsromega", "Hsr\u03C9")
   ) + labs(
-    x = '% variance explained in PC (Pearson R)',
+    x = '% variance explained in PC',
     y = ''
+  ) + theme_bw() + theme(
+    # Might want to edit figure to delete the legend and blow up the bar chart.
+    # Make the bar chart not overly tall.
+    plot.margin = margin(t = 35, b = 35, l = 5.5, r = 5.5),
+    legend.margin = margin(l = 15, t = 5.5, b = 5.5, r = 5.5),
+    legend.background = element_rect(fill = "transparent")
   )
 
   # "somatic" level comes after "germline" level, want this sign to be 1
@@ -286,47 +358,81 @@ Upd_pca_figures = function(figures_dir, Upd_sc) {
     plot.background = element_rect(color='black', linewidth=1)
   )
   ggarrange(
+    # Top left.
     pc_expl_plot('PC_1')
-    + theme_bw() + pairs_borders,
-    DimPlot(Upd_subset, red='pca.subset', com=F)[[1]]
-    + scale_color_manual(values=unlist(cluster_colors[1:2]))
     + pairs_borders,
-    DimPlot(Upd_subset, c(1,3), red='pca.subset', com=F)[[1]]
+    # Top center.
+    DimPlot(Upd_subset, c(2,1), red='pca.subset', com=F)[[1]] %>%
+      rasterise(dpi = 160)
     + scale_color_manual(values=unlist(cluster_colors[1:2]))
+    + scale_x_continuous(name = NULL, labels = NULL)
+    + scale_y_continuous(name = NULL, labels = NULL)
+    + theme(plot.margin = margin(l = 70, r = 70, t = 5.5, b = 5.5))
     + pairs_borders,
+    # Top right.
+    DimPlot(Upd_subset, c(3,1), red='pca.subset', com=F)[[1]] %>%
+      rasterise(dpi = 160)
+    + scale_color_manual(values=unlist(cluster_colors[1:2]))
+    + scale_x_continuous(name = NULL, labels = NULL)
+    + scale_y_continuous(name = NULL, labels = NULL)
+    + theme(plot.margin = margin(l = 70, r = 70, t = 5.5, b = 5.5))
+    + pairs_borders,
+    # Center left: a lot of features that we need to explain using PC 1 and 2.
     plot_grid(
-      FeaturePlot(Upd_subset, 'RpL22-like', red='pca.subset', com=F)[[1]]
+      FeaturePlot(Upd_subset, 'AGO3', red='pca.subset', pt.size = 1e-3, com=F)[[1]] %>%
+        rasterise(dpi = 160)
+      + labs(x = NULL, y = NULL)
+      + guides(color = guide_colorbar(barwidth = 0.5, barheight = 3))
       + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
-      + scale_color_viridis_c(option='magma'),
-      FeaturePlot(Upd_subset, 'lncRNA:roX2', red='pca.subset', com=F)[[1]]
+      + scale_color_viridis_c(begin=0.2, breaks=pretty_breaks(3)),
+      FeaturePlot(Upd_subset, 'lncRNA:roX2', red='pca.subset', pt.size = 1e-3, com=F)[[1]] %>%
+        rasterise(dpi = 160)
+      + labs(x = NULL, y = NULL, title = "roX2")
+      + guides(color = guide_colorbar(barwidth = 0.5, barheight = 3))
       + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
-      + scale_color_viridis_c(option='magma'),
-      FeaturePlot(Upd_subset, 'lncRNA:Hsromega', red='pca.subset', com=F)[[1]]
+      + scale_color_viridis_c(begin=0.2, breaks=pretty_breaks(3)),
+      FeaturePlot(Upd_subset, 'lncRNA:Hsromega', red='pca.subset', pt.size = 1e-3, com=F)[[1]] %>%
+        rasterise(dpi = 160)
+      + labs(x = NULL, y = NULL, title = "Hsr\u03C9")
+      + guides(color = guide_colorbar(barwidth = 0.5, barheight = 3))
       + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
-      + scale_color_viridis_c(option='magma'),
-      DimPlot(Upd_subset, gr='Phase', red='pca.subset', com=F)[[1]]
+      + scale_color_viridis_c(begin=0.2, breaks=pretty_breaks(2)),
+      DimPlot(Upd_subset, gr='Phase', red='pca.subset', pt.size = 1e-3, com=F)[[1]] %>%
+        rasterise(dpi = 160)
       + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
+      + labs(x = NULL, y = NULL)
     )
     + pairs_borders,
+    # Center: PC 2.
     pc_expl_plot('PC_2')
-    + theme_bw() + pairs_borders,
-    DimPlot(Upd_subset, c(2,3), red='pca.subset', com=F)[[1]]
+    + pairs_borders,
+    # Center right: scatter plot.
+    DimPlot(Upd_subset, c(3,2), red='pca.subset', com=F)[[1]] %>%
+      rasterise(dpi = 160)
     + scale_color_manual(values=unlist(cluster_colors[1:2]))
+    + scale_x_continuous(name = NULL, labels = NULL)
+    + scale_y_continuous(name = NULL, labels = NULL)
+    + theme(plot.margin = margin(l = 70, r = 70, t = 5.5, b = 5.5))
     + pairs_borders,
-    FeaturePlot(Upd_subset, 'vas', red='pca.subset', dim=c(1,3), com=F)[[1]]
-    + scale_color_viridis_c(option='magma')
+    # Bottom left: another PC 1-related feature (germline).
+    FeaturePlot(Upd_subset, 'vas', red='pca.subset', dim=c(1,3), com=F)[[1]] %>%
+      rasterise(dpi = 160)
+    + scale_color_viridis_c(begin=0.2)
+    + scale_x_continuous(name = NULL, labels = NULL)
+    + scale_y_continuous(name = NULL, labels = NULL)
     + pairs_borders,
-    FeaturePlot(Upd_subset, 'Mst84Da', red='pca.subset', dim=c(2,3), com=F)[[1]]
-    + scale_color_viridis_c(option='magma')
+    # Bottom center: A PC 3-related feature (unwanted cells in this subset).
+    FeaturePlot(Upd_subset, 'Mst84Da', red='pca.subset', dim=c(2,3), com=F)[[1]] %>%
+      rasterise(dpi = 160)
+    + scale_color_viridis_c(begin=0.2)
+    + scale_x_continuous(name = NULL, labels = NULL)
+    + scale_y_continuous(name = NULL, labels = NULL)
     + pairs_borders,
+    # Bottom right: PC 3 scatter plot.
     pc_expl_plot('PC_3')
-    + theme_bw() + pairs_borders,
+    + pairs_borders,
     nrow=3,ncol=3
   )
-  ggsave(
-    paste(figures_dir, 'Germline-Somatic-Pairs.png', sep='/'),
-    width=15, height=10, dpi=100,
-    bg='white')
 }
 
 fpkm_quarter_density <- function(Upd_fpkm, output_file, clusters = c('germline', 'somatic')) {
@@ -374,4 +480,31 @@ fpkm_quarter_density <- function(Upd_fpkm, output_file, clusters = c('germline',
       x = 'Cluster', y = bquote(log[10]*"(FPKM)")
     )
   ggsave(output_file, width = 4, height = 4)
+}
+
+write_Upd_sc_cell_cycle_phases = function(Upd_sc, cell_cycle_drosophila, metafeatures) {
+  Upd_sc = Upd_sc %>% NormalizeData
+  cell_cycle = load_cell_cycle_score_drosophila(cell_cycle_drosophila, metafeatures)
+  Upd_sc = Upd_sc %>% CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
+  Upd_sc$Phase <- Upd_sc$Phase %>% factor(c("G1", "S", "G2M"))
+  append(
+    list(
+      total = table(Idents(Upd_sc), Upd_sc$Phase) %>%
+        `/`(rowSums(.)) %>%
+        round(3)
+    ),
+    sapply(
+      c("nos.1", "nos.2", "tj.1", "tj.2"),
+      \(n) table(
+        Idents(Upd_sc)[Upd_sc$batch == n],
+        Upd_sc$Phase[Upd_sc$batch == n]
+      ) %>% `/`(rowSums(.)) %>% round(3),
+      simplify = F
+    )
+  ) %>%
+    sapply(
+      # table to data frame of the table's entries
+      \(t) as.data.frame(matrix(t, nrow=nrow(t), ncol=ncol(t), dimnames=dimnames(t))),
+      simplify = FALSE
+    )
 }

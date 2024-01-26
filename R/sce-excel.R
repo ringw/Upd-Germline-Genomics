@@ -96,3 +96,17 @@ write_abundance_table <- function(wb, title, glm, flybase, tx_length, table_styl
                  withFilter = T,
                  tableStyle = table_style)
 }
+
+write_excel_tables_list <- function(lst, output_path) {
+  wb <- createWorkbook()
+  for (n in names(lst)) {
+    addWorksheet(wb, n)
+    writeDataTable(
+      wb,
+      n,
+      lst[[n]],
+      rowNames = TRUE
+    )
+  }
+  saveWorkbook(wb, output_path, overwrite = TRUE)
+}
