@@ -142,22 +142,16 @@ call_nos.1 <- function(nos.1) {
 }
 
 call_nos.2 <- function(nos.2) {
-  # In nos.2, there is a cluster of spermatocytes (Mst84Da+) which is being
-  # confused for GSC-like and which has very low nCount_RNA (75%ile = 795).
-  # These cells were not integrated with the cells from other samples - they
-  # were integrated into the "germline" cluster. These cells could even be a
-  # spermatocyte-germline doublet cluster.
-  # We are also going to call a mamo+ doublet cluster (likely another
-  # germline-tumor - somatic doublet) which is very close to the somatic
-  # cluster.
-  nos.2 = nos.2 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.15, verb=F)
-  DotPlot(nos.2, 'SCT', c('vas','bam', 'tj','lncRNA:roX2','mamo', 'H3-GFP'))
+  nos.2 = nos.2 %>% FindNeighbors(dims=1:10, verb=F) %>% FindClusters(res = 0.15, verb=F)
+  DotPlot(nos.2, 'RNA', c('vas','bam', 'tj','lncRNA:roX2','mamo','wb', 'H3-GFP', 'w-cup', 'Act57B'))
+  # Cluster 3: wb+mamo+, but adjacent to somatic in PCA. These marker genes were
+  # seen in GSC (low) in other batches, and in muscle in this batch,
+  # respectively. This is a type of doublet cluster which was not observed in
+  # the clustering of the other samples.
   nos.2 = nos.2 %>% RenameIdents(
-    # Cluster 3 is vas+, bam+, GFP+ but has lower nCount_RNA.
-    `1`='germline', `3`='germline',
-    `0`='somatic',
-    `5`='doublet', `2`='doublet.spermatocyte', `4`='doublet.mamo+',
-    `6`='spermatocyte', `7`='muscle')
+    `0`='germline', `1`='somatic', `3`='doublet.wb',
+    `4`='doublet', `5`='spermatocyte', `8`='muscle'
+  )
 }
 
 call_tj.1 <- function(tj.1) {
