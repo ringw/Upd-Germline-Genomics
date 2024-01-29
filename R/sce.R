@@ -209,7 +209,7 @@ filter_integrate_data = function(seurats) {
   seurats = seurats %>% sapply(
     \(sce) sce %>% subset(
       cells = Cells(sce) %>% subset(
-        between(sce$nCount_RNA, 1300, 7500)
+        between(sce$nCount_RNA, 2200, 7500)
         & between(sce$nFeature_RNA, 500, 2500)
       )
     ),
@@ -273,6 +273,14 @@ filter_integrate_data = function(seurats) {
 
   # Dim reduction
   Upd_sc = Upd_sc %>% RunPCA(verb=F) %>% RunUMAP(dims=1:15)
+  # Update cell embedding so that GSC is on left, cytes/tids cluster is top, and
+  # contaminant cluster (muscle) is bottom.
+  Upd_sc[['umap']]@cell.embeddings = Upd_sc[['umap']]@cell.embeddings %*% matrix(
+    c(-1, 0, 0, -1),
+    nrow = 2,
+    dimnames = rep(list(colnames(Upd_sc[['umap']]@cell.embeddings)), 2)
+  )
+
   # PCA of germline and somatic clusters only
   Upd_subset = Upd_sc %>% subset(idents = c('germline','somatic'))
   # Now that we removed other clusters, regressing out pct.ribo is more

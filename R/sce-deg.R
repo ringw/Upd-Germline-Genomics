@@ -23,6 +23,17 @@ analyze_sce_to_csv <- function(seurats, output_path) {
     ) %>% setNames(colnames(sce)),
     colData(sce)
   )
+  # Bulk analysis: We will output cell barcodes, and these are the cells that we
+  # will analyze 10X transcript-level quantification. We are also going to
+  # compute % cells with each transcript present, so we are chiefly interested
+  # in applying the same total UMI filter that we are going to apply later.
+  # % Cells would be a more reproducible statistic if cells are more similar in
+  # sequencing depth.
+  colData(sce)$nCount_RNA_filter <- (
+    between(sce$nCount_RNA, 2200, 7500)
+  ) %>%
+    factor %>%
+    recode(`FALSE`="nCount_RNA_fail", `TRUE`="nCount_RNA_pass")
 
   quickClusters = quickCluster(sce, min.size = 1000)
   # Choose the large germline-like cluster as reference cluster with an average
