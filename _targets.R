@@ -44,6 +44,7 @@ tar_option_set(
     'OpenImageR',
     'openxlsx',
     'orthogene',
+    'pillar',
     'processx',
     'purrr',
     'readxl',
