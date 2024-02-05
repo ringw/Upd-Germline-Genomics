@@ -108,3 +108,42 @@ chic_average_profiles <- function(
 
   output_path
 }
+
+enrichr_set_names <- function(enrichr, treatment_name, control_name) {
+  enrichr@names <- c(treatment_name, control_name)
+  enrichr
+}
+
+enrichr_grid_ratio <- function(enrichrs, input_count, mod_count) {
+  data = data.frame(
+    input = sapply(
+      enrichrs, \(obj) obj@names[2]
+    ),
+    mod = sapply(
+      enrichrs, \(obj) obj@names[1]
+    ),
+    multiplier = sapply(
+      enrichrs,
+      \(obj) obj@theta[1] / (1 - obj@theta[1])
+    )
+  ) %>%
+    mutate(
+      input_size = input_count[input],
+      mod_size = mod_count[mod],
+      log_adjust = (log(multiplier) + log(input_size) - log(mod_size)) / log(2)
+    )
+  data$input <- data$input %>% factor(input_count %>% sort(dec=T) %>% names) %>%
+    fct_relabel(\(n) round(input_count[n]/1000/1000, 2) %>% paste0(" Mb") %>% make.unique)
+  data$mod <- data$mod %>% factor(mod_count %>% sort(dec=T) %>% names) %>%
+    fct_relabel(\(n) round(mod_count[n]/1000/1000, 2) %>% paste0(" Mb") %>% make.unique)
+  ggplot(data, aes(input, mod, fill=log_adjust)) + geom_tile(
+  ) + scale_x_discrete(
+    position = "top"
+  ) + scale_y_discrete(limits=rev) + coord_cartesian(
+    expand = FALSE
+  ) + labs(
+    x = paste0("Input Sample (n = ", length(input_count), ")"),
+    y = paste0("Mark Sample (n = ", length(mod_count), ")"),
+    fill = bquote(log[2]*"(mult)")
+  )
+}

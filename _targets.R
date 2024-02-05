@@ -537,6 +537,11 @@ list(
     )
   ),
 
+  tar_target(
+    chic.genome,
+    chr.lengths %>% data.frame(chr = names(.), len = .)
+  ),
+
   tar_map(
     chic.experiments,
     names = experiment_name,
@@ -579,6 +584,81 @@ list(
         fc_filter = Inf
       ),
       format = "file"
+    ),
+
+    tar_target(
+      chic.enrich,
+      enrichR(
+        chic_mod_bam,
+        chic_input_bam,
+        chic.genome,
+        countConfig = countConfigPairedEnd(tlenFilter = c(70L, 400L), midpoint = FALSE)
+      )
+    ),
+    tar_target(
+      bam_replicates_input,
+      as.list(chic_input_files)
+    ),
+    tar_target(
+      bam_replicates_mod,
+      as.list(chic_mod_files)
+    ),
+    tar_target(
+      chic.enrich.grid,
+      enrichR(
+        bam_replicates_mod[[1]],
+        bam_replicates_input[[1]],
+        chic.genome,
+        countConfig = countConfigPairedEnd(tlenFilter = c(70L, 400L), midpoint = FALSE)
+      ) %>% enrichr_set_names(
+        bam_replicates_mod[[1]],
+        bam_replicates_input[[1]]
+      ),
+      pattern = cross(bam_replicates_input, bam_replicates_mod),
+      iteration = "list"
+    ),
+    tar_target(
+      chic.input.count,
+      as.numeric(
+        processx::run(
+          "samtools",
+          c("view", "-c", bam_replicates_input[[1]])
+        )$stdout
+      ),
+      pattern = map(bam_replicates_input),
+      iteration = "list"
+    ),
+    tar_target(
+      chic.mod.count,
+      as.numeric(
+        processx::run(
+          "samtools",
+          c("view", "-c", bam_replicates_mod[[1]])
+        )$stdout
+      ),
+      pattern = map(bam_replicates_mod),
+      iteration = "list"
+    ),
+    tar_target(
+      plot.chic.multiplier,
+      enrichr_grid_ratio(
+        chic.enrich.grid,
+        setNames(unlist(chic.input.count), unlist(bam_replicates_input)),
+        setNames(unlist(chic.mod.count), unlist(bam_replicates_mod))
+      )
+    ),
+    tar_target(
+      plot.chic.multiplier_png,
+      save_figures(
+        paste0("figure/", name), ".png",
+        tribble(
+          ~name, ~figure, ~width, ~height,
+          paste0("EnrichR-Norm-", name, "-", mark),
+          plot.chic.multiplier,
+          6,
+          4
+        )
+      )
     )
   ),
 
