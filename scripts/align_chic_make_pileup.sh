@@ -2,9 +2,10 @@
 
 set -e
 
-READS_1_PATH=$1
-READS_2_PATH=$2
-OUTPUT_PATH=$3
+BOWTIE_REFERENCE=$1
+READS_1_PATH=$2
+READS_2_PATH=$3
+OUTPUT_PATH=$4
 
 mkdir -p `dirname $OUTPUT_PATH`
 
@@ -21,18 +22,14 @@ mkfifo $OUTPUT_2
 ) > $OUTPUT_2 &
 
 TEMP_PATH=$(mktemp -p /tmp --dry-run $(echo $OUTPUT_PATH | tr '/' '.').XXXXXXXXXX)
-bowtie2 --threads 12 -x ~/OneDrive/Documents/Dmel_r6.47_bowtie2/Dmel_r6.47 \
+bowtie2 --threads 12 -x "$BOWTIE_REFERENCE" \
     --no-discordant -1 $OUTPUT_1 -2 $OUTPUT_2 \
     2> >(tee ${OUTPUT_PATH%.bam}.log >&2) | \
-    samtools view -b -L scripts/drosophila_genomic_regions.tab -q 20 | \
-    # samtools collate -O - $TEMP_PATH.collate | \
+    samtools view -bq 20 | \
     samtools fixmate -m - - | \
     samtools sort -T /tmp -@ 8 - | \
     samtools markdup -@ 12 -r -s - $OUTPUT_PATH \
         2> ${OUTPUT_PATH%.bam}.markdup.log
-    # Suppress sixth column (base quality).
-    # samtools mpileup -B - | \
-    # gzip -9 -c > $OUTPUT_PATH 
 wait
 samtools index $OUTPUT_PATH
 

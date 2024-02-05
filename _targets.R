@@ -41,6 +41,7 @@ tar_option_set(
     'irlba',
     'magrittr',
     'Matrix',
+    'normr',
     'OpenImageR',
     'openxlsx',
     'orthogene',
@@ -144,6 +145,7 @@ chic.raw.tracks <- tar_map(
         c(
           "-i",
           align_chic_make_pileup,
+          flybase.bowtie %>% paste("chic_bowtie2", sep="/"),
           paste0(batch, "/", sample, "_R1_001.fastq.gz"),
           paste0(batch, "/", sample, "_R2_001.fastq.gz"),
           filename
@@ -151,18 +153,36 @@ chic.raw.tracks <- tar_map(
       )
       filename
     },
-    format = "file",
-    cue = tar_cue("never")
+    format = "file"# ,
+    # cue = tar_cue("never")
   ),
-  tar_target(chic.raw, bam_paired_fragment_ends(chic.bam))
+  tar_target(
+    chic.raw,
+    bam_paired_fragment_ends(chic.bam, c(chr.lengths, transposon.lengths))
+  )
 )
 
 # ChIC lookup: For every driver x mark x input/mod aggregation.
 chic.lookup <- chic.fpkm.data %>%
   cross_join(chic.mark.data) %>%
   cross_join(tribble(~input, "input", "mod"))
-# Pull the sample names from the sample sheet csv, and generate an R symbol for
-# the "raw" fragment ends sparse vector target.
+# Pull the sample names from the sample sheet csv. For each target chic.bam and
+# chic.raw, create rlang syms referring to the list of targets.
+chic.lookup$files <- mapply(
+  \(mark, driver, input) chic.samples[
+    chic.samples$driver == driver
+      & chic.samples$group == mark
+      & if (input == "input") chic.samples$molecule == "H3" else chic.samples$molecule != "H3",
+    "sample"
+  ] %>%
+    paste0("chic.bam_", .) %>%
+    rlang::syms() %>%
+    append(list("c"), .) %>% do.call(call, ., quote=T),
+  chic.lookup$mark,
+  chic.lookup$driver,
+  chic.lookup$input,
+  SIMPLIFY = FALSE
+)
 chic.lookup$samples <- mapply(
   \(mark, driver, input) chic.samples[
     chic.samples$driver == driver
@@ -171,7 +191,7 @@ chic.lookup$samples <- mapply(
     "sample"
   ] %>%
     paste0("chic.raw_", .) %>%
-    (rlang::syms),
+    rlang::syms(),
   chic.lookup$mark,
   chic.lookup$driver,
   chic.lookup$input,
@@ -187,17 +207,59 @@ chic.experiments <- chic.experiments %>% within({
   experiment_name <- paste(mark, name, sep="_")
   chic_input_sym <- rlang::syms(paste("chic", "input", mark, name, sep="_"))
   chic_mod_sym <- rlang::syms(paste("chic", "mod", mark, name, sep="_"))
+  chic_input_bam <- rlang::syms(paste("chic.merge.bam", "input", mark, name, sep="_"))
+  chic_mod_bam <- rlang::syms(paste("chic.merge.bam", "mod", mark, name, sep="_"))
 })
+chic.experiments$chic_input_files <- chic.experiments %>%
+  mutate(input = "input") %>%
+  left_join(
+    chic.lookup %>% mutate(chic_input_files = files),
+    by = c("name", "driver", "mark", "input")
+  ) %>%
+  pull(chic_input_files)
+chic.experiments$chic_mod_files <- chic.experiments %>%
+  mutate(input = "mod") %>%
+  left_join(
+    chic.lookup %>% mutate(chic_mod_files = files),
+    by = c("name", "driver", "mark", "input")
+  ) %>%
+  pull(chic_mod_files)
 
 sce_targets <- tar_map(
   unlist = FALSE,
   sce.data,
+  names = batch,
   tar_target(
-    tenx_file, tenx_path, format='file',
-    # Don't checksum the 10X outputs, 
-    cue = tar_cue('never')
+    tenx_file, tenx_path
+    # Don't checksum the 10X outputs. Unfortunately we will want to avoid using
+    # "file" with the tar cue "never", which is still reading in all of the
+    # files (presumably to do a checksum) every time we call tar_make!
+    # format='file'
   ),
-  tar_target(sce, load_flybase(tenx_file, batch, sce.present.features, sce.mt.features, metafeatures)),
+  tar_target(
+    seurat_qc,
+    load_flybase(
+      tenx_file, batch, sce.present.features, sce.mt.features, metafeatures
+    )
+  ),
+  tar_target(
+    sctransform_quantile,
+    load_flybase(
+      tenx_file, batch, sce.features, sce.mt.features, metafeatures,
+      return.only.var.genes = FALSE, run_pca = FALSE
+    ) %>%
+      quantify_quantiles(metadata)
+  ),
+  tar_target(
+    lognormalize_quantile,
+    load_flybase(
+      tenx_file, batch, sce.present.features, sce.mt.features, metafeatures,
+      return.only.var.genes = FALSE, run_pca = FALSE
+    ) %>%
+      quantify_quantiles(
+        metadata, assay = "RNA", slot = "data", per_million = FALSE
+      )
+  ),
 
   # Map over clusters (below, from metadata) and extract pseudobulk counts.
   tar_map(
@@ -217,17 +279,10 @@ sce_targets <- tar_map(
     ),
     tar_target(
       pseudobulk.library.size,
-      sum(
-        sce$nCount_RNA %>%
-          subset(
-            read.csv(
-              metadata, row.names = 1
-            )[
-              paste(batch, names(.), sep='_'),
-              'ident'
-            ] == cluster
-          )
-      )
+        seurat_qc$nCount_RNA %>%
+        subset(
+          read.csv(metadata, row.names = 1)[names(.), 'ident'] == cluster
+        ) %>% sum
     )
   )
 )
@@ -236,11 +291,17 @@ list(
   tar_target(
     scRNAseq,
     'scRNA-seq',
-    format='file'
+    format='file',
+    # Assume that 10X files do not change.
+    cue = tar_cue("never")
   ),
   tar_target(
     sce.mt.features,
     read_mt_genome(paste0(sce.data$tenx_path[1], '/features.tsv.gz'))
+  ),
+  tar_target(
+    sce.features,
+    load_feature_names(str_replace(sce.data$tenx_path, 'scRNA-seq', scRNAseq))
   ),
   tar_target(
     sce.present.features,
@@ -252,7 +313,57 @@ list(
   ),
   tar_file(
     flybase.gtf,
+    # https://ftp.flybase.org/releases/FB2022_04/dmel_r6.47/gtf/dmel-all-r6.47.gtf.gz
     'dmel-all-r6.47.gtf.gz'
+  ),
+  tar_file(
+    flybase.fa,
+    'references/dmel-r6.47.fa.gz'
+  ),
+  tar_file(
+    flybase.transposon,
+    # https://ftp.flybase.org/releases/FB2022_04/precomputed_files/transposons/transposon_sequence_set.fa.gz
+    'references/transposon_sequence_set.fa.gz'
+  ),
+  tar_target(
+    transposon.lengths,
+    flybase.transposon %>% read.table(quote="", sep="\x1B") %>% make_chr_lengths
+  ),
+  tar_file(
+    flybase.genome,
+    tibble(input_file=c(flybase.fa, flybase.transposon)) %>%
+      rowwise() %>%
+      mutate(contents = list(read.table(input_file, quote="", sep="\x1B"))) %>%
+      ungroup() %>%
+      summarize(
+        contents = list(do.call(rbind, contents)),
+        output_file = "references/chic_reference.fa",
+        write_table = write.table(contents[[1]], output_file, row.names=F, col.names=F, quote=F),
+        index_table = processx::run(
+          "samtools",
+          c("faidx", output_file)
+        ) %>% list
+      ) %>%
+      pull(output_file),
+    cue = tar_cue("never")
+  ),
+  tar_file(
+    flybase.bowtie,
+    tibble(input_file=list(list(flybase.fa, flybase.transposon)), output_file="references/chic_bowtie2", output_base="chic_bowtie2") %>%
+      mutate(
+        rename_folder =
+          if (file.exists(output_file))
+            file.rename(output_file, paste0(output_file, "~")),
+        make_folder = dir.create(output_file),
+        run_bowtie2 = processx::run(
+          "bowtie2-build",
+          c(
+            input_file[[1]] %>% append(list(sep=",")) %>% do.call(paste, .),
+            paste(output_file, output_base, sep="/")
+          )
+        ) %>% list
+      ) %>%
+      pull(output_file)
   ),
   tar_target(
     metafeatures,
@@ -567,13 +678,71 @@ list(
   chic.raw.tracks,
 
   # ChIC coverage tracks.
-  tar_target(chic.kde.filter, make_frag_end_filter(bw = 25)),
+  tar_target(
+    chic.kde.filter.template,
+    {
+      # With convolution, the Gaussian kernel will be a ROLLING filter applied
+      # to the chromosome. Chr filter size (plus or minus from origin) will be
+      # set to 10 * sigma. Limit input length (chr length limit) is determined
+      # by subtracting one, and subtracting the extent of the filter (+- x), so
+      # that effectively, we are not performing a wrap-around operation on the
+      # input.
+      # One filter is designed for the chromosomes (large, Mb), while another
+      # filter is designed for the thousands of transposons (small, kb).
+      df <- tibble(
+        fft_length = c(bitwShiftL(1, 14), bitwShiftL(1, 25)), bw = 25
+      ) %>%
+        mutate(
+          filter_size = bw * 10,
+          limit_length = fft_length - (2 * filter_size + 1) - 1
+        ) %>%
+        arrange(limit_length)
+      stopifnot(between(max(chr.lengths), min(df$limit_length), max(df$limit_length)))
+      stopifnot(max(transposon.lengths) < min(df$limit_length))
+      df
+    },
+    iteration = "vector"
+  ),
+  tar_target(
+    chic.kde.filter,
+    chic.kde.filter.template %>%
+      add_column(
+        filter =
+          list(with(., make_frag_end_filter(fft_length, filter_size, bw)))
+      ),
+    pattern = map(chic.kde.filter.template)
+  ),
   tar_map(
     chic.lookup,
     names = lookup_name,
     tar_target(
       chic,
-      fpkm_aggregate(samples) %>% smooth_chr_bp(chic.kde.filter)
+      fpkm_aggregate(samples) %>%
+        smooth_chr_bp(chic.kde.filter, c(chr.lengths, transposon.lengths))
+    ),
+    # Alternative pipeline merging BAM files before proceeding.
+    tar_target(
+      chic.merge.bam,
+      {
+        filename <- paste0(
+          dirname(files[1]),
+          "/",
+          lookup_name,
+          ".bam"
+        )
+        processx::run(
+          "samtools",
+          c(
+            "merge",
+            "-f",
+            filename,
+            files
+          )
+        )
+        processx::run("samtools", c("index", filename))
+        filename
+      },
+      format = "file"
     )
   ),
 
@@ -703,6 +872,10 @@ list(
         setNames(unlist(chic.input.count), unlist(bam_replicates_input)),
         setNames(unlist(chic.mod.count), unlist(bam_replicates_mod))
       )
+    ),
+    tar_target(
+      enrichr.size.factor,
+      enrichr_ratio_per_reads_mapped_adjustment(plot.chic.multiplier)
     ),
     tar_target(
       plot.chic.multiplier_png,

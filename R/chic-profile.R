@@ -128,9 +128,15 @@ enrichr_grid_ratio <- function(enrichrs, input_count, mod_count) {
     )
   ) %>%
     mutate(
+      input_filename = input,
+      mod_filename = mod,
       input_size = input_count[input],
       mod_size = mod_count[mod],
-      log_adjust = (log(multiplier) + log(input_size) - log(mod_size)) / log(2)
+      log_adjust = (log(multiplier) + log(input_size) - log(mod_size)) / log(2),
+      # Can test "adjust" using acast and svd: Is the multiplier applied to each
+      # sample linearly dependent? Then from the mean of RPKM-adjusted tracks,
+      # we can determine what multiplier to apply to the "mark / input" track.
+      adjust = exp(log_adjust * log(2))
     )
   data$input <- data$input %>% factor(input_count %>% sort(dec=T) %>% names) %>%
     fct_relabel(\(n) round(input_count[n]/1000/1000, 2) %>% paste0(" Mb") %>% make.unique)
@@ -146,4 +152,25 @@ enrichr_grid_ratio <- function(enrichrs, input_count, mod_count) {
     y = paste0("Mark Sample (n = ", length(mod_count), ")"),
     fill = bquote(log[2]*"(mult)")
   )
+}
+
+enrichr_ratio_per_reads_mapped_adjustment <- function(plot.chic.multiplier) {
+  data <- plot.chic.multiplier$data %>% acast(
+    input_filename ~ mod_filename, value.var = "multiplier"
+  )
+  # We are normalizing each track by number of reads mapped ("size"). "Mod" is
+  # the numerator, so it gets the reciprocal applied. "Input" is in the
+  # denominator, so the reciprocal cancels out. Then, we can hit the matrix of
+  # normr normalization values (multiplier for treatment / control) with the
+  # vectors of FPKM normalization values. This is because the actual
+  # contribution of ChIC samples to the track is going to be uniform after the
+  # FPKM normalization. Finally, samples contribute to the numerator or
+  # denominator proportional to the number of such samples (arithmetic mean).
+  my_input_weights <- t(
+    plot.chic.multiplier$data$input_size
+  )[, rownames(data)]
+  my_mod_weights <- 1 / (
+    plot.chic.multiplier$data$mod_size
+  )[colnames(data)]
+  my_input_weights %*% data %*% my_mod_weights / nrow(data) / ncol(data) %>% as.numeric()
 }

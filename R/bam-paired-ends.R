@@ -1,11 +1,8 @@
-chr_fft_length <- bitwShiftL(1, 25)
-chr_filter_size <- floor((chr_fft_length - max(chr.lengths) - 1) / 2)
-
-make_frag_end_filter <- function(bw = 25) {
+make_frag_end_filter <- function(fft_length, filter_size, bw = 25) {
   time_domain <- c(
-    dnorm(seq(0, chr_filter_size), sd = bw),
-    rep(0, chr_fft_length - (2 * chr_filter_size + 1)),
-    dnorm(seq(-chr_filter_size, -1), sd = bw)
+    dnorm(seq(0, filter_size), sd = bw),
+    rep(0, fft_length - (2 * filter_size + 1)),
+    dnorm(seq(-filter_size, -1), sd = bw)
   )
   fft(time_domain)
 }
@@ -30,7 +27,7 @@ cigar_ref_length <- function(cigars) {
     )
 }
 
-bam_paired_fragment_ends <- function(bam_file) {
+bam_paired_fragment_ends <- function(bam_file, chr.lengths) {
   read_origin_table <- names(chr.lengths) %>%
     sapply(
       \(n) run(
@@ -108,23 +105,30 @@ cbind_bulk_data <- function(data) {
   )
 }
 
-smooth_chr_bp <- function(bp_vec, filter_fft, bin_size = 10) {
+smooth_chr_bp <- function(bp_vec, chic.kde.filter, chr.lengths, bin_size = 10) {
   do_smooth <- function(v) {
     len <- length(v)
-    v <- c(v %>% as.numeric, rep(0, chr_fft_length - len))
+    fft_to_use <- len %>% findInterval(c(0, chic.kde.filter$limit_length))
+    fft_length <- pull(chic.kde.filter, "fft_length")[fft_to_use]
+    filter_fft <- pull(chic.kde.filter, "filter")[fft_to_use][[1]]
+
+    v <- c(v %>% as.numeric, rep(0, fft_length - len))
     v <- v %>% fft %>%
       `*`(filter_fft) %>%
       fft(inverse = TRUE) %>%
-      `/`(chr_fft_length)
+      `/`(fft_length)
     v <- with_options(list(warn=-1), as.numeric(v))
     v <- v[1:len]
 
-    # Use even steps when taking log. FPKM ~0.008 seems quite small.
     v <- c(
+      # Nice sampling of the density at each base pair, giving us the estimate at
+      # the midpoint of the range in our Rle.
       v[seq(bin_size/2, length(v), by=bin_size)],
-      if (length(v) %% bin_size >= floor(bin_size/2))
-        NULL
-      else v[length(v) - (length(v) %% bin_size)]
+      # If the final window is less than half-full, then we need to sample an
+      # extra value at the final base pair.
+      if (between(length(v) %% bin_size, 1, floor(bin_size/2) - 1))
+        v[length(v)]
+      else NULL
     )
     lengths <- rep(
       c(bin_size, len %% bin_size),
@@ -133,7 +137,7 @@ smooth_chr_bp <- function(bp_vec, filter_fft, bin_size = 10) {
         if (len %% bin_size == 0) 0 else 1
       )
     )
-    Rle(
+    res = Rle(
       with_options(list(warn=-1), log(v) / log(2)) %>%
         # FPKM ~0.008 seems quite small
         replace(!is.finite(.) | . < -7, -7) %>%
