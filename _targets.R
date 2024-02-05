@@ -90,8 +90,8 @@ sce.data = data.frame(
 sce.clusters = data.frame(cluster = c('germline','somatic','spermatocyte','muscle'))
 sce.clusters <- tribble(
   ~ cluster, ~ contrast,
-  'germline', c(1,0,0,0,0,0,0),
-  'somatic', c(1,1,0,0,0,0,0),
+  'germline', c(1, CySCoverGSC=-0.5, 0,0,0,0,0),
+  'somatic', c(1, CySCoverGSC=0.5, 0,0,0,0,0),
   'spermatocyte', c(1,0,1,0,0,0,0),
   'muscle', c(1,0,0,1,0,0,0)
 )
@@ -257,14 +257,14 @@ list(
   tar_target(
     metafeatures,
     create_meta_features(
-      tenx_file_nos.1_scRNA.seq.Nos.Upd_H3.GFP_Rep1.outs.filtered_feature_bc_matrix,
+      tenx_file_nos.1,
       flybase.annotations, flybase.gtf, sce.present.features, sce.mt.features,
       'scRNA-seq-Meta-Features.csv'), format='file'),
-  tar_target(nos.1, call_nos.1(sce_nos.1_scRNA.seq.Nos.Upd_H3.GFP_Rep1.outs.filtered_feature_bc_matrix)),
-  tar_target(nos.2, call_nos.2(sce_nos.2_scRNA.seq.Nos.Upd_H3.GFP_Rep2.outs.filtered_feature_bc_matrix)),
-  tar_target(tj.1, call_tj.1(sce_tj.1_scRNA.seq.tj.Upd_H3.GFP_Rep1.outs.filtered_feature_bc_matrix)),
-  tar_target(tj.2, call_tj.2(sce_tj.2_scRNA.seq.tj.Upd_H3.GFP_Rep2.outs.filtered_feature_bc_matrix)),
-  tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2)), cue=tar_cue('never')),
+  tar_target(nos.1, call_nos.1(seurat_qc_nos.1)),
+  tar_target(nos.2, call_nos.2(seurat_qc_nos.2)),
+  tar_target(tj.1, call_tj.1(seurat_qc_tj.1)),
+  tar_target(tj.2, call_tj.2(seurat_qc_tj.2)),
+  tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
   tar_target(scRNA_seq_figures, Upd_sc_figures('scRNA-seq-Figure', Upd_sc), format='file'),
   tar_target(metadata, analyze_sce_to_csv(list(nos.1=nos.1, nos.2=nos.2, tj.1=tj.1, tj.2=tj.2), 'scRNA-seq-Metadata.csv'), format='file'),
   tar_combine(
@@ -272,29 +272,34 @@ list(
     sce_targets$sctransform_quantile,
     command = combine_gene_quantiles(list(!!!.x))
   ),
+  tar_combine(
+    lognormalize_quantile,
+    sce_targets$lognormalize_quantile,
+    command = combine_gene_quantiles(list(!!!.x))
+  ),
+  tar_target(
+    model_matrix,
+    build_model_matrix(metadata)
+  ),
   tar_target(
     Upd_glm,
-    fit_glm(
-      c(nos.1=tenx_file_nos.1_scRNA.seq.Nos.Upd_H3.GFP_Rep1.outs.filtered_feature_bc_matrix,
-        nos.2=tenx_file_nos.2_scRNA.seq.Nos.Upd_H3.GFP_Rep2.outs.filtered_feature_bc_matrix,
-        tj.1=tenx_file_tj.1_scRNA.seq.tj.Upd_H3.GFP_Rep1.outs.filtered_feature_bc_matrix,
-        tj.2=tenx_file_tj.2_scRNA.seq.tj.Upd_H3.GFP_Rep2.outs.filtered_feature_bc_matrix),
-      metadata),
+    fit_glm(Upd_sc, model_matrix, metadata),
     # glm is quite slow and doesn't need to re-run as we are adding other colData to the seurat
-    cue=tar_cue('never')),
+    ), # cue=tar_cue('never')),
   tar_target(
     Upd_regression_somatic,
-    apeglm_coef_table(Upd_glm, sce.present.features)
+    apeglm_coef_table(Upd_glm)
   ),
   tar_target(
-    Upd_regression_spmtc,
-    apeglm_coef_table_contrast(Upd_glm, sce.present.features, apeglm_contrasts$spermatocyte)
+    Upd_regression_tid,
+    apeglm_coef_table(Upd_glm, coef = 3)
   ),
   tar_target(
-    Upd_regression_muscle,
-    apeglm_coef_table_contrast(Upd_glm, sce.present.features, apeglm_contrasts$muscle)
+    Upd_regression_mscl,
+    apeglm_coef_table(Upd_glm, coef = 4)
   ),
-  tar_target(scripts_dir, "scripts", format = "file"),
+  # Split this tar_file, then remove tar_cue("never")
+  tar_target(scripts_dir, "scripts", format = "file", cue = tar_cue("never")),
   sce_targets,
   tar_combine(
     Upd_pseudobulk,
@@ -342,6 +347,31 @@ list(
     )
   ),
   tar_target(
+    supplemental_bulk_fpkm,
+    gene_pseudobulk_fpkm(
+      paste0(
+        "scRNA-seq-Regression/pseudobulk_",
+        c("nos", "nos", "tj", "tj"),
+        c(".1", ".2", ".1", ".2"),
+        "_filtered.txt"
+      ),
+      mapply(
+        # Load all of the 10X matrices using sce.features (all features instead
+        # of our min # cells features).
+        \(n, f) load_flybase(
+          f, n, sce.features, sce.mt.features, metafeatures, sctransform=FALSE
+        ),
+        c("nos.1", "nos.2", "tj.1", "tj.2"),
+        c(tenx_file_nos.1, tenx_file_nos.2, tenx_file_tj.1, tenx_file_tj.2),
+        SIMPLIFY = FALSE
+      ),
+      c("nos.1", "nos.2", "tj.1", "tj.2"),
+      flybase.gtf,
+      metadata,
+      metafeatures
+    )
+  ),
+  tar_target(
     supplemental_gene_list,
     c(
       "Act5C", "Act42A", "AGO3", "vas", "tj", "zfh1", "lncRNA:roX1",
@@ -383,7 +413,7 @@ list(
   ),
   tar_target(
     supplemental_elbow_figure,
-    data.frame(stdev = Upd_sc_2200[['pca.subset']]@stdev, x = 1:50) %>%
+    data.frame(stdev = Upd_sc[['pca.subset']]@stdev, x = 1:50) %>%
       head(10) %>%
       ggplot(aes(x, stdev^2))
       + geom_point(color = "#06470c", size = 3)
@@ -410,7 +440,7 @@ list(
     {
       filename <- "scRNA-seq-Regression/Cell-Cycle-Scoring.xlsx"
       write_excel_tables_list(
-        write_Upd_sc_cell_cycle_phases(Upd_sc_2200, cell_cycle_drosophila, metafeatures),
+        write_Upd_sc_cell_cycle_phases(Upd_sc, cell_cycle_drosophila, metafeatures),
         filename
       )
       filename
@@ -423,11 +453,21 @@ list(
       filename <- "figure/Single-Cell/Germline-Somatic-Pairs.pdf"
       dir.create(dirname(filename), recursive = TRUE, showW = FALSE)
       CairoPDF(filename, width = 16, height = 9)
-      print(plot_Upd_pca_components(Upd_sc_2200, load_cell_cycle_score_drosophila(cell_cycle_drosophila, metafeatures)))
+      print(plot_Upd_pca_components(Upd_sc, load_cell_cycle_score_drosophila(cell_cycle_drosophila, metafeatures)))
       dev.off()
       filename
     },
     format = "file"
+  ),
+  tar_target(
+    sct_gene_lists,
+    determine_gene_list(sctransform_quantile, supplemental_bulk_fpkm)
+  ),
+  tar_target(
+    sct_gene_venn,
+    plot_gene_lists(
+      sct_gene_lists
+    )
   ),
   tar_map(
     tibble(extension = c(".pdf", ".png", ".svg")),
@@ -439,33 +479,49 @@ list(
           ~name, ~figure, ~width, ~height,
           "Bulk-Dots", supplemental_bulk_figure, 4, 9,
           "Cluster-Dots", supplemental_cluster_dot_plot_figure, 6, 9,
-          "Validation-Elbow", supplemental_elbow_figure, 5, 2.5
+          "Validation-Elbow", supplemental_elbow_figure, 5, 2.5,
+          "SCT-Gene-List-Venn-Area", sct_gene_venn, 4, 3
         )
       ),
       format = "file"
     )
   ),
+  # Predict gene mean from glmGamPoi. This is mostly still used for H3-GFP:
+  # The 10X BAM scripts will focus on the reference chromosomes and will later
+  # test normalizing by transcript length using the original reference. That
+  # analysis is not actually needed for the H3-GFP construct.
   tar_target(
-    Upd_cpm,
+    Upd_cpm_regression,
+    glm_make_cpm_table(Upd_glm)
+  ),
+  # Estimate gene isoform means using summary of 10X BAM transcript id tags.
+  tar_target(
+    Upd_cpm_transcripts,
     pseudobulk_cpm(
       Upd_pseudobulk,
       Upd_pseudobulk_sf,
       flybase.gtf
     )
   ),
+  # Call the most abundant gene isoform which maximizes FPKM value.
   tar_target(
-    Upd_fpkm_bam,
-    tx_cpm_to_fpkm(Upd_cpm, metafeatures)
+    Upd_fpkm,
+    tx_cpm_to_fpkm(Upd_cpm_transcripts, metafeatures)
   ),
+  # Final table of gene abundances: CPM of the abundant isoform based on FPKM
+  # calculation. Also join with H3-GFP gene mean coming from the GLM.
   tar_target(
-    Upd_fpkm_longest_isoform,
-    longest_isoform_fpkm(Upd_glm, metafeatures)
+    Upd_cpm,
+    join_cpm_data(Upd_cpm_transcripts, Upd_fpkm, Upd_cpm_regression)
   ),
-  # Do not use calculation based on gene body and longest isoform.
-  tar_target(Upd_fpkm, Upd_fpkm_bam),
   tar_target(
     sc_excel,
-    publish_excel_results(Upd_glm, Upd_regression_somatic, Upd_regression_spmtc, Upd_regression_muscle, metafeatures, 'scRNA-seq-Regression/Enriched-Genes.xlsx'),
+    publish_excel_results(
+      Upd_regression_somatic, Upd_regression_tid, Upd_regression_mscl,
+      Upd_cpm_transcripts, Upd_cpm, Upd_fpkm, sctransform_quantile,
+      supplemental_bulk_fpkm, metafeatures, flybase.gtf,
+      'scRNA-seq-Regression/Enriched-Genes.xlsx'
+    ),
     format='file'
   ),
 
@@ -527,7 +583,7 @@ list(
     tar_target(
       bed,
       reference_sort_by_fpkm_table(
-        Upd_fpkm_bam, tolower(name), metafeatures,
+        Upd_fpkm, tolower(name), metafeatures,
         paste0("scRNA-seq-Regression/", name, "-FPKM.bed")
       ),
       format = "file"

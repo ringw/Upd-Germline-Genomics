@@ -7,9 +7,29 @@ cluster_colors = list(
   others=hsv(0,0,0.9)
 )
 
-cluster_contrast = list(
-  germline = hcl(124, 55, 38),
-  somatic = hcl(214, 37, 45)
+cluster_colors = list(
+  # green
+  germline=hcl(123, 113, 80),
+  # magenta
+  somatic="#FF5AEE",
+  spermatocyte=hcl(86, 93, 85),
+  differentiated=hcl(86, 20, 75),
+  muscle=hcl(17, 112, 58),
+  others=hsv(0,0,0.9)
+)
+
+cluster_bar_color1 = list(
+  # forest green
+  germline=hcl(123, 67, 50),
+  # deep magenta
+  somatic=hcl(320, 75, 50)
+)
+
+cluster_bar_color2 = list(
+  # muted green
+  germline = hcl(123, 27, 61),
+  # rose
+  somatic = hcl(0, 47, 62)
 )
 
 sc_quartile_colors = c(
@@ -48,12 +68,22 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
     guide=guide_legend(title=NULL, override.aes = list(size=4))
   ) + scale_x_continuous(
     breaks=c(-10,0,10)
-  ) + scale_y_continuous(breaks=c(-7,0,10)) + theme_cowplot()
+  ) + scale_y_continuous(breaks=c(-10,0,5)) + theme_cowplot()
   filenames <- NULL
   filenames <- c(paste(figures_dir, 'UMAP.svg', sep='/'), filenames)
   ggsave(filenames[1], width=8, height=4.5)
+  filenames <- c(paste(figures_dir, 'UMAP.pdf', sep='/'), filenames)
+  ggsave(filenames[1], width=8, height=4.5)
+  umap_plot <- last_plot()
+  umap_plot$data <- umap_plot$data %>%
+    subset(ident %in% c('germline', 'somatic'))
+  print(umap_plot + scale_y_continuous(limits=c(-6,NA), breaks=c(-5,0,5)))
+  filenames <- c(paste(figures_dir, 'UMAP-Subset.svg', sep='/'), filenames)
+  ggsave(filenames[1], width=8, height=3)
+  filenames <- c(paste(figures_dir, 'UMAP-Subset.pdf', sep='/'), filenames)
+  ggsave(filenames[1], width=8, height=3)
 
-  for (gene in c('RpL22-like','vas','tj','lncRNA:roX1','lncRNA:roX2','Mst87F','soti','sunz','w-cup','Act57B')) {
+  for (gene in c('AGO3','RpL22-like','vas','tj','lncRNA:roX1','lncRNA:roX2','Mst87F','soti','sunz','w-cup','Act57B')) {
     gene.save = gene %>% str_replace('lncRNA:', '')
     gene.data = Upd_sc@meta.data %>%
       cbind(
@@ -74,13 +104,15 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
       limits = c(0, gene.max.intensity), oob = squish
     ) + scale_x_continuous(
       breaks=c(-10,0,10)
-    ) + scale_y_continuous(breaks=c(-7,0,10)) + theme_cowplot(
+    ) + scale_y_continuous(breaks=c(-10,0,5)) + theme_cowplot(
     ) + labs(
       tag=gene.save
     ) + theme(
       plot.tag.position = c(0.1, 0.94)
     )
     filenames <- c(paste0(figures_dir, '/UMAP-', gene.save, '.svg'), filenames)
+    ggsave(filenames[1], width=8, height=4.5)
+    filenames <- c(paste0(figures_dir, '/UMAP-', gene.save, '.pdf'), filenames)
     ggsave(filenames[1], width=8, height=4.5)
   }
   filenames
@@ -92,7 +124,11 @@ gene_pseudobulk_fpkm <- function(tx_files, seurats, seurat_names, gtf_path, meta
   metadata <- read.csv(metadata_path, row.names = 1)
   size_factors <- seurat_names %>%
     sapply(\(n) metadata %>% subset(batch == n & nCount_RNA_filter == "nCount_RNA_pass") %>% pull(nCount_RNA) %>% sum)
-  cpm_table <- pseudobulk_cpm(data.frame(batch = 'nos.1', tx_file = tx_files), data.frame(batch = 'nos.1', size_factor = size_factors), gtf_path)
+  cpm_table <- pseudobulk_cpm(
+    data.frame(batch = 'nos.1', tx_file = tx_files),
+    data.frame(batch = 'nos.1', size_factor = size_factors),
+    gtf_path
+  )
   fpkm_table <- cpm_table %>% tx_cpm_to_fpkm(metafeatures_path)
   data.frame(
     fpkm = fpkm_table[rownames(seurats[[1]][['RNA']]), 1],
@@ -103,8 +139,7 @@ gene_pseudobulk_fpkm <- function(tx_files, seurats, seurat_names, gtf_path, meta
             ,
             metadata %>%
               subset(batch == n & nCount_RNA_filter == "nCount_RNA_pass") %>%
-              rownames %>%
-              str_replace(paste0(n, "_"), "")
+              rownames
           ] %>%
             `!=`(0) %>%
             rowMeans,

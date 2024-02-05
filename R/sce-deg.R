@@ -1,7 +1,44 @@
+# Find an nCount_RNA threshold so that % expressed is more comparable between
+# the Nos and tj-driven samples. This is saved in the csv metadata and is
+# applied later for a supplemental dot plot.
+plot_nCount_RNA_threshold <- function(Upd_sc, ident, gene) {
+  Upd_sc$batch <- Upd_sc$batch %>% factor
+  data <- levels(Upd_sc$batch) %>%
+    sapply(
+      \(n) Upd_sc@meta.data %>%
+        subset(batch == n & Idents(Upd_sc) == ident) %>%
+        cbind(is.expressed = Upd_sc[['RNA']]@counts[
+          gene, Upd_sc$batch == n & Idents(Upd_sc) == ident
+        ] != 0) %>%
+        arrange(desc(nCount_RNA)) %>%
+        cbind(num.cells = seq_along(.$is.expressed), num.expressed = cumsum(.$is.expressed)) %>%
+        cbind(expression.rate = .$num.expressed / .$num.cells),
+      simplify = FALSE)
+  thresholds = seq(1000, 5000, length.out = 101) %>% round
+  threshold_stat <- thresholds %>%
+    sapply(
+      \(t) data %>% sapply(
+        \(df) df[
+          nrow(df) + 1 - findInterval(t, c(0, rev(df$nCount_RNA))),
+          "expression.rate"
+        ]
+      )
+    )
+  colnames(threshold_stat) <- thresholds
+  names(dimnames(threshold_stat)) <- c("batch", "nCount_RNA")
+  melt(threshold_stat) %>% ggplot(aes(nCount_RNA, value, group=batch, color=batch)) + geom_line()
+  data.frame(thresholds, sd = colSds(threshold_stat))
+}
+plot_nCount_RNA_threshold_summary <- function() {
+  mapply(plot_nCount_RNA_threshold, rep(list(Upd_sc), 2), c("germline","germline","germline","somatic","somatic","somatic"), c("vas","RpL22-like","blanks","tj","lncRNA:roX1","zfh1"), SIMPLIFY=F) %>% bind_rows(.id = "gene") %>% ggplot(aes(thresholds,sd,group=gene,color=gene)) + geom_line()
+}
+
 # Differentially expressed genes.
 analyze_sce_to_csv <- function(seurats, output_path) {
-  for (name in names(seurats)) seurats[[name]] = seurats[[name]] %>% RenameCells(
-    add.cell.id = name
+  stopifnot(
+    length(
+      purrr::reduce(sapply(seurats, Cells, simplify=FALSE), intersect)
+    ) == 0
   )
   for (i in seq_along(seurats)) {
     Idents(seurats[[i]]) = Idents(seurats[[i]]) %>% fct_relabel(
@@ -49,46 +86,49 @@ analyze_sce_to_csv <- function(seurats, output_path) {
   output_path
 }
 
-fit_glm <- function(tenx_paths, metadata_file) {
-  metadata = read.csv(metadata_file, row.names=1) %>% as.data.frame
-  counts = mapply(
-    \(name, path) {
-      mat = Read10X(path)
-      colnames(mat) = paste(name, colnames(mat), sep='_')
-      mat
-    },
-    names(tenx_paths),
-    tenx_paths,
-    SIMPLIFY=F,
-    USE.NAMES=F
+build_model_matrix <- function(metadata) {
+  metadata <- metadata %>% read.csv(row.names = 1)
+  metadata$ident <- metadata$ident %>%
+    factor(c("germline", "somatic", "spermatocyte", "muscle"))
+  metadata$batch <- metadata$batch %>% factor
+  mm <- model.matrix(~ ident + batch, metadata)
+
+  # Let Beta be a row vector:
+  # [germline germlinecyst LFCtid LFCmuscle], where germline is the intercept
+  # coefficient, and germlinecyst, LFCtid, and LFCmuscle are all deltas relative
+  # to germline.
+  # We want to add germlinecyst/2 to the first entry (intercept: germ/cyst avg)
+  # and subtract it from the third and fourth entries (again, using
+  # germ/cyst avg as the baseline for both outlier clusters).
+  # X (in model matrix) is also a row vector, and the model is fitted such that:
+  #   E[count] = Offset * beta * t(X).
+  # If we want a different beta vector, then solve for the column operations
+  # that we are going to apply: X -> X * solve(t(M)).
+  # In columns: Update to Intercept, germlinecyst unchanged, subtract the new
+  # Intercept from the values for the smaller clusters.
+  solve(t(matrix(c(1,0.5,0,0, 0,1,0,0, 0,-0.5,1,0, 0,-0.5,0,1), nrow=4)))
+  colnames(mm)[1:4] <- c("Mean", "CySCoverGSC", "TidOverMean", "MuscleOverMean")
+  mm[, 1:4] <- mm[, 1:4] %*% (
+    matrix(c(1,0.5,0,0, 0,1,0,0, 0,-0.5,1,0, 0,-0.5,0,1), nrow=4) %>%
+      t %>%
+      solve
   )
-  counts = do.call(cbind, counts)
-  rownames(counts) = rownames(counts) %>% map_feature_names
-  # Remove counts that are missing from metadata, and remove doublets
-  counts.keep = colnames(counts) %>% subset(
-    metadata[., 'ident'] %in% c(
-      'germline','somatic','spermatocyte','muscle'
-    )
-  )
-  gene.names = rownames(counts)
-  counts = counts[, counts.keep]
-  metadata = metadata[counts.keep, ]
-  metadata$ident = metadata$ident %>% fct_relevel(
-    'germline','somatic','spermatocyte','muscle'
-  )
-  counts = writeHDF5Array(counts, with.dimnames = T)
+  mm
+}
+
+fit_glm <- function(Upd_sc, model_matrix, metadata) {
+  metadata <- metadata %>% read.csv(row.names = 1)
   Upd_glm <- glm_gp(
-    counts,
-    ~ ident + batch,
-    metadata,
-    size_factors = metadata[, 'size_factor'],
-    subsample = 10000,
-    on_disk = T,
+    Upd_sc[['RNA']]@counts,
+    model_matrix[colnames(Upd_sc), ],
+    size_factors = metadata[colnames(Upd_sc), "size_factor"],
+    on_disk = F,
     verbose = T
   )
-  # Move data from hdf5 to memory:
-  # Store data as sparseMatrix.
-  assay(Upd_glm$data) = assay(Upd_glm$data) %>% as('sparseMatrix')
+  # Quite useful to keep the metadata in the GLM object.
+  colData(Upd_glm$data)[, colnames(metadata)] <- metadata[
+    colnames(Upd_glm$data),
+  ]
   # We did not specify an offset per gene. Grab the offset per cell (column).
   # We can reconstruct a full-size Offset matrix later.
   Upd_glm$Offset = as.matrix(Upd_glm$Offset[1,, drop=F])
@@ -98,52 +138,7 @@ fit_glm <- function(tenx_paths, metadata_file) {
   Upd_glm
 }
 
-create_fpkm_reference_longest_isoform <- function(
-    meta_path,
-    Upd_glm,
-    contrast,
-    output_path) {
-  col_data = colData(Upd_glm$data)[
-    colAlls(t(Upd_glm$model_matrix) == contrast),
-  ]
-  # Predict for the sum of size factors, divide by the sum of counts. We will
-  # divide by base pairs reference (bp), so the scale factor is 1B, not 1MM.
-  offset_predictions = (
-    log(sum(col_data$size_factor))
-    - log(sum(col_data$nCount_RNA))
-    + log(1000)*3
-  )
-  predictions = predict(
-    Upd_glm,
-    matrix(contrast, nrow=1),
-    type='response',
-    offset=offset_predictions
-  )
-
-  features = read.csv(meta_path, row.names=1) %>% rownames_to_column %>% subset(
-    !duplicated(flybase) & !is.na(flybase)
-  )
-  features = features %>% inner_join(
-    data.frame(
-      rowname = rownames(predictions),
-      fragments_per_kilo_mm = predictions
-    ),
-    by='rowname'
-  )
-
-  # Include introns mode - use entire length of mRNA (first exon to last exon)
-  features = features %>% arrange(desc(transcript.length))
-  features$fpkm = features$fragments_per_kilo_mm / (abs(features$end - features$start) + 1)
-
-  bed = features %>% subset(
-    select=c(chr,start,end,flybase,fpkm,strand)
-  )
-  bed = bed %>% arrange(desc(fpkm))
-  write.table(bed, output_path, row.names=F, col.names=F, quote=F, sep='\t')
-  output_path
-}
-
-apeglm_coef_table <- function(g, gene_list, coef=2, num_cells=20000) {
+apeglm_coef_table <- function(g, coef=2) {
   message('Construct dense matrices in memory for regression')
   g$Offset = matrix(
     g$Offset[1,, drop=T],
@@ -169,115 +164,18 @@ apeglm_coef_table <- function(g, gene_list, coef=2, num_cells=20000) {
     offset=0,
     se.fit=T
   ) %>% with(cbind(fit, se.fit))
-  message('Construct a smaller Offset matrix for Approximate Posterior')
-  cell_logical = with_seed(
-    1,
-    seq(ncol(g$data)) %in% sample(ncol(g$data), num_cells)
-  )
+  # Garbage-collect Mu.
   g$Mu = NULL
-  Offset = matrix(
-    g$Offset[1, cell_logical, drop=T],
-    byrow=T,
-    nrow=length(gene_list),
-    ncol=num_cells,
-    dimnames=list(gene_list, colnames(g$data)[cell_logical])
-  )
-  g$Offset = NULL
   message('Optimize Approximate Posterior')
   lfc = apeglm(
-    assay(g$data)[gene_list, cell_logical],
-    g$model_matrix[cell_logical,],
+    assay(g$data),
+    g$model_matrix,
     log.lik=NULL,
-    param=g$overdispersion_shrinkage_list$dispersion_trend[
-      match(gene_list, rownames(g$data))
-    ],
+    param=g$overdispersion_shrinkage_list$dispersion_trend,
     coef=coef,
     mle=lfc,
     method='nbinomCR',
-    offset=Offset
-  )
-  lfc$mle.test = mle
-  lfc
-}
-
-# coef: ident - germline
-# Contrast: Subtract 0.5*somatic (take geometric mean of germline and somatic
-# mean as the denominator)
-apeglm_contrasts = list(
-  spermatocyte=c(0,-0.5,1,0,0,0,0),
-  muscle=c(0,-0.5,0,1,0,0,0)
-)
-
-apeglm_coef_table_contrast <- function(g, gene_list, contrast, num_cells=20000) {
-  message('Construct dense matrices in memory for regression')
-  g$Offset = matrix(
-    g$Offset[1,, drop=T],
-    byrow=T,
-    nrow=nrow(g$data),
-    ncol=ncol(g$data),
-    dimnames=dimnames(g$data)
-  )
-  g$Mu = glmGamPoi:::calculate_mu(
-    Beta=g$Beta,
-    model_matrix=g$model_matrix,
-    offset_matrix=g$Offset
-  )
-  message('F-test of regression without shrinkage')
-  mle = test_de(g, contrast)
-  mle = NULL
-  message('Calculate regression s.e. using QR decomposition')
-  lfc = predict(
-    g,
-    matrix(
-      contrast,
-      nrow=1
-    ),
-    offset=0,
-    se.fit=T
-  ) %>% with(cbind(fit, se.fit))
-
-  message('Construct a smaller Offset matrix for Approximate Posterior')
-  cell_logical = with_seed(
-    1,
-    seq(ncol(g$data)) %in% sample(ncol(g$data), num_cells)
-  )
-  g$Mu = NULL
-  Offset = matrix(
-    g$Offset[1, cell_logical, drop=T],
-    byrow=T,
-    nrow=length(gene_list),
-    ncol=num_cells,
-    dimnames=list(gene_list, colnames(g$data)[cell_logical])
-  )
-  g$Offset = NULL
-
-  message('Construct a transformed design matrix')
-  # Y = beta X^T (beta coefficients in row vectors)
-  # beta -> beta * betamat.transform (one column takes the cluster estimate
-  #                                   coefficient and transforms it to be the
-  #                                   desired contrast)
-  # X^T -> solve(betamat.transform) * X^T
-  # X -> X * solve(betamat.transform^T)
-  betamat.transform = diag(nrow=ncol(g$Beta))
-  dimnames(betamat.transform) = list(
-    colnames(g$Beta)
-  ) %>% rep(2)
-  betamat.transform[,2] = contrast
-  colnames(betamat.transform)[2] = 'contrast'
-  model_matrix = g$model_matrix %*% solve(t(betamat.transform))
-
-  message('Optimize Approximate Posterior')
-  lfc = apeglm(
-    assay(g$data)[gene_list, cell_logical],
-    model_matrix[cell_logical,],
-    log.lik=NULL,
-    param=g$overdispersion_shrinkage_list$dispersion_trend[
-      match(gene_list, rownames(g$data))
-    ],
-    coef=2,
-    mle=lfc,
-    method='nbinomCR',
-    offset=Offset
+    offset=g$Offset
   )
   lfc$mle.test = mle
   lfc
@@ -300,15 +198,13 @@ download_bam_transcripts <- function(download_script, metadata, sample, cluster,
   output_path
 }
 
-pseudobulk_cpm <- function(
-  tx_files, size_factors, gtf_file
-) {
+pseudobulk_cpm <- function(tx_files, size_factors, gtf_file) {
   cluster_name = factor(
     tx_files$tx_file %>% str_extract('([a-z]+)\\.txt', group=1),
     sce.clusters$cluster
   )
   if (all(!is.na(cluster_name)))
-  pseudobulk_colData = cbind(size_factors, ident = cluster_name)
+    pseudobulk_colData = cbind(size_factors, ident = cluster_name)
   else
     pseudobulk_colData = cbind(size_factors, ident = 'intercept')
   # Use nos.2 as reference level for FPKM calculation
@@ -324,8 +220,8 @@ pseudobulk_cpm <- function(
     replace(is.na(.), 0)
   colnames(pseudobulk_counts) = rownames(pseudobulk_colData)
   if (length(unique(pseudobulk_colData$batch)) > 1 && length(unique(pseudobulk_colData$ident)) > 1)
-  dds <- DESeqDataSetFromMatrix(
-    pseudobulk_counts, pseudobulk_colData, ~ 0 + ident + batch)
+    dds <- DESeqDataSetFromMatrix(
+      pseudobulk_counts, pseudobulk_colData, ~ 0 + ident + batch)
   else
     dds <- DESeqDataSetFromMatrix(pseudobulk_counts, pseudobulk_colData, ~ 1)
   sizeFactors(dds) <- pseudobulk_colData$size_factor
@@ -350,20 +246,20 @@ pseudobulk_cpm <- function(
   cpm_table <- data.frame(
     tx = gtf$tx,
     gene_id = gtf$gene_id,
-    length = abs(gtf$end - gtf$start + 1)
+    length = abs(gtf$end - gtf$start) + 1
   )
   if (length(resultsNames(dds)) > 1)
-  for (cluster_name in sce.clusters$cluster) {
-    res <- results(dds, name = paste0("ident", cluster_name))
-    cpm_table <- cpm_table %>%
-      left_join(
-        data.frame(
-          tx = rownames(res),
-          clust = exp(res$log2FoldChange * log(2) + log(1000) * 2)
-        ),
-        "tx"
-      )
-    colnames(cpm_table)[ncol(cpm_table)] <- cluster_name
+    for (cluster_name in sce.clusters$cluster) {
+      res <- results(dds, name = paste0("ident", cluster_name))
+      cpm_table <- cpm_table %>%
+        left_join(
+          data.frame(
+            tx = rownames(res),
+            clust = exp(res$log2FoldChange * log(2) + log(1000) * 2)
+          ),
+          "tx"
+        )
+      colnames(cpm_table)[ncol(cpm_table)] <- cluster_name
     }
   else {
     cpm_table <- cpm_table %>%
@@ -391,6 +287,41 @@ tx_cpm_to_fpkm <- function(cpm_table, metafeatures_path) {
   fpkm_table <- fpkm_table %>%
     group_by(gene_id) %>%
     summarise_all(max)
+
+  # We have per-transcript values which are either "cpm" (bulk) or each
+  # pseudobulk cluster name. TODO: Get something more dynamic here using
+  # dplyr functions to aggregate transcript_id with each column.
+  if ("cpm" %in% colnames(cpm_table))
+    perform_summarize_transcripts <- \(df) df %>%
+      summarize(
+        cpm = transcript_id[which.max(cpm)]
+      )
+  else
+    perform_summarize_transcripts <- \(df) df %>%
+      summarize(
+        germline = transcript_id[which.max(germline)],
+        somatic = transcript_id[which.max(somatic)],
+        spermatocyte = transcript_id[which.max(spermatocyte)],
+        muscle = transcript_id[which.max(muscle)]
+      )
+
+  cluster_transcript <- apply(
+    cpm_table %>% subset(select=-c(gene_id, length)),
+    2,
+    \(v) v / cpm_table$length
+  ) %>%
+    as.data.frame %>%
+    rownames_to_column("transcript_id") %>%
+    cbind(gene_id = cpm_table$gene_id) %>%
+    group_by(gene_id) %>%
+    perform_summarize_transcripts %>%
+    right_join(
+      data.frame(
+        gene_id = metafeatures$flybase, rowname = rownames(metafeatures)
+      ), by = "gene_id"
+    ) %>%
+    column_to_rownames
+
   colnames(fpkm_table)[1] <- "flybase"
   fpkm_table <- metafeatures %>%
     rownames_to_column %>%
@@ -399,53 +330,70 @@ tx_cpm_to_fpkm <- function(cpm_table, metafeatures_path) {
     column_to_rownames %>%
     subset(select = -flybase) %>%
     as.matrix
+  attr(fpkm_table, "transcript_id") <- cluster_transcript
   fpkm_table
 }
 
-longest_isoform_fpkm <- function(
-    Upd_glm, meta_path) {
-  fpkm_table <- matrix(
+glm_make_cpm_table <- function(Upd_glm) {
+  cpm_table <- matrix(
     nrow = nrow(Upd_glm$Beta),
     ncol = nrow(sce.clusters),
     dimnames = list(rownames(Upd_glm$Beta), sce.clusters$cluster)
   )
   for (i in seq(nrow(sce.clusters))) {
     contrast <- sce.clusters[i, "contrast"] %>% unlist
+    contrast_cols <- grep(
+      "batch",
+      colnames(Upd_glm$model_matrix),
+      invert = TRUE
+    )
     col_data = colData(Upd_glm$data)[
-      colAlls(t(Upd_glm$model_matrix) == contrast),
+      colAlls(t(Upd_glm$model_matrix[contrast_cols, ]))
+      == contrast[contrast_cols],
     ]
-    # Predict for the sum of size factors, divide by the sum of counts. We will
-    # divide by base pairs reference (bp), so the scale factor is 1B, not 1MM.
+    # Predict the sum of counts where the offset is the sum of size factors for
+    # the cells. Normalize by sum of UMI count. Multiply by 1MM yielding counts
+    # per million.
     offset_predictions = (
       log(sum(col_data$size_factor))
       - log(sum(col_data$nCount_RNA))
-      + log(1000)*3
+      + log(1000) * 2
     )
-    fpkm_table[, i] <- predict(
+    cpm_table[, i] <- predict(
       Upd_glm,
       matrix(contrast, nrow=1),
       type='response',
       offset=offset_predictions
     )
   }
+  cpm_table
+}
 
-  metafeatures <- read.csv(meta_path, row.names=1)
-  features = metafeatures %>% rownames_to_column %>% subset(
-    !duplicated(flybase) & !is.na(flybase)
+join_cpm_data <- function(
+    Upd_cpm_transcripts, Upd_fpkm, Upd_cpm_regression) {
+  Upd_fpkm_transcript_id <- (
+    attr(Upd_fpkm, "transcript_id")[rownames(Upd_fpkm), ]
   )
-  fpkm_table <- fpkm_table %>%
-    as.data.frame %>%
-    rownames_to_column %>%
-    left_join(data.frame(rowname = features$rowname), ., "rowname") %>%
-    column_to_rownames %>%
-    as.matrix
-  fpkm_table <- fpkm_table / features$transcript.length
-  fpkm_table %>%
-    as.data.frame %>%
-    rownames_to_column %>%
-    right_join(data.frame(rowname=rownames(metafeatures)), "rowname") %>%
-    column_to_rownames %>%
-    as.matrix
+  Upd_cpm_by_fpkm <- mapply(
+    \(n, transcripts) Upd_cpm_transcripts[transcripts, ] %>%
+      cbind(symbol = rownames(Upd_fpkm)) %>%
+      pull(n, symbol),
+    sce.clusters$cluster,
+    Upd_fpkm_transcript_id %>%
+      subset(select = c(germline, somatic, spermatocyte, muscle))
+  )
+
+  # Find genes that didn't have a transcript_id in the 10X BAM file, but which
+  # were present in enough cells so that we included the gene when computing
+  # Upd_cpm_regression.
+  replace_genes <- is.na(Upd_cpm_by_fpkm) %>%
+    rowAnys(useNames = TRUE) %>%
+    which %>%
+    names
+  replace_genes <- intersect(replace_genes, rownames(Upd_cpm_regression))
+  Upd_cpm_by_fpkm[replace_genes,] <- Upd_cpm_regression[replace_genes,]
+
+  Upd_cpm_by_fpkm
 }
 
 reference_sort_by_fpkm_table <- function(

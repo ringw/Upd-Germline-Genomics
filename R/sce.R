@@ -24,14 +24,16 @@ map_feature_names <- function(feature_names) {
   feature_names
 }
 
+load_feature_names <- function(paths) {
+  paths[1] %>%
+    paste0('/features.tsv.gz') %>%
+    read.table(row.names=1) %>%
+    rownames %>%
+    map_feature_names
+}
+
 select_features <- function(paths) {
-  feature_names = (
-    paths[1]
-    %>% paste0('/features.tsv.gz')
-    %>% read.table(row.names=1)
-    %>% rownames
-    %>% map_feature_names
-  )
+  feature_names <- paths %>% load_feature_names
   features_keep = rep(TRUE, length(feature_names)) %>% setNames(feature_names)
   for (tenx_path in paths) {
     matrix_data = read.table(paste0(tenx_path, '/matrix.mtx.gz'), comment='%', header=T)
@@ -104,7 +106,7 @@ create_meta_features <- function(
 
 load_flybase <- function(
   tenx_path, batch, features_keep, mt_features, meta_path, mt_pct=10, ribo_pct=40,
-  return.only.var.genes = TRUE, run_pca = TRUE
+  return.only.var.genes = TRUE, run_pca = TRUE, sctransform = TRUE
 ) {
   sce = Read10X(tenx_path)
 
@@ -117,9 +119,10 @@ load_flybase <- function(
   seur$pct.ribo = seur %>% PercentageFeatureSet('^Rp[SL]')
   seur = seur[features_keep, seur$pct.mito < mt_pct & seur$pct.ribo < ribo_pct]
   seur$batch = batch
+  if (!sctransform) return(seur)
   seur = seur %>% SCTransform(
     vst.flavor = 'v2', do.correct.umi = F, return.only.var.genes = F,
-    verbose = F
+    verbose = F, min_cells = 0
   )
   # Include H3-GFP as a scale.data gene, past the end of the original 3000 HVGs
   # so that it is easy to remove when integrating the data.

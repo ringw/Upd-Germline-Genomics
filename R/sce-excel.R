@@ -6,41 +6,187 @@ excel_tables = list(
   mono='TableStyleMedium1'
 )
 
-publish_excel_results <- function(glm, apeglm_somatic, apeglm_spermatocyte, apeglm_muscle, metafeatures, target_path) {
+publish_excel_results <- function(
+  Upd_regression_somatic, Upd_regression_tid, Upd_regression_mscl,
+  Upd_cpm_transcripts, Upd_cpm, Upd_fpkm, sctransform_quantile,
+  supplemental_bulk_fpkm, metafeatures, gtf_path, target_path
+) {
   wb = createWorkbook()
+
   metafeatures = metafeatures %>% read.csv(row.names=1)
-  flybase = metafeatures$flybase[match(rownames(apeglm_somatic$map), rownames(metafeatures))]
-  write_regression_table(wb, 'Germline and Somatic Tumor', 'log(som/germ)', glm, apeglm_somatic, flybase, excel_tables$cyan)
-  write_regression_table(wb, 'Spermatocyte', 'log(spmtc/others)', glm, apeglm_spermatocyte, flybase, excel_tables$orange)
-  write_regression_table(wb, 'Muscle', 'log(mscl/others)', glm, apeglm_muscle, flybase, excel_tables$red)
-  flybase = metafeatures$flybase[match(rownames(glm$Beta), rownames(metafeatures))]
-  tx_length = metafeatures$transcript.length[match(rownames(glm$Beta), rownames(metafeatures))]
-  write_abundance_table(wb, 'CPM and FPKM', glm, flybase, tx_length, excel_tables$mono)
+  write_abundance_table(
+    wb,
+    'Gene Quantification',
+    metafeatures$flybase,
+    Upd_cpm,
+    Upd_fpkm,
+    sctransform_quantile,
+    supplemental_bulk_fpkm,
+    excel_tables$mono
+  )
+
+  write_quant_stats(
+    wb, "Gene Quantification Summary", Upd_cpm_transcripts, Upd_cpm, Upd_fpkm,
+    Upd_regression_somatic, sctransform_quantile, gtf_path, metafeatures
+  )
+
+  baseMeanCPM <- exp(Upd_regression_somatic$map[, "Mean"]) %>% `*`(
+    1000 * 1000 / sum(.)
+  ) %>% signif(digits=2)
+  flybase = metafeatures$flybase[match(rownames(Upd_regression_somatic$map), rownames(metafeatures))]
+  write_regression_table(wb, 'GSC&CySC Regression', 'log(CySC/GSC)', baseMeanCPM, Upd_regression_somatic, 2, flybase, excel_tables$cyan)
+  write_regression_table(wb, 'S-Cyte&Tid-Like Regression', 'log(cyte&tid/GSC&CySC)', baseMeanCPM, Upd_regression_tid, 3, flybase, excel_tables$orange)
+  write_regression_table(wb, 'Muscle Regression', 'log(mscl/GSC&CySC)', baseMeanCPM, Upd_regression_mscl, 4, flybase, excel_tables$red)
   dir.create('scRNA-seq-Regression', showW=F)
   saveWorkbook(wb, target_path, overwrite = T)
   target_path
 }
 
+write_abundance_table <- function(
+    wb, title, flybase, Upd_cpm, Upd_fpkm, sctransform_quantile, supplemental_bulk_fpkm, table_style) {
+  rename = c(germline='GSC', somatic="CySC", spermatocyte="tid", muscle="muscle")
+  data = data.frame(
+    symbol = rownames(Upd_fpkm),
+    flybase = flybase
+  )
+
+  for (n in names(rename)) {
+    name = rename[n]
+    data = cbind(
+      data,
+      setNames(
+        list(Upd_cpm[,n], Upd_fpkm[,n]),
+        paste(c('CPM','FPKM'), name, sep='_')
+      )
+    )
+    if (n %in% names(sctransform_quantile)) {
+      sct_ranking <- sctransform_quantile[[n]][, '90%']
+      sct_ranking <- sct_ranking %>% round(2)
+      sct_ranking_data <- data.frame(
+        symbol = names(sct_ranking), v = sct_ranking
+      )
+      colnames(sct_ranking_data)[2] <- paste('SCT90%', name, sep='_')
+      data <- data %>%
+        left_join(
+          sct_ranking_data,
+          by = "symbol"
+        )
+    }
+  }
+  data = data %>%
+    left_join(
+      data.frame(
+        symbol = rownames(supplemental_bulk_fpkm),
+        pctAllCells = supplemental_bulk_fpkm$percent_expressed
+      ),
+      by = "symbol"
+    )
+  data$pctAllCells <- data$pctAllCells %>% replace(is.na(.), 0)
+  class(data$pctAllCells) <- "percentage"
+  addWorksheet(wb, title)
+  writeDataTable(wb, title,
+                 data,
+                 startCol = 1, startRow = 1,
+                 withFilter = T,
+                 tableStyle = table_style)
+}
+
+write_quant_stats <- function(
+  wb, title, Upd_cpm_transcripts, Upd_cpm, Upd_fpkm, Upd_regression_somatic,
+  sctransform_quantile, gtf_path, metafeatures
+) {
+  addWorksheet(wb, title)
+
+  n_genes <- tribble(
+    ~ cluster, ~ CPM, ~ FPKM, ~ SCT, ~ L2FC,
+    "GSC",
+    sum((Upd_cpm[, "germline"] > 0) %>% replace(is.na(.), FALSE)),
+    sum((Upd_fpkm[, "germline"] > 0) %>% replace(is.na(.), FALSE)),
+    sum(is.finite(sctransform_quantile[["germline"]][, "90%"])),
+    sum(is.finite(Upd_regression_somatic$map[, 2])),
+    "CySC",
+    sum((Upd_cpm[, "somatic"] > 0) %>% replace(is.na(.), FALSE)),
+    sum((Upd_fpkm[, "somatic"] > 0) %>% replace(is.na(.), FALSE)),
+    sum(is.finite(sctransform_quantile[["somatic"]][, "90%"])),
+    sum(is.finite(Upd_regression_somatic$map[, 2]))
+  )
+
+  writeData(wb, title, paste0("# Genes Quantified by Method (Genes in Reference: ", nrow(Upd_fpkm), ")"), colNames = F, startRow = 1, startCol = 1)
+  writeDataTable(wb, title,
+                 n_genes, withFilter = FALSE,
+                 startCol = 1, startRow = 2)
+  
+  start_row <- 6
+  group_names <- c(germline="GSC", somatic="CySC")
+  analyze_genes <- rownames(Upd_fpkm) %>%
+    setdiff(rownames(Upd_fpkm) %>% subset(is.na(Upd_fpkm[, "germline"]))) %>%
+    setdiff(rownames(Upd_fpkm) %>% subset(is.na(Upd_fpkm[, "somatic"]))) %>%
+    intersect(rownames(Upd_regression_somatic$map) %>% subset(is.finite(Upd_regression_somatic$map[, 2])))
+  gtf <- read.table(
+    gtf_path,
+    sep = '\t',
+    col.names = c('chr', 'source', 'type', 'start', 'end', 'sc', 'strand', 'fr', 'annotation'),
+    header = F,
+    quote = ''
+  ) %>% subset(grepl('RNA', type)) # include "transcript" types in the reference
+  gtf$tx <- gtf$annotation %>% str_extract(
+    'transcript_id "([^"]+)"',
+    group = 1
+  )
+  gtf$length = abs(gtf$end - gtf$start) + 1
+
+  for (n in c("germline", "somatic")) {
+    writeData(
+      wb,
+      title,
+      paste0(group_names[n], ": Transcript Length as a Confounding Factor"),
+      colNames = F,
+      startRow = start_row, startCol = 1
+    )
+    start_row <- start_row + 1
+    transcripts <- attr(Upd_fpkm, "transcript_id")[analyze_genes, n]
+    CPM_naive = (
+      Upd_cpm_transcripts[, n] %>% split(Upd_cpm_transcripts$gene_id) %>% sapply(max)
+    )[metafeatures[analyze_genes, "flybase"]]
+    CPM = Upd_cpm[analyze_genes, n]
+    FPKM = Upd_fpkm[analyze_genes, n]
+    SCT = sctransform_quantile[[n]][analyze_genes, "90%"]
+    lengths <- gtf$length[match(transcripts, gtf$tx)]
+
+    analysis <- data.frame(
+      `cor(log(CPM[naive]), log(length))` = cor(log(CPM_naive) %>% subset(CPM != 0), log(lengths) %>% subset(CPM != 0)),
+      `cor(log(CPM), log(length))` = cor(log(CPM) %>% subset(CPM != 0), log(lengths) %>% subset(CPM != 0)),
+      `cor(log(FPKM), log(length))` = cor(log(FPKM) %>% subset(CPM != 0), log(lengths) %>% subset(CPM != 0)),
+      `cor(SCT90%, log(length))` = cor(SCT, log(lengths)),
+      check.names = FALSE
+    )
+    writeDataTable(
+      wb,
+      title,
+      analysis,
+      startRow = start_row, startCol = 1
+    )
+    start_row <- start_row + 3
+  }
+}
+
 write_regression_table <- function(
-    wb, title, header, glm, apeglm, flybase, table_style) {
+    wb, title, header, baseMeanCPM, apeglm, coef, flybase, table_style) {
   addWorksheet(wb, title)
   writeData(wb, title,
             matrix(
-              rep(c('avg(germ)', header), c(1,3)),
+              rep(c('CPM(GSC&CySC)', header), c(1,3)),
               nrow=1
             ),
             colNames = F,
-            startCol = 2, startRow = 1)
+            startCol = 3, startRow = 1)
   data = data.frame(
     symbol = rownames(apeglm$map),
     flybase = flybase,
-    baseMean = exp(
-      mean(glm$data$size_factor %>% subset(glm$data$ident == 'germline'))
-      + apeglm$map[,1]
-    ) %>% signif(digits=2),
-    p95minus = apeglm$map[,2] - qnorm(0.975) * apeglm$sd[,2],
-    map = apeglm$map[,2],
-    p95plus = apeglm$map[,2] + qnorm(0.975) * apeglm$sd[,2],
+    baseMeanCPM = baseMeanCPM,
+    p95minus = apeglm$map[,coef] - qnorm(0.975) * apeglm$sd[,coef],
+    map = apeglm$map[,coef],
+    p95plus = apeglm$map[,coef] + qnorm(0.975) * apeglm$sd[,coef],
     fsr = apeglm$fsr[,1] %>% signif(digits=2),
     padj = if('mle.test' %in% names(apeglm)) apeglm$mle.test$adj_pval[match(rownames(apeglm$map), apeglm$mle.test$name)] %>% signif(digits=2) else 0.01
   )
@@ -56,43 +202,6 @@ write_regression_table <- function(
   writeDataTable(wb, title,
                  data,
                  startCol = 1, startRow = 2,
-                 withFilter = T,
-                 tableStyle = table_style)
-}
-
-write_abundance_table <- function(wb, title, glm, flybase, tx_length, table_style) {
-  contrasts = cbind(
-    germline = c(1,0,0,0,0,0,0),
-    somatic = c(1,1,0,0,0,0,0),
-    spermatocyte = c(1,0,1,0,0,0,0),
-    muscle = c(1,0,0,1,0,0,0)
-  )
-  rename = c(germline='germ')
-  data = data.frame(
-    symbol = rownames(glm$Beta),
-    flybase = flybase
-  )
-  for (n in colnames(contrasts)) {
-    umi_count = glm$data$nCount_RNA %>% subset(
-      as.character(glm$data$ident) == n
-    ) %>% sum
-    size_factor = glm$data$size_factor %>% subset(
-      as.character(glm$data$ident) == n
-    ) %>% sum
-    cpm = exp(glm$Beta %*% contrasts[,n]) * (
-      size_factor * 1000 * 1000 / umi_count
-    )
-    fpkm = cpm * 1000 / tx_length
-    name = if (n %in% names(rename)) rename[n] else n
-    data = cbind(
-      data,
-      setNames(list(cpm,fpkm), paste(c('CPM','FPKM'), name, sep='_'))
-    )
-  }
-  addWorksheet(wb, title)
-  writeDataTable(wb, title,
-                 data,
-                 startCol = 1, startRow = 1,
                  withFilter = T,
                  tableStyle = table_style)
 }
