@@ -23,6 +23,8 @@ else
     dir_name=Tj-Upd_H3-GFP_Rep${batch_number}
 fi
 
+mkdir -p `dirname "$output_path"`
+
 rclone cat "$REMOTE_FOLDER/$dir_name/outs/possorted_genome_bam.bam" | \
     samtools view | grep -F xf:i:25 | grep -F -f $cb_file | \
     # The match follows a TX:Z: tag name, or a previous match \G followed by ;.
