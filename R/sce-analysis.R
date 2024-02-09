@@ -83,7 +83,7 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
   filenames <- c(paste(figures_dir, 'UMAP-Subset.pdf', sep='/'), filenames)
   ggsave(filenames[1], width=8, height=3)
 
-  for (gene in c('AGO3','RpL22-like','vas','tj','lncRNA:roX1','lncRNA:roX2','Mst87F','soti','sunz','w-cup','Act57B')) {
+  for (gene in c('AGO3','RpL22-like','vas','tj','lncRNA:roX1','lncRNA:roX2','Mst87F','soti','sunz','w-cup','Act57B','Dl')) {
     gene.save = gene %>% str_replace('lncRNA:', '')
     gene.data = Upd_sc@meta.data %>%
       cbind(
