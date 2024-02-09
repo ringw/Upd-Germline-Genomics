@@ -47,6 +47,7 @@ tar_option_set(
     'orthogene',
     'pillar',
     'processx',
+    'propagate',
     'purrr',
     'readxl',
     'reshape2',
@@ -183,19 +184,23 @@ chic.lookup$files <- mapply(
   chic.lookup$input,
   SIMPLIFY = FALSE
 )
-chic.lookup$samples <- mapply(
+chic.lookup$sample_names <- mapply(
   \(mark, driver, input) chic.samples[
     chic.samples$driver == driver
       & chic.samples$group == mark
       & if (input == "input") chic.samples$molecule == "H3" else chic.samples$molecule != "H3",
     "sample"
   ] %>%
-    paste0("chic.raw_", .) %>%
-    rlang::syms(),
+    paste0("chic.raw_", .),
   chic.lookup$mark,
   chic.lookup$driver,
   chic.lookup$input,
   SIMPLIFY = FALSE
+)
+chic.lookup$samples <- sapply(
+  chic.lookup$sample_names,
+  rlang::syms,
+  simplify = FALSE
 )
 chic.lookup <- chic.lookup %>% within(
   lookup_name <- paste(input, mark, name, sep="_")
@@ -207,6 +212,8 @@ chic.experiments <- chic.experiments %>% within({
   experiment_name <- paste(mark, name, sep="_")
   chic_input_sym <- rlang::syms(paste("chic", "input", mark, name, sep="_"))
   chic_mod_sym <- rlang::syms(paste("chic", "mod", mark, name, sep="_"))
+  chic_smooth_input_sym <- rlang::syms(paste("chic.smooth", "input", mark, name, sep="_"))
+  chic_smooth_mod_sym <- rlang::syms(paste("chic.smooth", "mod", mark, name, sep="_"))
   chic_input_bam <- rlang::syms(paste("chic.merge.bam", "input", mark, name, sep="_"))
   chic_mod_bam <- rlang::syms(paste("chic.merge.bam", "mod", mark, name, sep="_"))
 })
@@ -224,6 +231,19 @@ chic.experiments$chic_mod_files <- chic.experiments %>%
     by = c("name", "driver", "mark", "input")
   ) %>%
   pull(chic_mod_files)
+chic.smooth.input.sym <- chic.experiments %>%
+  group_by(name) %>%
+  summarise(
+    chic_all_smooth_input_sym = list(
+      call(
+        "setNames",
+        chic_smooth_input_sym,
+        call("c", mark)
+      )
+    )
+  )
+chic.experiments <- chic.experiments %>%
+  left_join(chic.smooth.input.sym, by = "name")
 
 sce_targets <- tar_map(
   unlist = FALSE,
@@ -712,13 +732,47 @@ list(
       ),
     pattern = map(chic.kde.filter.template)
   ),
+  tar_target(
+    chic.kde.filter.template.wide,
+    {
+      df <- tibble(
+        fft_length = c(bitwShiftL(1, 14), bitwShiftL(1, 25)), bw = 100
+      ) %>%
+        mutate(
+          filter_size = bw * 10,
+          limit_length = fft_length - (2 * filter_size + 1) - 1
+        ) %>%
+        arrange(limit_length)
+      stopifnot(between(max(chr.lengths), min(df$limit_length), max(df$limit_length)))
+      stopifnot(max(transposon.lengths) < min(df$limit_length))
+      df
+    },
+    iteration = "vector"
+  ),
+  tar_target(
+    chic.kde.filter.wide,
+    chic.kde.filter.template.wide %>%
+      add_column(
+        filter =
+          list(with(., make_frag_end_filter(fft_length, filter_size, bw)))
+      ),
+    pattern = map(chic.kde.filter.template.wide)
+  ),
   tar_map(
     chic.lookup,
     names = lookup_name,
     tar_target(
       chic,
-      fpkm_aggregate(samples) %>%
-        smooth_chr_bp(chic.kde.filter, c(chr.lengths, transposon.lengths))
+      fpkm_cbind(setNames(samples, sample_names)) %>%
+        smooth_average_cols(chic.kde.filter, c(chr.lengths, transposon.lengths))
+    ),
+    tar_target(
+      chic.smooth,
+      fpkm_cbind(setNames(samples, sample_names)) %>%
+        smooth_average_cols(
+          chic.kde.filter.wide, c(chr.lengths, transposon.lengths),
+          bin_size = 50
+        )
     ),
     # Alternative pipeline merging BAM files before proceeding.
     tar_target(
@@ -765,7 +819,7 @@ list(
 
   tar_target(
     chic.genome,
-    chr.lengths %>% data.frame(chr = names(.), len = .)
+    c(chr.lengths, transposon.lengths) %>% data.frame(chr = names(.), len = .)
   ),
 
   tar_map(
@@ -777,7 +831,18 @@ list(
       chic.bw,
       {
         filename <- paste0('chic/', driver, '_', mark, '.FE.bw')
-        export(chic_mod_sym / chic_input_sym, filename, 'bigwig')
+        export(
+          chic_mod_sym / chic_input_sym
+          * RleList(
+            sapply(
+              chic_input_sym,
+              \(v) ifelse(v >= 1, 1, 0),
+              simplify = FALSE
+            )
+          ),
+          filename,
+          'bigwig'
+        )
         filename
       },
       format = 'file'
@@ -820,6 +885,26 @@ list(
         chic.genome,
         countConfig = countConfigPairedEnd(tlenFilter = c(70L, 400L), midpoint = FALSE)
       )
+    ),
+    tar_target(
+      chic.peak.bed,
+      chic.enrich %>%
+        call_enrichr_peaks %>%
+        tibble(data = list(.)) %>%
+        mutate(
+          output_path = paste0(
+            "chic/", driver, "/", driver, "_", mark, ".peaks.bed"
+          ),
+          write.table = write.table(
+            data[[1]],
+            output_path,
+            quote = FALSE,
+            sep = "\t",
+            row.names = FALSE,
+            col.names = FALSE
+          ) %>% list
+        ) %>%
+        pull(output_path)
     ),
     tar_target(
       bam_replicates_input,
@@ -889,7 +974,69 @@ list(
           4
         )
       )
+    ),
+    tar_target(
+      chic.test,
+      chic_track_welch(
+        chic_smooth_mod_sym,
+        chic_all_smooth_input_sym,
+        mark_name = mark,
+        bin_size = 50
+      )
+    ),
+    tar_target(
+      plot.chic.input.anova,
+      plot_chic_anova(
+        chic_smooth_mod_sym,
+        chic_all_smooth_input_sym,
+        bin_size = 50
+      )
     )
+  ),
+
+  tar_map(
+    data.frame(extension = c(".pdf", ".png")),
+    tar_target(
+      supplemental_chic_model,
+      save_figures(
+        "chic/Model-Selection", extension,
+        tribble(
+          ~name, ~figure, ~width, ~height,
+          "Germline-F-Var",
+          plot.chic.input.anova_H3K4_Germline
+          + labs(
+            title = "ChIC Germline Equality of Variance",
+            subtitle = "H3K4 variance following null hypothesis is uncertain (dotted)"
+          ) + theme(aspect.ratio = 1),
+          6, 4,
+          "Somatic-F-Var",
+          plot.chic.input.anova_H3K4_Somatic
+          + labs(
+            title = "ChIC Somatic Equality of Variance",
+            subtitle = "H3K4 variance following null hypothesis is uncertain (dotted)"
+          ) + theme(aspect.ratio = 1),
+          6, 4
+        )
+      ),
+      format = "file"
+    )
+  ),
+
+  tar_target(
+    chic.peaks.bed_Germline,
+    write_chic_peaks(
+      list(H3K4=chic.test_H3K4_Germline,H3K9=chic.test_H3K9_Germline,H3K27=chic.test_H3K27_Germline),
+      "chic/Germline-Peaks.bed"
+    ),
+    format = "file"
+  ),
+  tar_target(
+    chic.peaks.bed_Somatic,
+    write_chic_peaks(
+      list(H3K4=chic.test_H3K4_Somatic,H3K9=chic.test_H3K9_Somatic,H3K27=chic.test_H3K27_Somatic),
+      "chic/Somatic-Peaks.bed"
+    ),
+    format = "file"
   ),
 
   tar_target(chic.1kb, window_chic('chic', 1000)),
