@@ -34,9 +34,11 @@ chic_rep_t_test <- function(
   data <- tibble(
     mu_1 = unbin_track(mod_track),
     sd_1 = unbin_track(mod_track %>% attr("standard_deviation")),
+    n_1 = mod_track %>% attr("n"),
     count_1 = mod_num_rep,
     mu_2 = unbin_track(input_track),
     sd_2 = unbin_track(input_track %>% attr("standard_deviation")),
+    n_2 = input_track %>% attr("n"),
     count_2 = input_num_rep
   ) %>%
     rowwise() %>%
@@ -46,7 +48,8 @@ chic_rep_t_test <- function(
     ungroup() %>%
     mutate(
       sd_test = sqrt(sd_1^2 + sd_2^2),
-      t = (mu_1 - mu_2) / sd_test,
+      t_denom = sqrt(sd_1^2 / n_1 + sd_2^2 / n_2),
+      t = (mu_1 - mu_2) / t_denom,
       p = pt(t, df, lower.tail = FALSE) %>% replace(t < 0, 1),
       q = p.adjust(p)
     )
@@ -185,6 +188,7 @@ plot_chic_anova <- function(mod_track, input_tracks, bin_size=50) {
 
 chic_track_welch <- function(mod_track, input_tracks, mark_name, bin_size=100) {
   track_list <- append(list(mod=mod_track), input_tracks)
+  track_n <- track_list %>% sapply(\(track) track %>% attr("n"))
   stopifnot(mark_name %in% names(track_list))
   bin_data <- as_tibble(sapply(track_list, list, simplify=FALSE)) %>% reframe(
     across(
@@ -234,6 +238,13 @@ chic_track_welch <- function(mod_track, input_tracks, mark_name, bin_size=100) {
     sd_simple = sqrt(
       bin_data %>% pull("mod_sd") %>% square
       + bin_data %>% pull(paste0(mark_name, "_sd")) %>% square
+    ),
+    # t-test grows with sqrt(n) (for the estimate of the mean for each
+    # coefficient in the contrast).
+    t_denom = sqrt(
+      as.numeric(
+        sd_values_matrix^2 %*% (ci_values^2 * track_n)
+      )
     ),
     t = (
       bin_data %>% pull("mod_mu")
