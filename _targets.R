@@ -154,12 +154,13 @@ chic.raw.tracks <- tar_map(
       )
       filename
     },
-    format = "file"# ,
-    # cue = tar_cue("never")
+    format = "file",
+    cue = tar_cue("never")
   ),
   tar_target(
     chic.raw,
-    bam_paired_fragment_ends(chic.bam, c(chr.lengths, transposon.lengths))
+    bam_paired_fragment_ends(chic.bam, c(chr.lengths, transposon.lengths)),
+    cue = tar_cue("never")
   )
 )
 
@@ -210,10 +211,13 @@ chic.experiments <- chic.fpkm.data %>% cross_join(chic.mark.data)
 # Pull the "chic" (track) target by name for the driver x mark targets.
 chic.experiments <- chic.experiments %>% within({
   experiment_name <- paste(mark, name, sep="_")
-  chic_input_sym <- rlang::syms(paste("chic", "input", mark, name, sep="_"))
-  chic_mod_sym <- rlang::syms(paste("chic", "mod", mark, name, sep="_"))
+  chic_input_sym <- rlang::syms(paste("chic.smooth_250", "input", mark, name, sep="_"))
+  chic_mod_sym <- rlang::syms(paste("chic.smooth_25", "mod", mark, name, sep="_"))
   chic_smooth_input_sym <- rlang::syms(paste("chic.smooth", "input", mark, name, sep="_"))
+  chic_smooth_250_input_sym <- rlang::syms(paste("chic.smooth_250", "input", mark, name, sep="_"))
   chic_smooth_mod_sym <- rlang::syms(paste("chic.smooth", "mod", mark, name, sep="_"))
+  chic_smooth_125_mod_sym <- rlang::syms(paste("chic.smooth_125", "mod", mark, name, sep="_"))
+  chic_smooth_250_mod_sym <- rlang::syms(paste("chic.smooth_250", "mod", mark, name, sep="_"))
   chic_input_bam <- rlang::syms(paste("chic.merge.bam", "input", mark, name, sep="_"))
   chic_mod_bam <- rlang::syms(paste("chic.merge.bam", "mod", mark, name, sep="_"))
 })
@@ -758,6 +762,21 @@ list(
       ),
     pattern = map(chic.kde.filter.template.wide)
   ),
+  tar_target(
+    chic.macs.bandwidth, list(500, 1000, 2000)
+  ),
+  # Background value for uniform FPKM. We have a multiplier of 1MM but this
+  # amount is spread across the reference sequence length.
+  tar_target(
+    chic.macs.background.value,
+    1000 * 1000 * 1000 / sum(c(chr.lengths, transposon.lengths))
+  ),
+  tar_target(
+    chic.macs.background.track,
+    c(chr.lengths, transposon.lengths) %>%
+      sapply(\(len) Rle(values = chic.macs.background.value, len)) %>%
+      RleList
+  ),
   tar_map(
     chic.lookup,
     names = lookup_name,
@@ -772,6 +791,128 @@ list(
         smooth_average_cols(
           chic.kde.filter.wide, c(chr.lengths, transposon.lengths),
           bin_size = 50
+        )
+    ),
+    tar_map(
+      data.frame(bw = c(25, 125, 250)),
+      tar_target(
+        chic.smooth,
+        setNames(samples, sample_names) %>%
+          sapply(
+            \(v) v %>%
+              smooth_sparse_vector_to_rle_list(
+                Rle(
+                  c(names(chr.lengths), names(transposon.lengths)),
+                  c(chr.lengths, transposon.lengths)
+                  # names(chr.lengths),
+                  # chr.lengths
+                ),
+                bw = bw,
+                sample_size = ifelse(bw < 50, 10, 50)
+              )
+          ) %>%
+          purrr::reduce(`+`) %>%
+          round(digits = 1) %>%
+          `/`(length(samples)) %>%
+          pmax(
+            . * 0 + 0.1
+          ) %>%
+          set_attr("n", length(samples))
+      ),
+      tar_target(
+        chic.sd,
+        {
+          s <- setNames(samples, sample_names) %>%
+            sapply(
+              \(v) v %>%
+                smooth_sparse_vector_to_rle_list(
+                  Rle(
+                    c(names(chr.lengths), names(transposon.lengths)),
+                    c(chr.lengths, transposon.lengths)
+                    # names(chr.lengths),
+                    # chr.lengths
+                  ),
+                  bw = bw,
+                  sample_size = ifelse(bw < 50, 10, 50)
+                )
+            ) %>%
+            rle_lists_sd
+          attr(s, "n") <- length(samples)
+          s
+        }
+      )
+    ),
+    tar_target(
+      chic.wide,
+      samples %>%
+        sapply(
+          \(x) x %>%
+            smooth_sparse_vector_to_rle_list(
+              # TODO: put this expression into a target
+              c(chr.lengths, transposon.lengths) %>%
+                enframe("refseq", "len") %>%
+                with(Rle(refseq, len)),
+              bw = 1000,
+              sample_size = 200
+            ),
+          simplify = FALSE
+        ) %>%
+        # Arithmetic mean of reps
+        purrr::reduce(`+`) %>%
+        `/`(length(samples)),
+    ),
+    tar_target(chic.macs.tagcounts, samples %>% sapply(sum)),
+    tar_target(
+      chic.macs.byparam,
+      # MACS adaptive parameter using a large window (chic.macs.bandwidth), now
+      # with multiple replicates (samples).
+      samples %>%
+        sapply(
+          \(x) x %>%
+            smooth_sparse_vector_macs(
+              # TODO: put this expression into a target
+              c(chr.lengths, transposon.lengths) %>%
+                enframe("refseq", "len") %>%
+                with(Rle(refseq, len)),
+              chic.macs.bandwidth[[1]],
+              sample_size = 200,
+              normalize_tag_count = TRUE
+            ),
+          simplify = FALSE
+        ) %>%
+        # In MACS Poisson distribution fitting, we can take the arithmetic mean
+        # of the parameter normalized by tag count, for the biological
+        # replicates.
+        # TODO: Optimize the parameter using glm instead of using arithmetic
+        # mean. We have applied an offset (tag count - FPKM calculation), so
+        # unlike the case with no offset, the optimum might be different than
+        # arithmetic mean.
+        purrr::reduce(`+`) %>%
+        `/`(length(samples)),
+      pattern = map(chic.macs.bandwidth),
+      iteration = "list"
+    ),
+    tar_target(
+      # MACS Poisson parameter is the max of the input track created by 3
+      # different large sliding window sizes. We removed the uniform coverage
+      # track.
+      chic.macs.fpkm,
+      purrr::reduce(chic.macs.byparam, pmax)
+    ),
+    tar_target(
+      chic.macs.peakdetect,
+      samples %>%
+        sapply(
+          \(x) x %>%
+            smooth_sparse_vector_macs(
+              c(chr.lengths, transposon.lengths) %>%
+                enframe("refseq", "len") %>%
+                with(Rle(refseq, len)),
+              diameter = 150,
+              sample_size = 50,
+              normalize_tag_count = FALSE
+            ),
+          simplify = FALSE
         )
     ),
     # Alternative pipeline merging BAM files before proceeding.
@@ -796,7 +937,82 @@ list(
         processx::run("samtools", c("index", filename))
         filename
       },
-      format = "file"
+      format = "file",
+      cue = tar_cue("never")
+    )
+  ),
+
+  tar_target(
+    chic.squeezeVar_Germline,
+    list(
+      H3K4=chic.sd_250_input_H3K4_Germline,
+      H3K27=chic.sd_250_input_H3K27_Germline,
+      H3K9=chic.sd_250_input_H3K9_Germline
+    ) %>%
+      chic_squeeze_var,
+    packages = "limma"
+  ),
+  tar_target(
+    chic.squeezeVar_Somatic,
+    list(
+      H3K4=chic.sd_250_input_H3K4_Somatic,
+      H3K27=chic.sd_250_input_H3K27_Somatic,
+      H3K9=chic.sd_250_input_H3K9_Somatic
+    ) %>%
+      chic_squeeze_var,
+    packages = "limma"
+  ),
+  tar_target(
+    chic.squeezeVar,
+    list(Germline = chic.squeezeVar_Germline, Somatic = chic.squeezeVar_Somatic)
+  ),
+
+  tar_target(
+    chic.macs.peak_H3K4_Germline,
+    chic_macs_test(
+      chic.macs.fpkm_input_H3K4_Germline,
+      chic.wide_input_H3K4_Germline,
+      chic.macs.peakdetect_mod_H3K4_Germline
+    )
+  ),
+  tar_target(
+    chic.macs.peak_H3K27_Germline,
+    chic_macs_test(
+      chic.macs.fpkm_input_H3K27_Germline,
+      chic.wide_input_H3K27_Germline,
+      chic.macs.peakdetect_mod_H3K27_Germline
+    )
+  ),
+  tar_target(
+    chic.macs.peak_H3K9_Germline,
+    chic_macs_test(
+      chic.macs.fpkm_input_H3K9_Germline,
+      chic.wide_input_H3K9_Germline,
+      chic.macs.peakdetect_mod_H3K9_Germline
+    )
+  ),
+  tar_target(
+    chic.macs.peak_H3K4_Somatic,
+    chic_macs_test(
+      chic.macs.fpkm_input_H3K4_Somatic,
+      chic.wide_input_H3K4_Somatic,
+      chic.macs.peakdetect_mod_H3K4_Somatic
+    )
+  ),
+  tar_target(
+    chic.macs.peak_H3K27_Somatic,
+    chic_macs_test(
+      chic.macs.fpkm_input_H3K27_Somatic,
+      chic.wide_input_H3K27_Somatic,
+      chic.macs.peakdetect_mod_H3K27_Somatic
+    )
+  ),
+  tar_target(
+    chic.macs.peak_H3K9_Somatic,
+    chic_macs_test(
+      chic.macs.fpkm_input_H3K9_Somatic,
+      chic.wide_input_H3K9_Somatic,
+      chic.macs.peakdetect_mod_H3K9_Somatic
     )
   ),
 
@@ -878,35 +1094,6 @@ list(
     ),
 
     tar_target(
-      chic.enrich,
-      enrichR(
-        chic_mod_bam,
-        chic_input_bam,
-        chic.genome,
-        countConfig = countConfigPairedEnd(tlenFilter = c(70L, 400L), midpoint = FALSE)
-      )
-    ),
-    tar_target(
-      chic.peak.bed,
-      chic.enrich %>%
-        call_enrichr_peaks %>%
-        tibble(data = list(.)) %>%
-        mutate(
-          output_path = paste0(
-            "chic/", driver, "/", driver, "_", mark, ".peaks.bed"
-          ),
-          write.table = write.table(
-            data[[1]],
-            output_path,
-            quote = FALSE,
-            sep = "\t",
-            row.names = FALSE,
-            col.names = FALSE
-          ) %>% list
-        ) %>%
-        pull(output_path)
-    ),
-    tar_target(
       bam_replicates_input,
       as.list(chic_input_files)
     ),
@@ -976,7 +1163,7 @@ list(
       )
     ),
     tar_target(
-      chic.test,
+      chic.test.welch,
       chic_track_welch(
         chic_smooth_mod_sym,
         chic_all_smooth_input_sym,
@@ -991,11 +1178,140 @@ list(
         chic_all_smooth_input_sym,
         bin_size = 50
       )
+    ),
+
+    tar_target(
+      chic.var.limma,
+      chic.squeezeVar[[name]]$var[[mark]]
+    ),
+    tar_target(
+      chic.test.limma,
+      chic_ttest(
+        pmax(chic_smooth_125_mod_sym, chic_smooth_250_mod_sym) %>%
+          set_attr("n", attr(chic_smooth_125_mod_sym, "n")),
+        chic_smooth_250_input_sym,
+        sd = sqrt(chic.var.limma),
+        df = chic.squeezeVar[[name]]$df
+      )
     )
   ),
 
   tar_map(
+    data.frame(macs_background = c(500, 1000, 5000, 10000)),
+    tar_target(
+      chic_macs_mean_variance,
+      chic_illustrate_mean_variance(
+        list(
+          chic.raw_GC2894001_S1_L001, chic.raw_GC2894002_S2_L001,
+          chic.raw_GC2894003_S3_L001
+        ),
+        macs_background
+      ),
+    )
+  ),
+  tar_target(
+    chic_macs_mean_variance_s2_files,
+    c("chip_seq_s2/SRR067914.bw", "chip_seq_s2/SRR067915.bw"),
+    format = "file"
+  ),
+  tar_target(
+    chic_macs_mean_variance_s2,
+    chic_illustrate_s2_mean_variance(chic_macs_mean_variance_s2_files)
+  ),
+  tar_target(
+    chic_macs_mean_variance_gaussian,
+    chic_illustrate_mean_variance_gaussian(
+      list(
+        chic.raw_GC2894001_S1_L001, chic.raw_GC2894002_S2_L001,
+        chic.raw_GC2894003_S3_L001
+      ),
+      bw = 250
+    )
+    + coord_cartesian(c(0,12), c(0,30), expand=F)
+  ),
+
+  tar_target(
+    chic.h3.tj.track.plot,
+    plot_chic_rect_window_replicates(
+      c(
+        chic.macs.peakdetect_input_H3K4_Germline,
+        chic.macs.peakdetect_input_H3K27_Germline,
+        chic.macs.peakdetect_input_H3K9_Germline
+      ),
+      "2L", 19462000:19468800
+    ) %>% ggplot(aes(x, y))
+      + geom_line(aes(group=sample, color=sample), alpha=0.5)
+      + geom_smooth(method="loess", span=0.2)
+      + scale_color_manual(values=c("purple", "forestgreen", "cyan", "goldenrod", "red", "limegreen", "violet", "steelblue", "brown"), guide=NULL)
+      + coord_cartesian(NULL, c(-2, 60), expand=F)
+      + scale_x_continuous(labels=\(x) paste0(x / 1000 / 1000, " Mb"))
+      + labs(x = NULL, y = "count")
+      + theme_bw()
+      + theme(aspect.ratio = 0.33)
+  ),
+
+  tar_map(
     data.frame(extension = c(".pdf", ".png")),
+    tar_target(
+      chic_poisson_illustration,
+      save_figures(
+        "figure/Germline", extension,
+        tribble(
+          ~name, ~figure, ~width, ~height,
+          "CHIC-H3K4-Sample-Simulation-1", 
+          illustrate_coverage_poisson(
+            # Center on tj gene
+            chic_mod_H3K4_Germline$`2L`[seq(19463500,19466500,by=10)] %>%
+              # Square the track (shrinks the variations where the value is smaller)
+              `^`(2) %>%
+              # Subtract off the minimum value
+              `-`(min(.) * 0.75) %>%
+              # rle to vector
+              as.numeric
+          ),
+          4,
+          4,
+          "CHIC-H3K4-Sample-Simulation-2",
+          illustrate_poisson_variable(
+            # Center on tj gene
+            chic_mod_H3K4_Germline$`2L`[seq(19463500,19466500,by=10)] %>%
+              # Square the track (shrinks the variations where the value is smaller)
+              `^`(2) %>%
+              # Subtract off the minimum value
+              `-`(min(.) * 0.75) %>%
+              # rle to vector
+              as.numeric
+          ),
+          4,
+          4,
+          "CHIC-H3K4-Mean-Variance-Window-500",
+          chic_macs_mean_variance_500,
+          4,
+          8,
+          "CHIC-H3K4-Mean-Variance-Window-1K",
+          chic_macs_mean_variance_1000
+          + coord_cartesian(c(0,350), c(0,25000), expand=FALSE),
+          4,
+          8,
+          "CHIC-H3K4-Mean-Variance-Window-5K",
+          chic_macs_mean_variance_5000,
+          4,
+          8,
+          "CHIC-S2-H3-Mean-Variance-Window-1K",
+          chic_macs_mean_variance_s2,
+          4,
+          8,
+          "CHIC-H3K4-Mean-Variance-Gaussian",
+          chic_macs_mean_variance_gaussian,
+          4,
+          8,
+          "CHIC-H3-TJ",
+          chic.h3.tj.track.plot,
+          6,
+          2
+        )
+      )
+    ),
     tar_target(
       supplemental_chic_model,
       save_figures(
@@ -1025,7 +1341,11 @@ list(
   tar_target(
     chic.peaks.bed_Germline,
     write_chic_peaks(
-      list(H3K4=chic.test_H3K4_Germline,H3K9=chic.test_H3K9_Germline,H3K27=chic.test_H3K27_Germline),
+      list(
+        H3K4=chic.test.limma_H3K4_Germline %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10),
+        H3K9=chic.test.limma_H3K9_Germline %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10),
+        H3K27=chic.test.limma_H3K27_Germline %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10)
+      ),
       "chic/Germline-Peaks.bed"
     ),
     format = "file"
@@ -1033,8 +1353,37 @@ list(
   tar_target(
     chic.peaks.bed_Somatic,
     write_chic_peaks(
-      list(H3K4=chic.test_H3K4_Somatic,H3K9=chic.test_H3K9_Somatic,H3K27=chic.test_H3K27_Somatic),
+      list(
+        H3K4=chic.test.limma_H3K4_Somatic %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10),
+        H3K9=chic.test.limma_H3K9_Somatic %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10),
+        H3K27=chic.test.limma_H3K27_Somatic %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10)
+      ),
       "chic/Somatic-Peaks.bed"
+    ),
+    format = "file"
+  ),
+
+  tar_target(
+    chic.macs.bed_Germline,
+    write_chic_peaks(
+      list(
+        H3K4=chic.test.macs_H3K4_Germline %>% chic_macs_generate_table,
+        H3K27=chic.test.macs_H3K27_Germline %>% chic_macs_generate_table,
+        H3K9=chic.test.macs_H3K9_Germline %>% chic_macs_generate_table(1e-3)
+      ),
+      "chic/Germline-Peaks-MACS.bed"
+    ),
+    format = "file"
+  ),
+  tar_target(
+    chic.macs.bed_Somatic,
+    write_chic_peaks(
+      list(
+        H3K4=chic.test.macs_H3K4_Somatic %>% chic_macs_generate_table,
+        H3K27=chic.test.macs_H3K27_Somatic %>% chic_macs_generate_table,
+        H3K9=chic.test.macs_H3K9_Somatic %>% chic_macs_generate_table(1e-3)
+      ),
+      "chic/Somatic-Peaks-MACS.bed"
     ),
     format = "file"
   ),
