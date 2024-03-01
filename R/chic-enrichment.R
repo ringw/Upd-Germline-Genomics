@@ -442,7 +442,6 @@ chic_ttest <- function(
           / sqrt(
             1 / attr(mod_track, "n")
             + 1 / attr(input_track, "n")
-            # 1/3 + 1/3
           ),
           as.numeric(df_track[[chr]][x]) + df_residual,
           lower.tail = FALSE

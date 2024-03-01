@@ -90,16 +90,94 @@ plot_chic_anova <- function(mod_track, input_tracks, bin_size=50) {
   ) + geom_line(
     data=data.frame(F=c(0,1), p=c(0,1)),
     linetype="dashed"
-  ) + geom_line(
-    data=data.frame(
-      F=c(0.025,0.025,0, 0.975,0.975,1),
-      p=c(0.025,0,0.025, 1,0.975,0.975),
-      group=rep(c("b", "t"), each=3)
-    ),
-    aes(group=group),
-    color="blue"
   ) + theme_bw() + theme(
   ) + coord_cartesian(
     expand=FALSE
+  )
+}
+
+plot_scaled_f <- function(monte_carlo=101, df1=2, df2=2) {
+  p_values <- seq(0, 1, length.out=monte_carlo)
+  f_values <- qf(p_values, df1, df2)
+  scaled_f <- tribble(
+    ~ label, ~ scalar,
+    "Var[Y]/Var[X] = 2", 2,
+    "Var[Y]/Var[X] = 1.15", 1.15,
+    "Var[Y]/Var[X] = 1", 1,
+    "Var[Y]/Var[X] = 1/1.15", 1/1.15,
+    "Var[Y]/Var[X] = 1/2", 1/2
+  )
+  scaled_f %>%
+    rowwise %>%
+    mutate(
+      data = tibble(
+        F=p_values, p=pf(f_values * scalar, df1, df2)
+      ) %>%
+        list
+    ) %>%
+    pull(data, label) %>%
+    bind_rows(.id = "variance") %>%
+    within(variance <- factor(variance, scaled_f$label)) %>%
+    ggplot(aes(F, p, group=variance, color=variance, linewidth=variance, linetype=variance)) + geom_line(
+    ) + scale_color_viridis_d(
+      option="magma", end=0.75, direction=-1
+    ) + scale_linewidth_manual(
+      values=seq(2, 0.75, length.out=5)
+    ) + scale_linetype_manual(
+      values=c("solid", "solid", "longdash", "solid", "solid")
+    ) + coord_cartesian(
+      expand=FALSE
+    ) + theme_bw()
+}
+
+demo_f_distribution <- function(
+  mu = list(c(-3,3), c(3,-3)),
+  sigma = list(matrix(c(1,-0.25,-0.25,1), ncol=2), matrix(c(1,0.75,0.75,2),ncol=2)),
+  n = 3
+) {
+  stopifnot(all(sapply(sigma, \(m) all(eigen(m)$values > 0))))
+  point_cloud <- mapply(
+    \(mu, sigma) rmvnorm(500, mu, sigma),
+    mu,
+    sigma,
+    SIMPLIFY=FALSE
+  ) %>%
+    do.call(rbind, .)
+  point_cloud <- data.frame(x = point_cloud[, 1], y = point_cloud[, 2])
+  points <- mapply(
+    \(name, mu, sigma) matrix(
+      rmvnorm(n, mu, sigma),
+      ncol = 2,
+      dimnames = list(NULL, c("x", "y"))
+    ) %>%
+      as.data.frame,
+    c("X", "Y"),
+    mu,
+    sigma,
+    SIMPLIFY=FALSE
+  ) %>%
+    bind_rows(.id = "variable")
+  midpoints <- points %>% group_by(variable) %>%
+    summarise(across(everything(), mean)) %>%
+    rename_with(\(n) n %>% replace(. == "x", "xend") %>% replace(. == "y", "yend"))
+  segments <- left_join(points, midpoints, "variable")
+  points %>% ggplot(
+    aes(x, y)
+  ) + geom_point(
+    data = point_cloud,
+    shape = 20,
+    size = 0.005
+  ) + geom_segment(
+    aes(xend=xend, yend=yend),
+    segments,
+    color = "red"
+  ) + geom_point(
+    color = "darkred", size = 1
+  ) + scale_x_continuous(
+    labels = NULL
+  ) + scale_y_continuous(
+    labels = NULL
+  ) + theme_cowplot() + labs(
+    x = NULL, y = NULL
   )
 }

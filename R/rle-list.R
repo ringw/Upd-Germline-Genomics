@@ -1,7 +1,7 @@
 rbind_rle_lists <- function(chic.replicates) {
   chic.table <- chic.replicates %>%
     sapply(
-      \(rle_list) rle_list[names(chr.lengths)] %>%
+      \(rle_list) rle_list %>%
         sapply(list, simplify=F) %>%
         as_tibble,
       simplify=F

@@ -804,8 +804,6 @@ list(
                 Rle(
                   c(names(chr.lengths), names(transposon.lengths)),
                   c(chr.lengths, transposon.lengths)
-                  # names(chr.lengths),
-                  # chr.lengths
                 ),
                 bw = bw,
                 sample_size = ifelse(bw < 50, 10, 50)
@@ -829,8 +827,6 @@ list(
                   Rle(
                     c(names(chr.lengths), names(transposon.lengths)),
                     c(chr.lengths, transposon.lengths)
-                    # names(chr.lengths),
-                    # chr.lengths
                   ),
                   bw = bw,
                   sample_size = ifelse(bw < 50, 10, 50)
@@ -1367,9 +1363,9 @@ list(
     chic.macs.bed_Germline,
     write_chic_peaks(
       list(
-        H3K4=chic.test.macs_H3K4_Germline %>% chic_macs_generate_table,
-        H3K27=chic.test.macs_H3K27_Germline %>% chic_macs_generate_table,
-        H3K9=chic.test.macs_H3K9_Germline %>% chic_macs_generate_table(1e-3)
+        H3K4=chic.macs.peak_H3K4_Germline %>% chic_macs_generate_table,
+        H3K27=chic.macs.peak_H3K27_Germline %>% chic_macs_generate_table,
+        H3K9=chic.macs.peak_H3K9_Germline %>% chic_macs_generate_table(1e-3)
       ),
       "chic/Germline-Peaks-MACS.bed"
     ),
@@ -1379,9 +1375,9 @@ list(
     chic.macs.bed_Somatic,
     write_chic_peaks(
       list(
-        H3K4=chic.test.macs_H3K4_Somatic %>% chic_macs_generate_table,
-        H3K27=chic.test.macs_H3K27_Somatic %>% chic_macs_generate_table,
-        H3K9=chic.test.macs_H3K9_Somatic %>% chic_macs_generate_table(1e-3)
+        H3K4=chic.macs.peak_H3K4_Somatic %>% chic_macs_generate_table,
+        H3K27=chic.macs.peak_H3K27_Somatic %>% chic_macs_generate_table,
+        H3K9=chic.macs.peak_H3K9_Somatic %>% chic_macs_generate_table(1e-3)
       ),
       "chic/Somatic-Peaks-MACS.bed"
     ),
