@@ -400,7 +400,45 @@ list(
   tar_target(tj.1, call_tj.1(seurat_qc_tj.1)),
   tar_target(tj.2, call_tj.2(seurat_qc_tj.2)),
   tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
-  tar_target(scRNA_seq_figures, Upd_sc_figures('scRNA-seq-Figure', Upd_sc), format='file'),
+  tar_map(
+    tibble(extension = c(".pdf", ".png")),
+    tar_target(
+      sc_idents,
+      save_figures(
+        "figure/Integrated-scRNAseq", extension,
+        tribble(
+          ~name, ~figure, ~width, ~height,
+          "RNAseq-UMAP-Ident", Upd_sc_plot_idents(Upd_sc), 6, 4,
+          "RNAseq-UMAP-Germline-Somatic",
+          Upd_sc %>% Upd_sc_plot_idents %>% Upd_sc_plot_subset, 6, 3,
+          "RNAseq-Quantification-Quarters",
+          fpkm_quarter_density(Upd_fpkm),
+          4, 4
+        )
+      ),
+      format = "file"
+    ),
+    tar_target(
+      sc_genes,
+      save_figures(
+        "figure/Integrated-scRNAseq/Genes-of-Interest", extension,
+        tribble(
+          ~gene,
+          "AGO3","RpL22-like","RpL22","vas","nos","tj","lncRNA:roX1","lncRNA:roX2","Mst87F","soti","sunz","w-cup","Act57B","Dl","E(spl)m3-HLH"
+        ) %>%
+          mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
+          rowwise %>%
+          mutate(
+            gene_short_name = gene %>% str_replace("lncRNA:", ""),
+            name = paste0("RNAseq-FeaturePlot-", gene_short_name),
+            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
+            width = 6,
+            height = 4
+          ) %>%
+          subset(select=c(name, figure, width, height))
+      )
+    )
+  ),
   tar_target(metadata, analyze_sce_to_csv(list(nos.1=nos.1, nos.2=nos.2, tj.1=tj.1, tj.2=tj.2), 'scRNA-seq-Metadata.csv'), format='file'),
   tar_combine(
     sctransform_quantile,
@@ -585,7 +623,7 @@ list(
   tar_target(
     supplemental_pca_figure,
     {
-      filename <- "figure/Single-Cell/Germline-Somatic-Pairs.pdf"
+      filename <- "figure/Integrated-scRNAseq/Germline-Somatic-Pairs.pdf"
       dir.create(dirname(filename), recursive = TRUE, showW = FALSE)
       CairoPDF(filename, width = 16, height = 9)
       print(plot_Upd_pca_components(Upd_sc, load_cell_cycle_score_drosophila(cell_cycle_drosophila, metafeatures)))
@@ -605,17 +643,17 @@ list(
     )
   ),
   tar_map(
-    tibble(extension = c(".pdf", ".png", ".svg")),
+    tibble(extension = c(".pdf", ".png")),
     tar_target(
       supplemental_figures,
       save_figures(
-        "figure/Single-Cell", extension,
+        "figure/Integrated-scRNAseq", extension,
         tribble(
           ~name, ~figure, ~width, ~height,
-          "Bulk-Dots", supplemental_bulk_figure, 4, 9,
-          "Cluster-Dots", supplemental_cluster_dot_plot_figure, 6, 9,
-          "Validation-Elbow", supplemental_elbow_figure, 5, 2.5,
-          "SCT-Gene-List-Venn-Area", sct_gene_venn, 4, 3
+          "RNAseq-Genotype-Bulk-Dots", supplemental_bulk_figure, 4, 9,
+          "RNAseq-Integrated-Cluster-Dots", supplemental_cluster_dot_plot_figure, 6, 9,
+          "RNAseq-Validation-Elbow", supplemental_elbow_figure, 5, 2.5,
+          "RNAseq-SCT-Gene-List-Venn-Area-Blank", sct_gene_venn, 4, 3
         )
       ),
       format = "file"
@@ -1246,6 +1284,9 @@ list(
       + theme(aspect.ratio = 0.33)
   ),
 
+  tar_target(demo.f.distribution, demo_f_distribution()),
+  tar_target(plot.scaled.f.distribution, plot_scaled_f()),
+
   tar_map(
     data.frame(extension = c(".pdf", ".png")),
     tar_target(
@@ -1304,7 +1345,41 @@ list(
           "CHIC-H3-TJ",
           chic.h3.tj.track.plot,
           6,
-          2
+          2,
+          "CHIC-F-Test-Gaussian",
+          plot.chic.input.anova_H3K4_Germline
+          + theme(aspect.ratio = 1),
+          6, 4,
+          "F-Statistic",
+          (demo.f.distribution
+          + annotate(
+            "text", -3, 0.5, label = bquote(s[X]^2*"  = SSB"), color = "red"
+          )
+          + annotate(
+            "text", 3, -6.5, label = bquote(s[Y]^2*"  = SSB"), color = "red"
+          )
+          + annotate(
+            "text", -3, -6.5, label = bquote("F =  "*s[Y]^2*"/"*s[X]^2)
+          )
+          )
+          ,
+          3, 3,
+          "F-Scaled-Distribution",
+          plot.scaled.f.distribution,
+          8, 6
+        )
+      )
+    ),
+    tar_target(
+      chic_poisson_illustration_somatic,
+      save_figures(
+        "figure/Somatic", extension,
+        tribble(
+          ~name, ~figure, ~width, ~height,
+          "CHIC-F-Test-Gaussian",
+          plot.chic.input.anova_H3K4_Somatic
+          + theme(aspect.ratio = 1),
+          6, 4
         )
       )
     ),

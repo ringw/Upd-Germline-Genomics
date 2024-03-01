@@ -48,6 +48,67 @@ sc_quartile_annotations = c(
   high = hcl(77, 87, 87)
 )
 
+Upd_sc_plot_idents <- function(Upd_sc) {
+  # Rename spermatocyte to differentiated below.
+  cbind(
+    Upd_sc@meta.data,
+    Upd_sc[['umap']]@cell.embeddings,
+    ident=Idents(Upd_sc) %>%
+      recode(spermatocyte='differentiated') %>%
+      fct_relevel(c('germline', 'somatic', 'muscle', 'differentiated'))
+  ) %>% ggplot(
+    aes(UMAP_1, UMAP_2, color=ident)
+  ) + rasterize(geom_point(
+    shape = 20, size = 0.001
+  ), dpi=120, scale=0.5) + scale_color_manual(
+    values=unlist(cluster_colors),
+    guide=guide_legend(title=NULL, override.aes = list(size=4))
+  ) + scale_x_continuous(
+    breaks=c(-10,0,10)
+  ) + scale_y_continuous(breaks=c(-10,0,5)) + theme_cowplot() + theme(
+    aspect.ratio = 0.75
+  )
+}
+
+Upd_sc_plot_subset <- function(sc.plot.idents) {
+  sc.plot.idents$data <- sc.plot.idents$data %>%
+    subset(ident %in% c('germline', 'somatic'))
+  sc.plot.idents + scale_y_continuous(
+    limits=c(-6,6), breaks=c(-5,0,5)
+  ) + theme(
+    aspect.ratio = 0.5
+  )
+}
+
+Upd_sc_feature_plot <- function(Upd_sc, gene) {
+  gene.data = Upd_sc@meta.data %>%
+    cbind(
+      Upd_sc[['umap']]@cell.embeddings,
+      ident=Idents(Upd_sc),
+      LogNormalize=Upd_sc[['RNA']][gene,] %>% as.numeric
+    )
+  gene.max.intensity = quantile(gene.data$LogNormalize, 0.99)
+  gene.max.intensity = c(Mst87F=5, Act57B=4, soti=3, sunz=2)[gene] %>% replace(is.na(.), gene.max.intensity)
+  gene.data %>% ggplot(
+    aes(UMAP_1, UMAP_2, color=LogNormalize)
+  ) + rasterize(geom_point(
+    shape = 20, size = 0.001
+  ), dpi=240) + # + scale_color_viridis_c(
+    # option='magma', limits=c(0,gene.max.intensity), oob=squish
+  scale_color_viridis_c(
+    begin = 0.2,
+    limits = c(0, gene.max.intensity), oob = squish
+  ) + scale_x_continuous(
+    breaks=c(-10,0,10)
+  ) + scale_y_continuous(breaks=c(-10,0,5)) + theme_cowplot(
+  ) + labs(
+    tag=gene
+  ) + theme(
+    plot.tag.position = c(0.1, 0.94),
+    aspect.ratio = 0.75
+  )
+}
+
 # Single-cell dim reduc figure generator. Returns list of filenames.
 Upd_sc_figures = function(figures_dir, Upd_sc) {
   Upd_sc = Upd_sc %>% NormalizeData
@@ -83,7 +144,7 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
   filenames <- c(paste(figures_dir, 'UMAP-Subset.pdf', sep='/'), filenames)
   ggsave(filenames[1], width=8, height=3)
 
-  for (gene in c('AGO3','RpL22-like','vas','tj','lncRNA:roX1','lncRNA:roX2','Mst87F','soti','sunz','w-cup','Act57B','Dl')) {
+  for (gene in c('AGO3','RpL22-like','vas','nos','tj','lncRNA:roX1','lncRNA:roX2','Mst87F','soti','sunz','w-cup','Act57B','Dl')) {
     gene.save = gene %>% str_replace('lncRNA:', '')
     gene.data = Upd_sc@meta.data %>%
       cbind(
@@ -470,7 +531,7 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
   )
 }
 
-fpkm_quarter_density <- function(Upd_fpkm, output_file, clusters = c('germline', 'somatic')) {
+fpkm_quarter_density <- function(Upd_fpkm, clusters = c('germline', 'somatic')) {
   Upd_fpkm <- Upd_fpkm %>% subset(rowAlls((. > 0) %>% replace(is.na(.), FALSE)))
   names(dimnames(Upd_fpkm)) <- c('gene', 'cluster')
   log_fpkm <- log(Upd_fpkm) / log(10)
@@ -499,22 +560,16 @@ fpkm_quarter_density <- function(Upd_fpkm, output_file, clusters = c('germline',
     within(violinwidth <- y / max_density) %>%
     subset(cluster %in% clusters)
   density_melt %>%
-    ggplot(
-      aes(cluster, x, height=res, width=y, fill=cluster, group=cluster)
-    ) + geom_tile()
-  density_melt %>%
-    ggplot(
-      aes(cluster, x, violinwidth=violinwidth, fill=quartile, group=interaction(quartile, cluster))
-    ) + geom_violin(stat='identity')
-  density_melt %>%
+    within(quartile <- quartile %>% factor(rev(sort(unique(.))))) %>%
     ggplot(
       aes(cluster, x, height=res, width=violinwidth * 0.95, fill=quartile)
-    ) + rasterise(geom_tile(), dpi=240) + scale_fill_manual(values = sc_quartile_colors %>% setNames(NULL)) + coord_cartesian(
+    ) + rasterise(geom_tile(), dpi=240) + scale_fill_manual(
+      values = sc_quartile_colors %>% setNames(NULL) %>% rev
+    ) + coord_cartesian(
       NULL, c(-5,NA)
     ) + theme_bw() + labs(
       x = 'Cluster', y = bquote(log[10]*"(FPKM)")
     )
-  ggsave(output_file, width = 4, height = 4)
 }
 
 write_Upd_sc_cell_cycle_phases = function(Upd_sc, cell_cycle_drosophila, metafeatures) {
