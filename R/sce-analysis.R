@@ -221,8 +221,7 @@ gene_cluster_fpkm <- function(Upd_fpkm, seurats, ident.quantify, metadata_path) 
             ,
             metadata %>%
               subset(batch == n & ident == ident.quantify & nCount_RNA_filter == "nCount_RNA_pass") %>%
-              rownames %>%
-              str_replace(paste0(n, "_"), "")
+              rownames
           ] %>%
             `!=`(0) %>%
             rowMeans,
