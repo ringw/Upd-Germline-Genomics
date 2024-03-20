@@ -331,6 +331,13 @@ list(
     flybase.fa,
     'references/dmel-r6.47.fa.gz'
   ),
+  tar_target(
+    # Includes many reference sequences beyond the autosome arms/X/Y. These
+    # other reference sequences are the "scaffolds" and are generally
+    # heterochromatin.
+    flybase.fa.scaffold.lengths,
+    flybase.fa %>% read.table(quote="", sep="\x1B") %>% make_chr_lengths
+  ),
   tar_file(
     flybase.transposon,
     # https://ftp.flybase.org/releases/FB2022_04/precomputed_files/transposons/transposon_sequence_set.fa.gz
@@ -1738,20 +1745,20 @@ list(
   ),
   tar_map(
     data.frame(extension = c(".pdf", ".png")),
-  tar_target(
-    name = repli.chic.quarter_Somatic,
-    chic_average_profiles(
-      repli.quarters_Tj_Weighted %>%
-        rownames_to_column %>%
-        pull(quarter, rowname) %>%
-        # Some genes were not quantified in 10X Genomics BAM TX. The reason why
-        # those genomic features were unsuitable for quantifying at the isoform
-        # level by 10X Cell Ranger is unclear. To make Repli and FPKM somewhat
-        # more comparable (although there may still be genomic features with low
-        # read count in the Repli window and we will remove those features
-        # before any Repli computation), we will filter Repli features using 10X
-        # FPKM feature criteria.
-        subset(names(.) %in% names(quartile.factor_Somatic)),
+    tar_target(
+      name = repli.chic.quarter_Somatic,
+      chic_average_profiles(
+        repli.quarters_Tj_Weighted %>%
+          rownames_to_column %>%
+          pull(quarter, rowname) %>%
+          # Some genes were not quantified in 10X Genomics BAM TX. The reason why
+          # those genomic features were unsuitable for quantifying at the isoform
+          # level by 10X Cell Ranger is unclear. To make Repli and FPKM somewhat
+          # more comparable (although there may still be genomic features with low
+          # read count in the Repli window and we will remove those features
+          # before any Repli computation), we will filter Repli features using 10X
+          # FPKM feature criteria.
+          subset(names(.) %in% names(quartile.factor_Somatic)),
         dirname(
           c(
             chic.bw_H3K4_Somatic,
@@ -1759,9 +1766,9 @@ list(
             chic.bw_H3K9_Somatic
           )[1]
         ),
-      metafeatures,
-      'tj',
-      'Repli Quartile',
+        metafeatures,
+        'tj',
+        'Repli Quartile',
         setNames(repli_quartile_fills, NULL)
       ) %>%
         list %>%
@@ -1773,8 +1780,8 @@ list(
         ) %>%
         save_figures("repli/profile", extension, ., dpi = 300),
       format = "file"
-  ),
-  tar_target(
+    ),
+    tar_target(
       chic.results_Germline,
       save_figures(
         "figure/Germline",
@@ -1799,8 +1806,8 @@ list(
           4, 2
         ),
         dpi = 300
-    ),
-    format = 'file'
+      ),
+      format = 'file'
     ),
     tar_target(
       chic.results_Somatic,
