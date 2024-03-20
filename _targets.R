@@ -235,19 +235,6 @@ chic.experiments$chic_mod_files <- chic.experiments %>%
     by = c("name", "driver", "mark", "input")
   ) %>%
   pull(chic_mod_files)
-chic.smooth.input.sym <- chic.experiments %>%
-  group_by(name) %>%
-  summarise(
-    chic_all_smooth_input_sym = list(
-      call(
-        "setNames",
-        chic_smooth_input_sym,
-        call("c", mark)
-      )
-    )
-  )
-chic.experiments <- chic.experiments %>%
-  left_join(chic.smooth.input.sym, by = "name")
 
 sce_targets <- tar_map(
   unlist = FALSE,
@@ -748,66 +735,6 @@ list(
 
   # ChIC coverage tracks.
   tar_target(
-    chic.kde.filter.template,
-    {
-      # With convolution, the Gaussian kernel will be a ROLLING filter applied
-      # to the chromosome. Chr filter size (plus or minus from origin) will be
-      # set to 10 * sigma. Limit input length (chr length limit) is determined
-      # by subtracting one, and subtracting the extent of the filter (+- x), so
-      # that effectively, we are not performing a wrap-around operation on the
-      # input.
-      # One filter is designed for the chromosomes (large, Mb), while another
-      # filter is designed for the thousands of transposons (small, kb).
-      df <- tibble(
-        fft_length = c(bitwShiftL(1, 14), bitwShiftL(1, 25)), bw = 25
-      ) %>%
-        mutate(
-          filter_size = bw * 10,
-          limit_length = fft_length - (2 * filter_size + 1) - 1
-        ) %>%
-        arrange(limit_length)
-      stopifnot(between(max(chr.lengths), min(df$limit_length), max(df$limit_length)))
-      stopifnot(max(transposon.lengths) < min(df$limit_length))
-      df
-    },
-    iteration = "vector"
-  ),
-  tar_target(
-    chic.kde.filter,
-    chic.kde.filter.template %>%
-      add_column(
-        filter =
-          list(with(., make_frag_end_filter(fft_length, filter_size, bw)))
-      ),
-    pattern = map(chic.kde.filter.template)
-  ),
-  tar_target(
-    chic.kde.filter.template.wide,
-    {
-      df <- tibble(
-        fft_length = c(bitwShiftL(1, 14), bitwShiftL(1, 25)), bw = 100
-      ) %>%
-        mutate(
-          filter_size = bw * 10,
-          limit_length = fft_length - (2 * filter_size + 1) - 1
-        ) %>%
-        arrange(limit_length)
-      stopifnot(between(max(chr.lengths), min(df$limit_length), max(df$limit_length)))
-      stopifnot(max(transposon.lengths) < min(df$limit_length))
-      df
-    },
-    iteration = "vector"
-  ),
-  tar_target(
-    chic.kde.filter.wide,
-    chic.kde.filter.template.wide %>%
-      add_column(
-        filter =
-          list(with(., make_frag_end_filter(fft_length, filter_size, bw)))
-      ),
-    pattern = map(chic.kde.filter.template.wide)
-  ),
-  tar_target(
     chic.macs.bandwidth, list(500, 1000, 2000)
   ),
   # Background value for uniform FPKM. We have a multiplier of 1MM but this
@@ -825,19 +752,6 @@ list(
   tar_map(
     chic.lookup,
     names = lookup_name,
-    tar_target(
-      chic,
-      fpkm_cbind(setNames(samples, sample_names)) %>%
-        smooth_average_cols(chic.kde.filter, c(chr.lengths, transposon.lengths))
-    ),
-    tar_target(
-      chic.smooth,
-      fpkm_cbind(setNames(samples, sample_names)) %>%
-        smooth_average_cols(
-          chic.kde.filter.wide, c(chr.lengths, transposon.lengths),
-          bin_size = 50
-        )
-    ),
     tar_map(
       data.frame(bw = c(25, 125, 250)),
       tar_target(
@@ -1203,23 +1117,6 @@ list(
         )
       )
     ),
-    tar_target(
-      chic.test.welch,
-      chic_track_welch(
-        chic_smooth_mod_sym,
-        chic_all_smooth_input_sym,
-        mark_name = mark,
-        bin_size = 50
-      )
-    ),
-    tar_target(
-      plot.chic.input.anova,
-      plot_chic_anova(
-        chic_smooth_mod_sym,
-        chic_all_smooth_input_sym,
-        bin_size = 50
-      )
-    ),
 
     tar_target(
       chic.var.limma,
@@ -1234,6 +1131,39 @@ list(
         sd = sqrt(chic.var.limma),
         df = chic.squeezeVar[[name]]$df
       )
+    )
+  ),
+
+  tar_target(
+    plot.chic.input.anova_H3K4_Germline,
+    plot_chic_anova(
+      chic.smooth_125_mod_H3K4_Germline %>%
+        set_attr("standard_deviation", chic.sd_125_mod_H3K4_Germline),
+      list(
+        H3K4=chic.smooth_125_input_H3K4_Germline %>%
+          set_attr("standard_deviation", chic.sd_125_input_H3K4_Germline),
+        H3K27=chic.smooth_125_input_H3K27_Germline %>%
+          set_attr("standard_deviation", chic.sd_125_input_H3K27_Germline),
+        H3K9=chic.smooth_125_input_H3K9_Germline %>%
+          set_attr("standard_deviation", chic.sd_125_input_H3K9_Germline)
+      ),
+      bin_size = 50
+    )
+  ),
+  tar_target(
+    plot.chic.input.anova_H3K4_Somatic,
+    plot_chic_anova(
+      chic.smooth_125_mod_H3K4_Somatic %>%
+        set_attr("standard_deviation", chic.sd_125_mod_H3K4_Somatic),
+      list(
+        H3K4=chic.smooth_125_input_H3K4_Somatic %>%
+          set_attr("standard_deviation", chic.sd_125_input_H3K4_Somatic),
+        H3K27=chic.smooth_125_input_H3K27_Somatic %>%
+          set_attr("standard_deviation", chic.sd_125_input_H3K27_Somatic),
+        H3K9=chic.smooth_125_input_H3K9_Somatic %>%
+          set_attr("standard_deviation", chic.sd_125_input_H3K9_Somatic)
+      ),
+      bin_size = 50
     )
   ),
 
@@ -1305,7 +1235,7 @@ list(
           "CHIC-H3K4-Sample-Simulation-1", 
           illustrate_coverage_poisson(
             # Center on tj gene
-            chic_mod_H3K4_Germline$`2L`[seq(19463500,19466500,by=10)] %>%
+            chic.smooth_25_mod_H3K4_Germline$`2L`[seq(19463500,19466500,by=10)] %>%
               # Square the track (shrinks the variations where the value is smaller)
               `^`(2) %>%
               # Subtract off the minimum value
@@ -1318,7 +1248,7 @@ list(
           "CHIC-H3K4-Sample-Simulation-2",
           illustrate_poisson_variable(
             # Center on tj gene
-            chic_mod_H3K4_Germline$`2L`[seq(19463500,19466500,by=10)] %>%
+            chic.smooth_25_mod_H3K4_Germline$`2L`[seq(19463500,19466500,by=10)] %>%
               # Square the track (shrinks the variations where the value is smaller)
               `^`(2) %>%
               # Subtract off the minimum value
