@@ -1159,6 +1159,56 @@ list(
         sd = sqrt(chic.var.limma),
         df = chic.squeezeVar[[name]]$df
       )
+    ),
+    tar_target(
+      chic.broad.peaks.stat,
+      chic_quantify_broad_peaks(
+        pmax(chic_smooth_125_mod_sym, chic_smooth_250_mod_sym)
+        / chic_smooth_250_input_sym,
+        track_mask = chic_smooth_250_input_sym >= 1,
+        features = read.csv(metafeatures, row.names = 1)
+      )
+    ),
+    tar_target(
+      chic.test.limma.bed,
+      chic.test.limma %>%
+        chic_track_generate_table_by_enrichment %>%
+        subset(q < 0.05)
+    ),
+    tar_target(
+      chic.peak.location.stat,
+      classify_feature_overlaps(chic.test.limma.bed, genomic_feature_factor)
+    )
+  ),
+
+  tar_target(
+    plot.chic.peak.location_Germline,
+    display_peak_location_stats(
+      list(
+        H3K4=chic.peak.location.stat_H3K4_Germline,
+        H3K27=chic.peak.location.stat_H3K27_Germline,
+        H3K9=chic.peak.location.stat_H3K9_Germline
+      )
+    )
+  ),
+  tar_target(
+    plot.chic.peak.location_Somatic,
+    display_peak_location_stats(
+      list(
+        H3K4=chic.peak.location.stat_H3K4_Somatic,
+        H3K27=chic.peak.location.stat_H3K27_Somatic,
+        H3K9=chic.peak.location.stat_H3K9_Somatic
+      )
+    )
+  ),
+  tar_target(
+    limits_plot.chic.peak.location,
+    c(
+      0,
+      sapply(
+        list(plot.chic.peak.location_Germline, plot.chic.peak.location_Somatic),
+        \(pl) pl$data$value
+      ) %>% max
     )
   ),
 
@@ -1247,6 +1297,76 @@ list(
       + labs(x = NULL, y = "count")
       + theme_bw()
       + theme(aspect.ratio = 0.33)
+  ),
+  tar_map(
+    data.frame(extension=c(".png", ".pdf")),
+    tar_target(
+      tss_mark_heatmap_legend,
+      {
+        dir.create("figure/Germline", showW=FALSE, recursive=TRUE)
+        dir.create("figure/Somatic", showW=FALSE, recursive=TRUE)
+        save_figures(
+          "figure",
+          extension,
+          tribble(
+            ~name, ~figure, ~width, ~height,
+            "Germline/Heatmap-Legend",
+            get_legend(
+              ggplot(
+                # color from fc_max
+                data.frame(x=0, y=0, c=c(0, 4)),
+                aes(x, y, color=c)
+              ) + geom_point() + scale_color_viridis_c(
+                option="magma",
+                guide=guide_colorbar(title = "mark/input", barheight = 10)
+              )
+            ),
+            1,
+            3,
+            "Germline/INV-Heatmap-Legend",
+            get_legend(
+              ggplot(
+                # color from fc_max
+                data.frame(x=0, y=0, c=c(0, 4)),
+                aes(x, y, fill=c)
+              ) + geom_tile() + create_direction_invert_tss_tile_matrix_gradient() +
+                guides(
+                  fill=guide_colorbar(title = "mark/input", barheight = 10)
+                )
+            ),
+            1,
+            3,
+            "Somatic/Heatmap-Legend",
+            get_legend(
+              ggplot(
+                # color from fc_max
+                data.frame(x=0, y=0, c=c(0, 4)),
+                aes(x, y, color=c)
+              ) + geom_point() + scale_color_viridis_c(
+                option="magma",
+                guide=guide_colorbar(title = "mark/input", barheight = 10)
+              )
+            ),
+            1,
+            3,
+            "Somatic/INV-Heatmap-Legend",
+            get_legend(
+              ggplot(
+                # color from fc_max
+                data.frame(x=0, y=0, c=c(0, 4)),
+                aes(x, y, fill=c)
+              ) + geom_tile() + create_direction_invert_tss_tile_matrix_gradient() +
+                guides(
+                  fill=guide_colorbar(title = "mark/input", barheight = 10)
+                )
+            ),
+            1,
+            3
+          )
+        )
+      },
+      format = "file"
+    )
   ),
 
   tar_target(demo.f.distribution, demo_f_distribution()),
@@ -1487,6 +1607,137 @@ list(
     ),
     format = 'file'
   ),
+
+  tar_target(
+    name = fpkm.chic.quarter.tss.plot_Germline,
+    chic_average_profiles(
+      quartile.factor_Germline,
+      dirname(
+        c(
+          chic.bw_H3K4_Germline,
+          chic.bw_H3K27_Germline,
+          chic.bw_H3K9_Germline
+        )[1]
+      ),
+      metafeatures,
+      'Nos',
+      'FPKM Quartile',
+      setNames(sc_quartile_annotations, NULL)
+    )
+  ),
+  tar_target(
+    name = fpkm.chic.quarter.tss.plot_Somatic,
+    chic_average_profiles(
+      quartile.factor_Somatic,
+      dirname(
+        c(
+          chic.bw_H3K4_Somatic,
+          chic.bw_H3K27_Somatic,
+          chic.bw_H3K9_Somatic
+        )[1]
+      ),
+      metafeatures,
+      'tj',
+      'FPKM Quartile',
+      setNames(sc_quartile_annotations, NULL)
+    )
+  ),
+  tar_target(
+    name = fpkm.chic.quarter.plot_Germline,
+    chic_quartile_gene_list_paneled_profiles(
+      quartile.factor_Germline,
+      dirname(
+        c(
+          chic.bw_H3K4_Germline,
+          chic.bw_H3K27_Germline,
+          chic.bw_H3K9_Germline
+        )[1]
+      ),
+      metafeatures,
+      'Nos',
+      'FPKM Quartile',
+      setNames(sc_quartile_annotations, NULL)
+    )
+  ),
+  tar_target(
+    name = fpkm.chic.quarter.plot_Somatic,
+    chic_quartile_gene_list_paneled_profiles(
+      quartile.factor_Somatic,
+      dirname(
+        c(
+          chic.bw_H3K4_Somatic,
+          chic.bw_H3K27_Somatic,
+          chic.bw_H3K9_Somatic
+        )[1]
+      ),
+      metafeatures,
+      'tj',
+      'FPKM Quartile',
+      setNames(sc_quartile_annotations, NULL)
+    )
+  ),
+
+  tar_target(
+    name = fpkm.chic.sct.tss.plot_Germline,
+    chic_average_gene_list_profiles(
+      sct_gene_lists$germline,
+      dirname(
+        c(
+          chic.bw_H3K4_Germline,
+          chic.bw_H3K27_Germline,
+          chic.bw_H3K9_Germline
+        )[1]
+      ),
+      metafeatures,
+      'Nos'
+    )
+  ),
+  tar_target(
+    name = fpkm.chic.sct.tss.plot_Somatic,
+    chic_average_gene_list_profiles(
+      sct_gene_lists$somatic,
+      dirname(
+        c(
+          chic.bw_H3K4_Somatic,
+          chic.bw_H3K27_Somatic,
+          chic.bw_H3K9_Somatic
+        )[1]
+      ),
+      metafeatures,
+      'tj'
+    )
+  ), tar_target(
+    name = fpkm.chic.sct.plot_Germline,
+    chic_custom_gene_list_paneled_profile(
+      sct_gene_lists$germline,
+      dirname(
+        c(
+          chic.bw_H3K4_Germline,
+          chic.bw_H3K27_Germline,
+          chic.bw_H3K9_Germline
+        )[1]
+      ),
+      metafeatures,
+      'Nos'
+    )
+  ),
+  tar_target(
+    name = fpkm.chic.sct.plot_Somatic,
+    chic_custom_gene_list_paneled_profile(
+      sct_gene_lists$somatic,
+      dirname(
+        c(
+          chic.bw_H3K4_Somatic,
+          chic.bw_H3K27_Somatic,
+          chic.bw_H3K9_Somatic
+        )[1]
+      ),
+      metafeatures,
+      'tj'
+    )
+  ),
+  tar_map(
+    data.frame(extension = c(".pdf", ".png")),
   tar_target(
     name = repli.chic.quarter_Somatic,
     chic_average_profiles(
@@ -1501,26 +1752,201 @@ list(
         # before any Repli computation), we will filter Repli features using 10X
         # FPKM feature criteria.
         subset(names(.) %in% names(quartile.factor_Somatic)),
-      'chic',
+        dirname(
+          c(
+            chic.bw_H3K4_Somatic,
+            chic.bw_H3K27_Somatic,
+            chic.bw_H3K9_Somatic
+          )[1]
+        ),
       metafeatures,
       'tj',
       'Repli Quartile',
-      setNames(repli_quartile_fills, NULL),
-      'repli/profile/Somatic_marks.png'
-    )
+        setNames(repli_quartile_fills, NULL)
+      ) %>%
+        list %>%
+        tibble(
+          name = "Somatic_marks",
+          figure = .,
+          width = 9,
+          height = 4
+        ) %>%
+        save_figures("repli/profile", extension, ., dpi = 300),
+      format = "file"
   ),
   tar_target(
-    name = fpkm.chic.quarter_Somatic,
-    chic_average_profiles(
-      quartile.factor_Somatic,
-      'chic',
-      metafeatures,
-      'tj',
-      'FPKM Quartile',
-      setNames(sc_quartile_annotations, NULL),
-      'scRNA-seq-Figure/profile/Somatic_marks.png'
+      chic.results_Germline,
+      save_figures(
+        "figure/Germline",
+        extension,
+        tribble(
+          ~name, ~figure, ~width, ~height,
+          "CHIC-TSS-AllMarks-RNAseq-Quartile",
+          fpkm.chic.quarter.tss.plot_Germline,
+          9, 4,
+          "CHIC-AllMarks-RNAseq-Quartile",
+          fpkm.chic.quarter.plot_Germline,
+          15, 4,
+          "CHIC-AllMarks-Peak-Annotation",
+          plot.chic.peak.location_Germline
+          + scale_y_continuous(
+            limits = limits_plot.chic.peak.location,
+            expand = expansion(mult = c(0, 0.05))
+          ),
+          6, 3,
+          "CHIC-H3-Periodicity",
+          chic.plot.psd_Germline,
+          4, 2
+        ),
+        dpi = 300
     ),
     format = 'file'
+    ),
+    tar_target(
+      chic.results_Somatic,
+      save_figures(
+        "figure/Somatic",
+        extension,
+        tribble(
+          ~name, ~figure, ~width, ~height,
+          "CHIC-TSS-AllMarks-RNAseq-Quartile",
+          fpkm.chic.quarter.tss.plot_Somatic,
+          9, 4,
+          "CHIC-AllMarks-RNAseq-Quartile",
+          fpkm.chic.quarter.plot_Somatic,
+          15, 4,
+          "CHIC-AllMarks-Peak-Annotation",
+          plot.chic.peak.location_Somatic
+          + scale_y_continuous(
+            limits = limits_plot.chic.peak.location,
+            expand = expansion(mult = c(0, 0.05))
+          ),
+          6, 3,
+          "CHIC-H3-Periodicity",
+          chic.plot.psd_Somatic,
+          4, 2
+        ),
+        dpi = 300
+      ),
+      format = 'file'
+    ),
+    tar_target(
+      name = fpkm.chic.sct.tss_Germline,
+      fpkm.chic.sct.tss.plot_Germline %>%
+        list %>%
+        tibble(
+          name = "CHIC-TSS-AllMarks-RNAseq-SCT-AllGermlineGenes",
+          figure = .,
+          width = 8,
+          height = 4
+        ) %>%
+        save_figures("figure/Germline", extension, ., dpi = 300),
+      format = 'file'
+    ),
+    tar_target(
+      name = fpkm.chic.sct_Germline,
+      fpkm.chic.sct.plot_Germline %>%
+        list %>%
+        tibble(
+          name = "CHIC-AllMarks-RNAseq-SCT-AllGermlineGenes",
+          figure = .,
+          width = 12,
+          height = 4
+        ) %>%
+        save_figures("figure/Germline", extension, ., dpi = 300),
+      format = 'file'
+    ),
+    tar_target(
+      name = fpkm.chic.sct.tss_Somatic,
+      fpkm.chic.sct.tss.plot_Somatic %>%
+        list %>%
+        tibble(
+          name = "CHIC-TSS-AllMarks-RNAseq-SCT-AllSomaticGenes",
+          figure = .,
+          width = 8,
+          height = 4
+        ) %>%
+        save_figures("figure/Somatic", extension, ., dpi = 300),
+      format = 'file'
+    ),
+    tar_target(
+      name = fpkm.chic.sct_Somatic,
+      fpkm.chic.sct.plot_Somatic %>%
+        list %>%
+        tibble(
+          name = "CHIC-AllMarks-RNAseq-SCT-AllSomaticGenes",
+          figure = .,
+          width = 12,
+          height = 4
+        ) %>%
+        save_figures("figure/Somatic", extension, ., dpi = 300),
+      format = 'file'
+    )
+  ),
+
+  # CHIC Power Spectral Density
+  apply(
+    chic.fpkm.data %>% dplyr::rename(driver. = "driver"),
+    1,
+    \(v) with(
+      as.list(v),
+      list(
+        tar_target_raw(
+          paste0("chic.raw.list_input_", name),
+          chic.samples %>%
+            dplyr::filter(molecule == "H3", driver == driver.) %>%
+            pull(sample) %>%
+            paste0("chic.raw_", .) %>%
+            rlang::syms() %>%
+            append(list("list"), .) %>%
+            do.call(call, ., quote=T) %>%
+            list(
+              "setNames",
+              .,
+              chic.samples %>%
+                dplyr::filter(molecule == "H3", driver == driver.) %>%
+                pull(sample) %>%
+                append(list("c"), .) %>%
+                do.call(call, ., quote=T)
+            ) %>%
+            do.call(call, ., quote=T)
+        ),
+        tar_target_raw(
+          paste0("chic.psd.gene.list_", name),
+          if (name == "Germline")
+            quote(sct_gene_lists$germline)
+          else quote(sct_gene_lists$somatic)
+        ),
+        tar_target_raw(
+          paste0("chic.psd.obs_", name),
+          list("cbind_features_at_tss") %>% append(
+            rlang::syms(
+              list(
+                paste0("chic.raw.list_input_", name),
+                paste0("chic.psd.gene.list_", name),
+                "metafeatures"
+              )
+            )
+          ) %>%
+            do.call(call, ., quote=T)
+        ),
+        tar_target_raw(
+          paste0("chic.psd_", name),
+          call(
+            "psd_centered_features",
+            rlang::sym(paste0("chic.psd.obs_", name))
+          ),
+          packages = "gsignal"
+        ),
+        tar_target_raw(
+          paste0("chic.plot.psd_", name),
+          call(
+            "heatmap_psd_centered_features",
+            rlang::sym(paste0("chic.psd_", name))
+          )
+        )
+      )
+    )
   )
 
   #,

@@ -3,6 +3,7 @@
 #     flybase, chr (as in load_flybase_bed), strand, start, end.
 flybase_big_matrix <- function(
   features, bw_path,
+  genomic_feature = "TSS",
   before = 500, after = 1500
 ) {
   coverage <- import(bw_path, "bigwig") %>% coverage(weight="score")
@@ -11,6 +12,8 @@ flybase_big_matrix <- function(
   chr_data <- split(features, features$chr)
   chr_data <- mapply(
     \(chr_bed, chr_coverage, chr_length) {
+      if (type_sum(rownames(chr_bed)) != "chr")
+        rownames(chr_bed) <- as.character(seq(nrow(chr_bed)))
       data_rows <- expand.grid(
         flybase = chr_bed$flybase,
         relative_pos = seq(-before, after-1)
@@ -20,7 +23,16 @@ flybase_big_matrix <- function(
             chr_bed,
             data.frame(
               flybase = flybase,
-              start = ifelse(strand == "+", start, end),
+              start = chr_bed[
+                cbind(
+                  rownames(chr_bed),
+                  list(
+                    TSS = c(`+`="start", `-`="end"),
+                    TES = c(`+`="end", `-`="start")
+                  )[[genomic_feature]][strand]
+                )
+              ] %>%
+                as.numeric,
               sign = ifelse(strand == "+", 1, -1)
             )
           ),
