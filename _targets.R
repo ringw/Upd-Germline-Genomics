@@ -1051,6 +1051,30 @@ list(
       ),
       format = "file"
     ),
+    tar_target(
+      inv_tss_mark_heatmap,
+      display_tss_tile_matrix(
+        tss_mark_matrix,
+        paste0("figure/", name, "/INV-FPKM-", mark, ".pdf"),
+        scale_image_filter = rep(1/50, 50),
+        fc_max = 4,
+        fc_filter = Inf,
+        direction = -1
+      ),
+      format = "file"
+    ),
+    tar_target(
+      inv_tss_mark_heatmap_png,
+      display_tss_tile_matrix(
+        tss_mark_matrix,
+        paste0("figure/", name, "/INV-FPKM-", mark, ".png"),
+        scale_image_filter = rep(1/50, 50),
+        fc_max = 4,
+        fc_filter = Inf,
+        direction = -1
+      ),
+      format = "file"
+    ),
 
     tar_target(
       bam_replicates_input,

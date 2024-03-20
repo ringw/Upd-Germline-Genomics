@@ -75,11 +75,17 @@ smooth_image_columns <- function(
     head(orig_height)
 }
 
+create_direction_invert_tss_tile_matrix_gradient <- function() scale_fill_gradientn(
+  colors = c("white", viridis(7, option = "magma", end = 0.9, direction = -1)),
+  values = c(0, 1, 1.5, 2, 2.5, 3, 3.5, 4) %>% rescale
+)
+
 display_tss_tile_matrix <- function(
   data, output_path,
   scale_image_filter = 1,
   fc_max = 5,
-  fc_filter = 10
+  fc_filter = 10,
+  direction = 1
 ) {
   dir.create(dirname(dirname(output_path)), showW=F)
   dir.create(dirname(output_path), showW=F)
@@ -97,6 +103,8 @@ display_tss_tile_matrix <- function(
     + geom_raster()
     + scale_fill_viridis_c(
       option="magma", limits = c(0, fc_max), oob = squish,
+      direction = direction,
+      begin = ifelse(direction == -1, 0.25, 0),
       guide = guide_colorbar(title = "mark/input", barheight = 10)
     )
     + scale_x_continuous(
@@ -114,6 +122,8 @@ display_tss_tile_matrix <- function(
       plot.margin = unit(c(1, 12, 1, 1), 'pt')
     )
   )
+  if (direction == -1)
+    p <- p + create_direction_invert_tss_tile_matrix_gradient()
   ggsave(
     output_path,
     p + theme(legend.position = "none"),
