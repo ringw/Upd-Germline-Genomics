@@ -362,14 +362,21 @@ list(
       summarize(
         contents = list(do.call(rbind, contents)),
         output_file = "references/chic_reference.fa",
-        write_table = write.table(contents[[1]], output_file, row.names=F, col.names=F, quote=F),
-        index_table = processx::run(
-          "samtools",
-          c("faidx", output_file)
-        ) %>% list
+        write_table = write.table(contents[[1]], output_file, row.names=F, col.names=F, quote=F)
       ) %>%
       pull(output_file),
     cue = tar_cue("never")
+  ),
+  tar_file(
+    flybase.genome.index,
+    tibble(
+      input_file = flybase.genome,
+      index_table = processx::run(
+        "samtools", c("faidx", input_file)
+      ) %>% list,
+      faidx = paste0(input_file, ".fai")
+    ) %>%
+      pull(faidx)
   ),
   tar_file(
     flybase.bowtie,
