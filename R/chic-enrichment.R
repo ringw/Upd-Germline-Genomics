@@ -456,3 +456,75 @@ chic_df_list_to_pvalue_list <- function(df_list) {
     sapply(\(df) df %>% with(Rle(p, length))) %>%
     RleList
 }
+
+chic_quantify_broad_peaks <- function(track, track_mask, features, enrichment = 1.5, resolution = 10) {
+  track <- (track >= enrichment) * (
+    sapply(
+      track_mask,
+      \(track_mask) as(
+        as.logical(track_mask) %>%
+          ifelse(1, 0),
+        "Rle"
+      )
+    ) %>%
+      RleList
+  )
+  feature_values <- features %>%
+    filter(
+      chr %in% names(chr.lengths),
+      !is.na(start),
+      !is.na(end),
+      transcript.length >= 2000
+    ) %>%
+    split(.$chr) %>%
+    mapply(
+      \(chr_name, chr_features) {
+        feature_names <- rownames(chr_features)
+        chr_features <- chr_features %>%
+          rowwise %>%
+          mutate(all_pos = seq(min(start, end), max(start, end)) %>% list)
+        feature_factor <- rep(
+          rownames(chr_features),
+          sapply(chr_features$all_pos, length)
+        ) %>%
+          factor(rownames(chr_features))
+        feature_lookup <- track[[chr_name]][
+          chr_features$all_pos %>% do.call(c, .)
+        ]
+        sapply(
+          feature_lookup %>% split(feature_factor),
+          mean
+        ) %>%
+          setNames(feature_names)
+      },
+      names(.),
+      .,
+      SIMPLIFY=FALSE
+    ) %>%
+    setNames(NULL) %>%
+    do.call(c, .)
+}
+
+display_peak_location_stats <- function(lst) {
+  lst %>%
+    sapply(
+      \(df) df$region %>% table %>% enframe, simplify=FALSE
+    ) %>%
+    bind_rows(.id = "mark") %>%
+    mutate(
+      mark = mark %>% factor(chic.mark.data$mark),
+      name = name %>% factor(lst[[1]]$region %>% levels)
+    ) %>%
+    ggplot(
+      aes(x = name, y = value, fill = mark)
+    ) + geom_bar(
+      stat = "identity", position = "dodge"
+    ) + scale_y_continuous(
+      expand = expansion(mult = c(0, 0.05))
+    ) + scale_fill_viridis_d(
+      option = "turbo", begin = 0.3, end = 0.9
+    ) + labs(
+      x = "Genomic Annotation",
+      y = "Number of Peaks (q < 0.05)"
+    )
+}

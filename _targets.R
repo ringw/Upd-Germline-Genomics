@@ -992,6 +992,10 @@ list(
     chic.genome,
     c(chr.lengths, transposon.lengths) %>% data.frame(chr = names(.), len = .)
   ),
+  tar_target(
+    genomic_feature_factor,
+    factor_genome(flybase.gtf, metafeatures)
+  ),
 
   tar_map(
     chic.experiments,
