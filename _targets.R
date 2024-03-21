@@ -137,29 +137,49 @@ chic.raw.tracks <- tar_map(
   chic.samples,
   names = sample,
   unlist = FALSE,
-  tar_target(
+  tar_file(
     chic.bam,
-    {
-      filename <- paste0("chic/", group, "/", sample, ".bam")
-      run(
+    tibble(
+      tmp_name = tempfile(pattern = sample, fileext = ".bam"),
+      filtered_name = paste0("chic/", group, "/", sample, ".bam"),
+      align_lightfiltering = run(
         "bash",
         c(
           "-i",
-          align_chic_make_pileup,
+          align_chic_lightfiltering,
           flybase.bowtie %>% paste("chic_bowtie2", sep="/"),
           paste0(batch, "/", sample, "_R1_001.fastq.gz"),
           paste0(batch, "/", sample, "_R2_001.fastq.gz"),
-          filename
+          tmp_name
         )
-      )
-      filename
-    },
-    format = "file",
+      ) %>%
+        list,
+      chromatin_specific = run(
+        "bash",
+        c(
+          "-i",
+          align_chic_chromatin_specific_filtering,
+          tmp_name,
+          filtered_name
+        )
+      ) %>%
+        list,
+      move_log = file.copy(
+        str_replace(tmp_name, ".bam", ".log"),
+        str_replace(filtered_name, ".bam", ".log")
+      ),
+      move_markdup_log = file.copy(
+        str_replace(tmp_name, ".bam", ".markdup.log"),
+        str_replace(filtered_name, ".bam", ".markdup.log")
+      ),
+      clean_up_large_tmp_file = file.remove(tmp_name)
+    ) %>%
+      pull(filtered_name),
     cue = tar_cue("never")
   ),
   tar_target(
     chic.raw,
-    bam_paired_fragment_ends(chic.bam, c(chr.lengths, transposon.lengths)),
+    bam_paired_fragment_ends(chic.bam, feature.lengths),
     cue = tar_cue("never")
   )
 )
@@ -331,13 +351,6 @@ list(
     flybase.fa,
     'references/dmel-r6.47.fa.gz'
   ),
-  tar_target(
-    # Includes many reference sequences beyond the autosome arms/X/Y. These
-    # other reference sequences are the "scaffolds" and are generally
-    # heterochromatin.
-    flybase.fa.scaffold.lengths,
-    flybase.fa %>% read.table(quote="", sep="\x1B") %>% make_chr_lengths
-  ),
   tar_file(
     flybase.transposon,
     # https://ftp.flybase.org/releases/FB2022_04/precomputed_files/transposons/transposon_sequence_set.fa.gz
@@ -371,6 +384,16 @@ list(
       faidx = paste0(input_file, ".fai")
     ) %>%
       pull(faidx)
+  ),
+  tar_target(
+    flybase.lengths,
+    read.table(flybase.genome.index, header=F) %>%
+      reframe(name=V1, value=V2) %>%
+      deframe
+  ),
+  tar_target(
+    feature.lengths,
+    flybase.lengths %>% replace(!(names(.) %in% names(chr.lengths)), 1)
   ),
   tar_file(
     flybase.bowtie,
@@ -737,7 +760,11 @@ list(
   ),
 
   # ChIC paired-end alignment targets.
-  tar_target(align_chic_make_pileup, "scripts/align_chic_make_pileup.sh", format = "file"),
+  tar_file(align_chic_lightfiltering, "scripts/align_chic_lightfiltering.sh"),
+  tar_file(
+    align_chic_chromatin_specific_filtering,
+    "scripts/align_chic_chromatin_specific_filtering.sh"
+  ),
   chic.raw.tracks,
 
   # ChIC coverage tracks.

@@ -27,8 +27,16 @@ cigar_ref_length <- function(cigars) {
     )
 }
 
-bam_paired_fragment_ends <- function(bam_file, chr.lengths) {
-  read_origin_table <- names(chr.lengths) %>%
+# For the sample (bam file), plot fragment ends (FE), an estimate of the
+# genomic alignment of each end of each molecule in the sample.
+# feature.lengths must be named with the reference sequences that exist in the
+# bam file. If a length of 1 is substituted for the actual reference length,
+# then all of the fragment ends for the reference (an even number, assuming that
+# we applied the filter -f 0x2) will be summed up in a scalar. The starts of
+# each track or scalar value in the resulting sparseVector are given by:
+#   c(1, 1 + cumsum(feature.lengths))
+bam_paired_fragment_ends <- function(bam_file, feature.lengths) {
+  read_origin_table <- names(feature.lengths) %>%
     sapply(
       \(n) run(
         "bash",
@@ -61,33 +69,29 @@ bam_paired_fragment_ends <- function(bam_file, chr.lengths) {
         sort %>%
         rle %>%
         with(
-          data.frame(
-            loc = values,
-            count = lengths
-          )
+          if (feature.lengths[n] != 1)
+            data.frame(
+              loc = values,
+              count = lengths
+            )
+          else
+            data.frame(
+              loc = 1,
+              count = sum(values * lengths)
+            )
         ),
       simplify = F
     ) %>%
     bind_rows(.id = "chr")
-  # Reads mapped to the chromosomes did not pass beyond the end of the
-  # chromosome, so this check is useful for validation there. On the
-  # transposable elements, the 3' end in alignment coordinates might
-  # have extended beyond the end.
-  stopifnot(
-    all(
-      between(read_origin_table$loc, 1, chr.lengths[read_origin_table$chr])
-      | str_starts(read_origin_table$chr, "FBte")
-    )
-  )
   # Zero-based offset for each chr.
-  chr.starts <- setNames(
-    c(0, cumsum(chr.lengths[-length(chr.lengths)])),
-    names(chr.lengths)
+  feature.starts <- setNames(
+    c(0, cumsum(feature.lengths[-length(feature.lengths)])),
+    names(feature.lengths)
   )
   bam_track <- sparseVector(
-    i = chr.starts[read_origin_table$chr] + read_origin_table$loc,
+    i = feature.starts[read_origin_table$chr] + read_origin_table$loc,
     x = read_origin_table$count,
-    length = sum(chr.lengths)
+    length = sum(feature.lengths)
   )
   bam_track
 }
