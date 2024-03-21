@@ -356,10 +356,6 @@ list(
     # https://ftp.flybase.org/releases/FB2022_04/precomputed_files/transposons/transposon_sequence_set.fa.gz
     'references/transposon_sequence_set.fa.gz'
   ),
-  tar_target(
-    transposon.lengths,
-    flybase.transposon %>% read.table(quote="", sep="\x1B") %>% make_chr_lengths
-  ),
   tar_file(
     flybase.genome,
     tibble(input_file=c(flybase.fa, flybase.transposon)) %>%
@@ -394,6 +390,10 @@ list(
   tar_target(
     feature.lengths,
     flybase.lengths %>% replace(!(names(.) %in% names(chr.lengths)), 1)
+  ),
+  tar_target(
+    feature.rle,
+    Rle(factor(names(feature.lengths), names(feature.lengths)), as.numeric(feature.lengths))
   ),
   tar_file(
     flybase.bowtie,
@@ -775,11 +775,11 @@ list(
   # amount is spread across the reference sequence length.
   tar_target(
     chic.macs.background.value,
-    1000 * 1000 * 1000 / sum(c(chr.lengths, transposon.lengths))
+    1000 * 1000 * 1000 / sum(feature.lengths)
   ),
   tar_target(
     chic.macs.background.track,
-    c(chr.lengths, transposon.lengths) %>%
+    feature.lengths %>%
       sapply(\(len) Rle(values = chic.macs.background.value, len)) %>%
       RleList
   ),
@@ -794,10 +794,7 @@ list(
           sapply(
             \(v) v %>%
               smooth_sparse_vector_to_rle_list(
-                Rle(
-                  c(names(chr.lengths), names(transposon.lengths)),
-                  c(chr.lengths, transposon.lengths)
-                ),
+                feature.rle,
                 bw = bw,
                 sample_size = ifelse(bw < 50, 10, 50)
               )
@@ -817,10 +814,7 @@ list(
             sapply(
               \(v) v %>%
                 smooth_sparse_vector_to_rle_list(
-                  Rle(
-                    c(names(chr.lengths), names(transposon.lengths)),
-                    c(chr.lengths, transposon.lengths)
-                  ),
+                  feature.rle,
                   bw = bw,
                   sample_size = ifelse(bw < 50, 10, 50)
                 )
@@ -837,10 +831,7 @@ list(
         sapply(
           \(x) x %>%
             smooth_sparse_vector_to_rle_list(
-              # TODO: put this expression into a target
-              c(chr.lengths, transposon.lengths) %>%
-                enframe("refseq", "len") %>%
-                with(Rle(refseq, len)),
+              feature.rle,
               bw = 1000,
               sample_size = 200
             ),
@@ -859,10 +850,7 @@ list(
         sapply(
           \(x) x %>%
             smooth_sparse_vector_macs(
-              # TODO: put this expression into a target
-              c(chr.lengths, transposon.lengths) %>%
-                enframe("refseq", "len") %>%
-                with(Rle(refseq, len)),
+              feature.rle,
               chic.macs.bandwidth[[1]],
               sample_size = 200,
               normalize_tag_count = TRUE
@@ -894,9 +882,7 @@ list(
         sapply(
           \(x) x %>%
             smooth_sparse_vector_macs(
-              c(chr.lengths, transposon.lengths) %>%
-                enframe("refseq", "len") %>%
-                with(Rle(refseq, len)),
+              feature.rle,
               diameter = 150,
               sample_size = 50,
               normalize_tag_count = FALSE
@@ -1022,9 +1008,10 @@ list(
     )
   ),
 
+  # TODO: Try replacing this target (data frame) with feature.rle
   tar_target(
     chic.genome,
-    c(chr.lengths, transposon.lengths) %>% data.frame(chr = names(.), len = .)
+    feature.lengths %>% data.frame(chr = names(.), len = .)
   ),
   tar_target(
     genomic_feature_factor,

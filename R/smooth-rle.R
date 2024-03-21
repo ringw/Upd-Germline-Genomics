@@ -20,6 +20,12 @@ smooth_sparse_vector_to_rle_list <- function(
     sapply(
       \(n) {
         v <- counts[as.logical(chrs == n)]
+        # Never apply density() to a single entry. We already have a discrete
+        # scale (base pairs) so the density estimate in the single bin is the
+        # original value in the single bin. Size factor is included as a
+        # multiplier for the scale that each counted event is on (e.g. FPKM).
+        if (length(v) == 1)
+          return(Rle(as.numeric(v[1]) * size_factor, lengths = 1))
         which_v <- rep(v@i, times = v@x)
         length_log_2 <- log(length(v) / sample_size) / log(2)
         density_n <- round(exp(ceiling(length_log_2) * log(2)))
