@@ -9,11 +9,11 @@ subsample_time_series <- function(series, bin_size=100) {
 
 subsample_unlist_rle_list <- function(rles, bin_size) do.call(
   c,
-  sapply(
-    rles,
-    \(v) subsample_time_series(v, bin_size),
-    simplify = FALSE
-  )
+  rles[sapply(rles, length) > bin_size] %>%
+    sapply(
+      \(v) subsample_time_series(v, bin_size),
+      simplify = FALSE
+    )
 )
 
 chic_rep_t_test <- function(

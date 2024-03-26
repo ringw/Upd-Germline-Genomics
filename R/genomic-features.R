@@ -19,7 +19,10 @@ make_chr_lengths <- function(fa_table) {
 
 # Create a factor-valued track for the genome. The levels are categories of loci
 # so that we can show a bar chart of peak locations.
-factor_genome <- function(gtf_path, metafeatures_path) {
+factor_genome <- function(gtf_path, metafeatures_path, feature.lengths) {
+  factor_genome_levels <- c(
+    "5'UTR", "exon", "intron", "3'UTR", "promoter", "intergene", "TE"
+  )
   metafeatures <- metafeatures_path %>% read.csv(row.names=1)
   gtf <- read.table(
     gtf_path,
@@ -126,14 +129,16 @@ factor_genome <- function(gtf_path, metafeatures_path) {
             ) %>%
             do.call(c, .)
         ] <- "exon"
-        call_chr %>% factor(
-          c("5'UTR", "exon", "intron", "3'UTR", "promoter", "intergene")
-        )
+        call_chr %>% factor(factor_genome_levels)
       },
       names(.),
       .,
       SIMPLIFY = FALSE
     )
+  for (n in grep("FBte", names(feature.lengths), val=T)) {
+    rles[[n]] <- Rle("TE", 1) %>% factor(factor_genome_levels)
+  }
+  rles
 }
 
 classify_feature_overlaps <- function(bed_track, factor_track) {
@@ -158,8 +163,8 @@ classify_feature_overlaps <- function(bed_track, factor_track) {
             factor(levels(factor_track[[1]]))
         )
     },
-    (bed_track %>% split(.$chr))[names(chr.lengths)],
-    factor_track[names(chr.lengths)],
+    (bed_track %>% split(.$chr))[names(factor_track)],
+    factor_track,
     SIMPLIFY=FALSE
   ) %>%
     do.call(rbind, .)

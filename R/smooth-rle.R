@@ -9,23 +9,46 @@ rolling_filter_to_bw <- function(rolling_filter_diameter) {
 smooth_sparse_vector_to_rle_list <- function(
   counts,
   chrs,
-  size_factor = 1000 * 1000 * 1000 / sum(counts),
+  size_factor = 1000 * 1000 * 1000 / est_library_size,
   kernel = "gaussian",
   bw = 25,
-  sample_size = 10
+  sample_size = 10,
+  # Heterochromatin ref seqs are smaller in length (6 Mb) compared to the
+  # euchromatin chromosome arm seqs (138 Mb), but we did apply different SAM
+  # filtering for heterochromatin and for TEs (MAPQ 0 vs 20, -k 10 vs none).
+  # The former (MAPQ) entails a decrease in alignment confidence of 100X
+  # (likelihood of incorrect alignment goes from 100% to 1%), and for the
+  # latter, hardly any reads have a multi-mapping. We sought to roughly equalize
+  # mean 2L/2R/3L/3R/X euchromatin FPKM with mean heterochromatin FPKM on the H3
+  # input samples by applying a 0.1 multiplier to the heterochromatin counts.
+  heterochromatin_mapq_factor = 0.1
 ) {
+  num_counts <- sum(counts)
+
   if (!is.factor(chrs@values))
     chrs <- Rle(factor(chrs@values, chrs@values), chrs@lengths)
-  levels(chrs@values) %>%
+
+  # First compute the sum features (length 1).
+  sum_feature_mask <- Rle(chrs@lengths == 1, chrs@lengths)
+  # Now that we can mask the heterochromatin features (sum features, being
+  # aggregated into a length-1 Rle), then we can compute the est library size.
+  # This estimates the number of reads that we will find for a given molecule
+  # in the heterochromatin filtering params (multi-mapping 10 alternate
+  # alignments, any MAPQ) vs euchromatin (one alignment, MAPQ 20).
+  est_library_size <- sum(counts) - (1 - heterochromatin_mapq_factor) * sum(counts[which(sum_feature_mask)])
+  sum_features <- counts[which(sum_feature_mask)] %>%
+    as.numeric %>%
+    `*`(size_factor) %>%
+    setNames(chrs[sum_feature_mask]) %>%
+    sapply(\(value) Rle(value, lengths = 1))
+
+  # Second compute the smooth features (euchromatin features) which are not of
+  # length 1.
+  eu_features <- levels(chrs@values) %>%
+    setdiff(names(sum_features)) %>%
     sapply(
       \(n) {
         v <- counts[as.logical(chrs == n)]
-        # Never apply density() to a single entry. We already have a discrete
-        # scale (base pairs) so the density estimate in the single bin is the
-        # original value in the single bin. Size factor is included as a
-        # multiplier for the scale that each counted event is on (e.g. FPKM).
-        if (length(v) == 1)
-          return(Rle(as.numeric(v[1]) * size_factor, lengths = 1))
         which_v <- rep(v@i, times = v@x)
         length_log_2 <- log(length(v) / sample_size) / log(2)
         density_n <- round(exp(ceiling(length_log_2) * log(2)))
@@ -53,8 +76,12 @@ smooth_sparse_vector_to_rle_list <- function(
         )
         with(density_sampling, Rle(dens, end - begin))
       }
-    ) %>%
-    RleList
+    )
+
+  all_feature_names <- levels(chrs@values)
+  append(eu_features, sum_features)[all_feature_names] %>%
+    RleList %>%
+    set_attr("est_library_size", est_library_size)
 }
 
 smooth_sparse_vector_macs <- function(

@@ -20,5 +20,8 @@ rle_lists_sd <- function(rles) {
 
 rles_summary <- function(rles, summary="sd") {
   summary_fns <- list(sd = rowSds)
-  sapply(rles, as.numeric) %>% (summary_fns[[summary]]) %>% as("Rle")
+  sapply(rles, as.numeric, simplify=FALSE) %>%
+    do.call(cbind, .) %>%
+    (summary_fns[[summary]]) %>%
+    as("Rle")
 }

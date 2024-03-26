@@ -61,23 +61,37 @@ bam_paired_fragment_ends <- function(bam_file, feature.lengths) {
         as.list %>%
         with(
           ifelse(
+            # Reverse-mapped read?
             tlen < 0,
+            # Then find the final Crick-end reference coordinate which a
+            # template base pair is mapped to.
             pos + cigar_length - 1,
+            # Else we already have the Watson-end base pair, which is at the
+            # other extreme end of the template molecule.
             pos
           )
         ) %>%
         sort %>%
+        # Summarize the reads with unique (sorted) reference position and number
+        # of reads.
+        # TODO: Consider using table() instead of sort %>% rle as it would be
+        # more clear that it is a bin count.
         rle %>%
         with(
+          # In the sequence, values are the reference coordinate, while the
+          # length is given (after sort) by the number of such reads.
           if (feature.lengths[n] != 1)
             data.frame(
               loc = values,
               count = lengths
             )
+          # For features that we summarize down to a length of 1, then we are
+          # not retaining the read coordinates within the reference sequence so
+          # we will sum their values.
           else
             data.frame(
               loc = 1,
-              count = sum(values * lengths)
+              count = sum(values)
             )
         ),
       simplify = F

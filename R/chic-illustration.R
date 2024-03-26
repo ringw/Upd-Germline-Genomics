@@ -168,9 +168,9 @@ chic_illustrate_mean_variance_from_rle_table <- function(chic.table, slope=1) {
   )
 }
 
-plot_chic_rect_window_replicates <- function(chic_list, chr, xs) {
+plot_chic_rect_window_replicates <- function(chic_list, chr, xs, by=50) {
   xs <- range(xs)
-  xs <- seq(xs[1], xs[2], by = 50)
+  xs <- seq(xs[1], xs[2], by = by)
   chic_list %>%
     sapply(\(rles) data.frame(x = xs, y = rles[[chr]][xs] %>% as.numeric), simplify=FALSE) %>%
     bind_rows(.id = "sample")

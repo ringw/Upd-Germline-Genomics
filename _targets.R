@@ -803,8 +803,8 @@ list(
               )
           ) %>%
           purrr::reduce(`+`) %>%
-          round(digits = 1) %>%
           `/`(length(samples)) %>%
+          rle_list_round_log_scale_pretty %>%
           pmax(
             . * 0 + 0.1
           ) %>%
@@ -1317,6 +1317,48 @@ list(
       + geom_smooth(method="loess", span=0.2)
       + scale_color_manual(values=c("purple", "forestgreen", "cyan", "goldenrod", "red", "limegreen", "violet", "steelblue", "brown"), guide=NULL)
       + coord_cartesian(NULL, c(-2, 60), expand=F)
+      + scale_x_continuous(labels=\(x) paste0(x / 1000 / 1000, " Mb"))
+      + labs(x = NULL, y = "count")
+      + theme_bw()
+      + theme(aspect.ratio = 0.33)
+  ),
+  tar_target(
+    chic.h3.histone.track.plot,
+    plot_chic_rect_window_replicates(
+      c(
+        chic.macs.peakdetect_input_H3K4_Germline,
+        chic.macs.peakdetect_input_H3K27_Germline,
+        chic.macs.peakdetect_input_H3K9_Germline
+      ),
+      "2L",
+      21398000:21549000,
+      by = 100
+    ) %>% ggplot(aes(x, y))
+      + geom_line(aes(group=sample, color=sample), alpha=0.5)
+      + geom_smooth(method="loess", span=0.2)
+      + scale_color_manual(values=c("purple", "forestgreen", "cyan", "goldenrod", "red", "limegreen", "violet", "steelblue", "brown"), guide=NULL)
+      + coord_cartesian(NULL, c(-2, 10000), expand=F)
+      + scale_x_continuous(labels=\(x) paste0(x / 1000 / 1000, " Mb"))
+      + labs(x = NULL, y = "count")
+      + theme_bw()
+      + theme(aspect.ratio = 0.33)
+  ), tar_target(
+    chic.h3.histone.track.plot.fpkm,
+    plot_chic_rect_window_replicates(
+      c(
+        chic.macs.peakdetect_input_H3K4_Germline,
+        chic.macs.peakdetect_input_H3K27_Germline,
+        chic.macs.peakdetect_input_H3K9_Germline
+      ) %>%
+        sapply(\(rl) rl * 1000 * 1000 * 1000 / 150 / attr(rl, "num_tags")),
+      "2L",
+      21398000:21549000,
+      by = 100
+    ) %>% ggplot(aes(x, y))
+      + geom_line(aes(group=sample, color=sample), alpha=0.5)
+      + geom_smooth(method="loess", span=0.2)
+      + scale_color_manual(values=c("purple", "forestgreen", "cyan", "goldenrod", "red", "limegreen", "violet", "steelblue", "brown"), guide=NULL)
+      + coord_cartesian(NULL, c(-2, 1000), expand=F)
       + scale_x_continuous(labels=\(x) paste0(x / 1000 / 1000, " Mb"))
       + labs(x = NULL, y = "count")
       + theme_bw()
