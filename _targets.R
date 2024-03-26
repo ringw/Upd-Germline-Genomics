@@ -254,6 +254,15 @@ chic.experiments$chic_mod_files <- chic.experiments %>%
   ) %>%
   pull(chic_mod_files)
 
+repli.samples = read.csv('repli/repli_samples.csv')
+repli.samples$replication_value = repli.samples$replication_value %>% factor
+repli.samples$full = repli.samples$replication_value
+levels(repli.samples$full) <- c("Early", "Early-Mid", "Mid-Late", "Late")
+repli.samples$abbrev = repli.samples$replication_value
+levels(repli.samples$abbrev) <- c("E", "G", "J", "L")
+repli.samples <- repli.samples %>%
+  mutate(name = paste0(genotype, "_", abbrev, rep))
+
 sce_targets <- tar_map(
   unlist = FALSE,
   sce.data,
@@ -319,6 +328,43 @@ sce_targets <- tar_map(
           read.csv(metadata, row.names = 1)[names(.), 'ident'] == cluster
         ) %>% sum
     )
+  )
+)
+
+repli_targets <- tar_map(
+  repli.samples,
+  names = name,
+  tar_file(
+    fastqc,
+    tibble(
+      input_path = paste0("Upd_Tumor/Repli/", filename),
+      output_dir = "repli/fastqc",
+      output_dir_create = dir.create(output_dir, rec=TRUE, showW=FALSE),
+      output_path = paste0(
+        output_dir, "/", str_replace(filename, ".fastq.gz", "_fastqc.zip")
+      ),
+      run_fastqc = processx::run(run_fastqc_sh, c(input_path, output_path)) %>% list
+    ) %>%
+      pull(output_path)
+  ),
+  tar_file(
+    repli.bam,
+    tibble(
+      output_path = paste0("repli/bam/", str_replace(filename, ".fastq.gz", ".bam")),
+      align = run(
+        "bash",
+        c(
+          "-i",
+          align_repli,
+          flybase.bowtie %>% paste("chic_bowtie2", sep="/"),
+          paste0("Upd_Tumor/Repli/", filename),
+          output_path
+        )
+      ) %>%
+        list
+    ) %>%
+      pull(output_path),
+    cue = tar_cue("never")
   )
 )
 
@@ -768,6 +814,7 @@ list(
     align_chic_chromatin_specific_filtering,
     "scripts/align_chic_chromatin_specific_filtering.sh"
   ),
+  tar_file(align_repli, "scripts/align_repli.sh"),
   chic.raw.tracks,
 
   # ChIC coverage tracks.
@@ -2013,7 +2060,7 @@ list(
         )
       )
     )
-  )
+  ),
 
   #,
 
@@ -2021,5 +2068,9 @@ list(
   # tar_target(name = repli.raw, command = load_repli(repli_dir), cue=tar_cue('never')),
   # tar_target(name = repli, command = normalize_repli(repli.raw), cue=tar_cue('never')),
   # tar_target(name = repli.hmm, command = repli_fit_hmm(repli), cue=tar_cue('never'))
+
+  # Repli-Seq
+  tar_file(run_fastqc_sh, "scripts/run_fastqc.sh"),
+  repli_targets
 )
  
