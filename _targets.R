@@ -21,14 +21,12 @@ postscriptFonts(sans = postscriptFonts()$Helvetica)
 # Set target options:
 tar_option_set(
   packages = c(
-    'AnnotationDbi',
     'apeglm',
     'BiocIO',
     'Cairo',
     'cowplot',
     'DESeq2',
     'dplyr',
-    'drosophila2.db',
     'forcats',
     'GenomicRanges',
     'ggnewscale',
@@ -260,31 +258,36 @@ sce_targets <- tar_map(
   unlist = FALSE,
   sce.data,
   names = batch,
-  tar_target(
-    tenx_file, tenx_path
-    # Don't checksum the 10X outputs. Unfortunately we will want to avoid using
-    # "file" with the tar cue "never", which is still reading in all of the
-    # files (presumably to do a checksum) every time we call tar_make!
-    # format='file'
+  tar_file(
+    tenx_file, tenx_path,
+    cue = tar_cue("never")
   ),
+  # Our light QC (before SCTransform) will be based on mitochondrial percent and
+  # ribo transcript percent. This is not the full QC. Later we will filter
+  # nCount_RNA and nFeature_RNA. At this stage, these criteria did not need to
+  # be applied to get clear clusters.
   tar_target(
     seurat_qc,
-    load_flybase(
-      tenx_file, batch, sce.present.features, sce.mt.features, metafeatures
+    read_seurat_sctransform(
+      tenx_file, batch, sce.present.features, assay.data.sc
     )
   ),
+  # Quantiles of gene expression value per cluster. We will apply one of the
+  # quantiles as a nonparametric statistic for calling some genes "off", because
+  # their % expressed is too low, or because the normalized expression value at
+  # the low end is tiny.
   tar_target(
     sctransform_quantile,
-    load_flybase(
-      tenx_file, batch, sce.features, sce.mt.features, metafeatures,
+    read_seurat_sctransform(
+      tenx_file, batch, sce.features, assay.data.sc,
       return.only.var.genes = FALSE, run_pca = FALSE
     ) %>%
       quantify_quantiles(metadata)
   ),
   tar_target(
     lognormalize_quantile,
-    load_flybase(
-      tenx_file, batch, sce.present.features, sce.mt.features, metafeatures,
+    read_seurat_sctransform(
+      tenx_file, batch, sce.present.features, assay.data.sc,
       return.only.var.genes = FALSE, run_pca = FALSE
     ) %>%
       quantify_quantiles(
@@ -293,6 +296,7 @@ sce_targets <- tar_map(
   ),
 
   # Map over clusters (below, from metadata) and extract pseudobulk counts.
+  tar_file(download_bam_tx_sh, "scripts/download_bam_tx.sh"),
   tar_map(
     unlist = FALSE,
     sce.clusters,
@@ -300,7 +304,7 @@ sce_targets <- tar_map(
     tar_target(
       pseudobulk.tx,
       download_bam_transcripts(
-        paste0(scripts_dir, '/download_bam_tx.sh'),
+        download_bam_tx_sh,
         metadata,
         batch,
         cluster,
@@ -319,28 +323,28 @@ sce_targets <- tar_map(
 )
 
 list(
-  tar_target(
-    scRNAseq,
-    'scRNA-seq',
-    format='file',
-    # Assume that 10X files do not change.
-    cue = tar_cue("never")
+  tar_file(
+    flybase.annotations.current,
+    'fbgn_annotation_ID_fb_2022_04.tsv.gz'
+  ),
+  tar_file(
+    flybase.annotations.previous,
+    'fbgn_annotation_ID_fb_2020_06.tsv.gz'
   ),
   tar_target(
-    sce.mt.features,
-    read_mt_genome(paste0(sce.data$tenx_path[1], '/features.tsv.gz'))
+    flybase.annotations,
+    c(
+      `2022_04`=flybase.annotations.current,
+      `2020_06`=flybase.annotations.previous
+    )
   ),
   tar_target(
     sce.features,
-    load_feature_names(str_replace(sce.data$tenx_path, 'scRNA-seq', scRNAseq))
+    load_feature_names(tenx_file_nos.1, flybase.annotations)
   ),
   tar_target(
     sce.present.features,
-    select_features(str_replace(sce.data$tenx_path, 'scRNA-seq', scRNAseq))
-  ),
-  tar_file(
-    flybase.annotations,
-    'fbgn_annotation_ID_fb_2022_04.tsv.gz'
+    select_features(tenx_file_nos.1, flybase.annotations)
   ),
   tar_file(
     flybase.gtf,
@@ -413,12 +417,13 @@ list(
       ) %>%
       pull(output_file)
   ),
-  tar_target(
-    metafeatures,
-    create_meta_features(
-      tenx_file_nos.1,
-      flybase.annotations, flybase.gtf, sce.present.features, sce.mt.features,
-      'scRNA-seq-Meta-Features.csv'), format='file'),
+  tar_file(
+    assay.data.sc,
+    create_assay_data_sc(
+      tenx_file_nos.1, sce.features,
+      flybase.annotations, flybase.gtf, sce.present.features,
+      'scRNA-seq-Assay-Metadata.csv')
+  ),
   tar_target(nos.1, call_nos.1(seurat_qc_nos.1)),
   tar_target(nos.2, call_nos.2(seurat_qc_nos.2)),
   tar_target(tj.1, call_tj.1(seurat_qc_tj.1)),
@@ -495,8 +500,6 @@ list(
     Upd_regression_mscl,
     apeglm_coef_table(Upd_glm, coef = 4)
   ),
-  # Split this tar_file, then remove tar_cue("never")
-  tar_target(scripts_dir, "scripts", format = "file", cue = tar_cue("never")),
   sce_targets,
   tar_combine(
     Upd_pseudobulk,
@@ -539,7 +542,7 @@ list(
         unlist(batch_names),
         flybase.gtf,
         metadata,
-        metafeatures
+        assay.data.sc
       )
     )
   ),
@@ -555,8 +558,8 @@ list(
       mapply(
         # Load all of the 10X matrices using sce.features (all features instead
         # of our min # cells features).
-        \(n, f) load_flybase(
-          f, n, sce.features, sce.mt.features, metafeatures, sctransform=FALSE
+        \(n, f) read_seurat_sctransform(
+          f, n, sce.features, assay.data.sc, sctransform=FALSE
         ),
         c("nos.1", "nos.2", "tj.1", "tj.2"),
         c(tenx_file_nos.1, tenx_file_nos.2, tenx_file_tj.1, tenx_file_tj.2),
@@ -565,7 +568,7 @@ list(
       c("nos.1", "nos.2", "tj.1", "tj.2"),
       flybase.gtf,
       metadata,
-      metafeatures
+      assay.data.sc
     )
   ),
   tar_target(
@@ -637,7 +640,7 @@ list(
     {
       filename <- "scRNA-seq-Regression/Cell-Cycle-Scoring.xlsx"
       write_excel_tables_list(
-        write_Upd_sc_cell_cycle_phases(Upd_sc, cell_cycle_drosophila, metafeatures),
+        write_Upd_sc_cell_cycle_phases(Upd_sc, cell_cycle_drosophila, assay.data.sc),
         filename
       )
       filename
@@ -650,7 +653,7 @@ list(
       filename <- "figure/Integrated-scRNAseq/Germline-Somatic-Pairs.pdf"
       dir.create(dirname(filename), recursive = TRUE, showW = FALSE)
       CairoPDF(filename, width = 16, height = 9)
-      print(plot_Upd_pca_components(Upd_sc, load_cell_cycle_score_drosophila(cell_cycle_drosophila, metafeatures)))
+      print(plot_Upd_pca_components(Upd_sc, load_cell_cycle_score_drosophila(cell_cycle_drosophila, assay.data.sc)))
       dev.off()
       filename
     },
@@ -703,7 +706,7 @@ list(
   # Call the most abundant gene isoform which maximizes FPKM value.
   tar_target(
     Upd_fpkm,
-    tx_cpm_to_fpkm(Upd_cpm_transcripts, metafeatures)
+    tx_cpm_to_fpkm(Upd_cpm_transcripts, assay.data.sc)
   ),
   # Final table of gene abundances: CPM of the abundant isoform based on FPKM
   # calculation. Also join with H3-GFP gene mean coming from the GLM.
@@ -716,7 +719,7 @@ list(
     publish_excel_results(
       Upd_regression_somatic, Upd_regression_tid, Upd_regression_mscl,
       Upd_cpm_transcripts, Upd_cpm, Upd_fpkm, sctransform_quantile,
-      supplemental_bulk_fpkm, metafeatures, flybase.gtf,
+      supplemental_bulk_fpkm, assay.data.sc, flybase.gtf,
       'scRNA-seq-Regression/Enriched-Genes.xlsx'
     ),
     format='file'
@@ -997,14 +1000,14 @@ list(
     tar_target(
       bed,
       reference_sort_by_fpkm_table(
-        Upd_fpkm, tolower(name), metafeatures,
+        Upd_fpkm, tolower(name), assay.data.sc,
         paste0("scRNA-seq-Regression/", name, "-FPKM.bed")
       ),
       format = "file"
     ),
     tar_target(
       quartile.factor,
-      bed_flybase_quartile_factor(bed, metafeatures)
+      bed_flybase_quartile_factor(bed, assay.data.sc)
     )
   ),
 
@@ -1015,7 +1018,7 @@ list(
   ),
   tar_target(
     genomic_feature_factor,
-    factor_genome(flybase.gtf, metafeatures)
+    factor_genome(flybase.gtf, assay.data.sc, feature.lengths)
   ),
 
   tar_map(
@@ -1187,7 +1190,7 @@ list(
         pmax(chic_smooth_125_mod_sym, chic_smooth_250_mod_sym)
         / chic_smooth_250_input_sym,
         track_mask = chic_smooth_250_input_sym >= 1,
-        features = read.csv(metafeatures, row.names = 1)
+        features = read.csv(assay.data.sc, row.names = 1)
       )
     ),
     tar_target(
@@ -1612,7 +1615,7 @@ list(
     ),
     tar_target(
       repli.quarters,
-      analyze_repli_quarters(repli.hdf5, metafeatures, flybase.gtf)
+      analyze_repli_quarters(repli.hdf5, assay.data.sc, flybase.gtf)
     )
   ),
 
@@ -1640,7 +1643,7 @@ list(
           chic.bw_H3K9_Germline
         )[1]
       ),
-      metafeatures,
+      assay.data.sc,
       'Nos',
       'FPKM Quartile',
       setNames(sc_quartile_annotations, NULL)
@@ -1657,7 +1660,7 @@ list(
           chic.bw_H3K9_Somatic
         )[1]
       ),
-      metafeatures,
+      assay.data.sc,
       'tj',
       'FPKM Quartile',
       setNames(sc_quartile_annotations, NULL)
@@ -1674,7 +1677,7 @@ list(
           chic.bw_H3K9_Germline
         )[1]
       ),
-      metafeatures,
+      assay.data.sc,
       'Nos',
       'FPKM Quartile',
       setNames(sc_quartile_annotations, NULL)
@@ -1691,7 +1694,7 @@ list(
           chic.bw_H3K9_Somatic
         )[1]
       ),
-      metafeatures,
+      assay.data.sc,
       'tj',
       'FPKM Quartile',
       setNames(sc_quartile_annotations, NULL)
@@ -1709,7 +1712,7 @@ list(
           chic.bw_H3K9_Germline
         )[1]
       ),
-      metafeatures,
+      assay.data.sc,
       'Nos'
     )
   ),
@@ -1724,7 +1727,7 @@ list(
           chic.bw_H3K9_Somatic
         )[1]
       ),
-      metafeatures,
+      assay.data.sc,
       'tj'
     )
   ), tar_target(
@@ -1738,7 +1741,7 @@ list(
           chic.bw_H3K9_Germline
         )[1]
       ),
-      metafeatures,
+      assay.data.sc,
       'Nos'
     )
   ),
@@ -1753,7 +1756,7 @@ list(
           chic.bw_H3K9_Somatic
         )[1]
       ),
-      metafeatures,
+      assay.data.sc,
       'tj'
     )
   ),
@@ -1780,7 +1783,7 @@ list(
             chic.bw_H3K9_Somatic
           )[1]
         ),
-        metafeatures,
+        assay.data.sc,
         'tj',
         'Repli Quartile',
         setNames(repli_quartile_fills, NULL)
@@ -1945,7 +1948,7 @@ list(
               list(
                 paste0("chic.raw.list_input_", name),
                 paste0("chic.psd.gene.list_", name),
-                "metafeatures"
+                "assay.data.sc"
               )
             )
           ) %>%

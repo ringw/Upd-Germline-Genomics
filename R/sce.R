@@ -1,39 +1,65 @@
-read_mt_genome <- function(features_path) {
-  features = read.table(features_path, row.names=1)
-  features = rownames(features) %>% str_replace('^Dmel_', '')
-  suppressWarnings(
-    mapIds(
-      drosophila2.db,
-      features %>% subset(
-        mapIds(drosophila2.db, features, 'CHR', 'FLYBASECG') == 'MT'
-      ),
-      'SYMBOL',
-      'FLYBASECG'
+# Load all of the flybase annotation id tsv files. The first one in the
+# character vector should contain most of the features (the release that we used
+# -- FlyBase r6.47). The character vector can contain additional FlyBase
+# references, to cover the FlyBase features that are now out of date, but
+# nevertheless appeared in the GTF file that was built for genomic alignment
+# (CR31927, CR32123, CR31485). Therefore, when we search for the FlyBase id,
+# then the tsv file line coming from the first tsv file in the list will be
+# expected to take priority in resolving the gene name.
+load_flybase_annotation_mapping <- function(fbgn_paths) {
+ apply_fbgn_ref <- function(fbgn_path) {
+    fbgn_ann = read.table(fbgn_path, quote='', sep='\t', header=F)
+    colnames(fbgn_ann)[c(1,3)] = c('symbol','flybase')
+    fbgn_ann = as.data.frame(fbgn_ann)
+    fbgn_ann_mapping = data.frame(
+      annotation = fbgn_ann$V5,
+      flybase = fbgn_ann$flybase,
+      symbol = fbgn_ann$symbol
     )
-  )
+    for (row in seq(nrow(fbgn_ann)))
+      if (str_length(fbgn_ann[row,'V6']))
+        fbgn_ann_mapping = fbgn_ann_mapping %>% rbind(
+            data.frame(
+              annotation = strsplit(fbgn_ann[row, 'V6'], ',')[[1]],
+              flybase = fbgn_ann[row, 'flybase'],
+              symbol = fbgn_ann[row, 'symbol']
+            )
+          )
+    fbgn_ann_mapping
+  }
+  sapply(fbgn_paths, apply_fbgn_ref, simplify=FALSE) %>% do.call(rbind, .)
 }
 
-map_feature_names <- function(feature_names) {
-  # SingleCellExperiment does not like a names vector which is a named vector.
-  feature_names = setNames(
-    mapIds(drosophila2.db, str_replace(feature_names, '^Dmel_', ''), 'SYMBOL', 'FLYBASECG')
-    %>% replace(is.na(.) | duplicated(.), names(.)[is.na(.) | duplicated(.)]),
-    NULL
-  )
-  feature_names[feature_names == 'UrbanChen_H3-GFP'] = 'H3-GFP'
-  feature_names
-}
-
-load_feature_names <- function(paths) {
-  paths[1] %>%
+load_feature_names <- function(paths, fbgn_paths) {
+  fbgn_ann_mapping <- load_flybase_annotation_mapping(fbgn_paths)
+  annotation_names <- paths[1] %>%
     paste0('/features.tsv.gz') %>%
     read.table(row.names=1) %>%
-    rownames %>%
-    map_feature_names
+    rownames
+  sce.features <- c(
+    "H3-GFP",
+    fbgn_ann_mapping$symbol[
+      match(
+        annotation_names[-1] %>% str_replace("Dmel_", ""),
+        fbgn_ann_mapping$annotation
+      )
+    ]
+  )
+  sce.features[duplicated(sce.features)] <- c(
+    "H3-GFP",
+    fbgn_ann_mapping$flybase[
+      match(
+        annotation_names[-1] %>% str_replace("Dmel_", ""),
+        fbgn_ann_mapping$annotation
+      )
+    ]
+  )[duplicated(sce.features)]
+  stopifnot(all(!duplicated(sce.features)))
+  sce.features
 }
 
-select_features <- function(paths) {
-  feature_names <- paths %>% load_feature_names
+select_features <- function(paths, fbgn_paths) {
+  feature_names <- paths %>% load_feature_names(fbgn_paths)
   features_keep = rep(TRUE, length(feature_names)) %>% setNames(feature_names)
   for (tenx_path in paths) {
     matrix_data = read.table(paste0(tenx_path, '/matrix.mtx.gz'), comment='%', header=T)
@@ -45,37 +71,25 @@ select_features <- function(paths) {
   features_keep = feature_names[features_keep]
 }
 
-create_meta_features <- function(
-    path, fbgn_path, gtf_path, present.symbols, mt.symbols, output_path) {
+create_assay_data_sc <- function(
+    path, sce.features, fbgn_paths, gtf_path, present.symbols, output_path) {
   cg_names = (
     path
     %>% paste0('/features.tsv.gz')
     %>% read.table(row.names=1)
     %>% rownames
   )
-  fbgn_ann = read.table(fbgn_path, quote='', sep='\t', header=F)
-  colnames(fbgn_ann)[c(1,3)] = c('symbol','flybase')
-  fbgn_ann = as.data.frame(fbgn_ann)
-  fbgn_ann_mapping = data.frame(
-    annotation = fbgn_ann$V5,
-    flybase = fbgn_ann$flybase,
-    symbol = fbgn_ann$symbol
-  )
-  for (row in seq(nrow(fbgn_ann)))
-    if (str_length(fbgn_ann[row,'V6'])) fbgn_ann_mapping = fbgn_ann_mapping %>% rbind(
-    data.frame(
-      annotation = strsplit(fbgn_ann[row, 'V6'], ',')[[1]],
-      flybase = fbgn_ann[row, 'flybase'],
-      symbol = fbgn_ann[row, 'symbol']
-    )
-  )
-  feature_names = cg_names %>% map_feature_names
-  meta.features = data.frame(
-    row.names = feature_names,
+ 
+  fbgn_ann_mapping <- load_flybase_annotation_mapping(fbgn_paths)
+  meta.data = tibble(
+    rowname = sce.features,
     flybasecg = c('', str_replace(cg_names[-1], 'Dmel_', '')),
-    flybase = c('', fbgn_ann_mapping$flybase[match(str_replace(cg_names[-1], 'Dmel_', ''), fbgn_ann_mapping$annotation)]),
-    pass.min.cells = feature_names %in% present.symbols,
-    is.mito = feature_names %in% mt.symbols
+    flybase = c(
+      '',
+      fbgn_ann_mapping$flybase[match(sce.features[-1], fbgn_ann_mapping$symbol)]
+    ),
+    pass.min.cells = sce.features %in% present.symbols,
+    is.mito = grepl("^mt:", rowname)
   )
 
   # Now build a length column, for FPKM calculation.
@@ -97,24 +111,32 @@ create_meta_features <- function(
     strand = max(strand),
     transcript.length = max(abs(end - start)) + 1
   )
-  meta.features = meta.features %>% left_join(gtf, 'flybase')
-  rownames(meta.features) = feature_names
+  meta.data = meta.data %>% left_join(gtf, 'flybase') %>% column_to_rownames
 
-  write.csv(meta.features, output_path)
+  write.csv(meta.data, output_path)
   output_path
 }
 
-load_flybase <- function(
-  tenx_path, batch, features_keep, mt_features, meta_path, mt_pct=10, ribo_pct=40,
+read_seurat_sctransform <- function(
+  tenx_path, batch, features_keep, assay_path, mt_pct=10, ribo_pct=40,
   return.only.var.genes = TRUE, run_pca = TRUE, sctransform = TRUE
 ) {
   sce = Read10X(tenx_path)
 
-  rownames(sce) = map_feature_names(rownames(sce))
+  assay.data <- read.csv(assay_path, row.names=1)
+  stopifnot(
+    all.equal(
+      rownames(sce) %>% str_replace("UrbanChen.*|Dmel_", ""),
+      assay.data$flybasecg
+    )
+  )
+  rownames(sce) <- rownames(assay.data)
   seur = CreateSeuratObject(sce)
   # Every cell will have a nos.1_ prefix, etc.
   seur = seur %>% RenameCells(add.cell.id = batch)
-  seur[['RNA']]@meta.features = read.csv(meta_path, row.names=1)
+  seur[['RNA']]@meta.data = read.csv(assay_path, row.names=1)
+  mt_features <- rownames(seur[['RNA']]@meta.data) %>%
+    subset(seur[['RNA']]@meta.data$is.mito)
   seur$pct.mito = seur %>% PercentageFeatureSet(features = mt_features)
   seur$pct.ribo = seur %>% PercentageFeatureSet('^Rp[SL]')
   seur = seur[features_keep, seur$pct.mito < mt_pct & seur$pct.ribo < ribo_pct]
