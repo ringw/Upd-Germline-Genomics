@@ -17,7 +17,7 @@ bed_flybase_quartile_factor <- function(bed_path, metafeatures_path, nquartiles=
 }
 
 # Analysis with TSS profile as x-axis, with ChIC tracks.
-chic_average_profile_limits <- c(0.5, 3)
+chic_average_profile_limits <- c(0.375, 2.65)
 chic_average_profiles <- function(
   chic_factor,
   chic_path,
@@ -106,7 +106,8 @@ chic_average_profiles <- function(
     values = c(0.5, 0.75, 1.5, 1.75),
     guide = guide_legend(title = legend_title)
   ) + scale_y_continuous(
-    limits = chic_average_profile_limits
+    limits = chic_average_profile_limits,
+    expand = c(0, 0)
   ) + coord_cartesian(expand=FALSE) + labs(
     x = "bp (from TSS)", y = "mean(mark/input)"
   )
@@ -160,7 +161,8 @@ chic_average_gene_list_profiles <- function(
   ) + geom_line(color = "goldenrod", linewidth = 1) + facet_wrap(
     vars(marks)
   ) + scale_y_continuous(
-    limits = chic_average_profile_limits
+    limits = chic_average_profile_limits,
+    expand = c(0, 0)
   ) + coord_cartesian(expand = FALSE) + labs(
     x = "bp (from TSS)", y = "mean(mark/input)"
   )
@@ -281,9 +283,32 @@ pull_chic_average_gene_list_paneled_data <- function(
       paste0("+", 1:(num_tes - 1))
     ),
     track_value = c(
-      colMeans(tss_data),
-      colMeans(inter_data),
-      colMeans(tes_data)
+      # Average profiles are kernel-smoothed, because the large effect of the
+      # nucleosome phasing would not be so useful to show on a small panel.
+      ksmooth(
+        seq(ncol(tss_data)),
+        colMeans(tss_data),
+        kernel = "normal",
+        bandwidth = 100,
+        x.points = seq(ncol(tss_data))
+      )$y,
+      ksmooth(
+        seq(ncol(inter_data)),
+        colMeans(inter_data),
+        kernel = "normal",
+        # 10 == 10% of the width of the gene body region, this is similar to a
+        # bandwidth of 100 bp for the TSS and TES regions, which each have
+        # 500+500 bp shown.
+        bandwidth = 10,
+        x.points = seq(ncol(inter_data))
+      )$y,
+      ksmooth(
+        seq(ncol(tes_data)),
+        colMeans(tes_data),
+        kernel = "normal",
+        bandwidth = 100,
+        x.points = seq(ncol(tes_data))
+      )$y
     )
   )
   colnames(result)[2] <- basename(chic_bw) %>% str_replace("[.].*", "")
