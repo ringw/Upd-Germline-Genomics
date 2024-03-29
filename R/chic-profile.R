@@ -17,7 +17,7 @@ bed_flybase_quartile_factor <- function(bed_path, metafeatures_path, nquartiles=
 }
 
 # Analysis with TSS profile as x-axis, with ChIC tracks.
-chic_average_profile_limits <- c(0.375, 2.65)
+chic_average_profile_limits <- c(0.37, 3.3)
 chic_average_profiles <- function(
   chic_factor,
   chic_path,
@@ -75,13 +75,6 @@ chic_average_profiles <- function(
       facets %>% subset(select=-profile) %>% rownames_to_column("profile_index"),
       .,
       by = "profile_index"
-    ) %>%
-    group_by(genes, marks) %>%
-    mutate(
-      l2FC = with(
-        ksmooth(pos, l2FC, "normal", bandwidth = 100),
-        approx(x, y, xout = pos)$y
-      )
     ) %>%
     ungroup %>%
     mutate(marks = marks %>% factor(chic.mark.data$mark, ordered=TRUE))
