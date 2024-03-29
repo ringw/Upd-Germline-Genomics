@@ -1825,64 +1825,85 @@ list(
   ),
 
   tar_target(
-    name = fpkm.chic.sct.tss.plot_Germline,
-    chic_average_gene_list_profiles(
-      sct_gene_lists$germline,
-      dirname(
+    sct_gene_lists_extended,
+    sct_gene_lists %>%
+      with(
+        list(
+          AllGermlineGenes = germline,
+          AllSomaticGenes = somatic,
+          ExclusiveGermlineGenes = setdiff(germline, somatic),
+          ExclusiveSomaticGenes = setdiff(somatic, germline),
+          AllGermlineOrSomaticGenes = union(germline, somatic)
+        )
+    )
+  ),
+  tar_target(
+    name = fpkm.chic.sct.plots_Germline,
+    list(
+      dirname = dirname(
         c(
           chic.bw_H3K4_Germline,
           chic.bw_H3K27_Germline,
           chic.bw_H3K9_Germline
         )[1]
-      ),
+        )
+    ) %>%
+      with(
+        tibble(
+          experiment = "Germline",
+          gene_list = names(sct_gene_lists_extended),
+          tss_plot = chic_average_gene_list_profiles(
+            sct_gene_lists_extended[[1]],
+            dirname,
       assay.data.sc,
-      'Nos'
-    )
+            "Nos"
+          ) %>%
+            list,
+          paneled_plot = chic_custom_gene_list_paneled_profile(
+            sct_gene_lists_extended[[1]],
+            dirname,
+            assay.data.sc,
+            "Nos"
+          ) %>%
+            list
+        )
+      ),
+    pattern = map(sct_gene_lists_extended)
   ),
   tar_target(
-    name = fpkm.chic.sct.tss.plot_Somatic,
-    chic_average_gene_list_profiles(
-      sct_gene_lists$somatic,
-      dirname(
+    name = fpkm.chic.sct.plots_Somatic,
+    list(
+      dirname = dirname(
         c(
           chic.bw_H3K4_Somatic,
           chic.bw_H3K27_Somatic,
           chic.bw_H3K9_Somatic
         )[1]
-      ),
+        )
+    ) %>%
+      with(
+        tibble(
+          experiment = "Somatic",
+          gene_list = names(sct_gene_lists_extended),
+          tss_plot = chic_average_gene_list_profiles(
+            sct_gene_lists_extended[[1]],
+            dirname,
       assay.data.sc,
-      'tj'
-    )
-  ), tar_target(
-    name = fpkm.chic.sct.plot_Germline,
-    chic_custom_gene_list_paneled_profile(
-      sct_gene_lists$germline,
-      dirname(
-        c(
-          chic.bw_H3K4_Germline,
-          chic.bw_H3K27_Germline,
-          chic.bw_H3K9_Germline
-        )[1]
-      ),
-      assay.data.sc,
-      'Nos'
-    )
+            "tj"
+          ) %>%
+            list,
+          paneled_plot = chic_custom_gene_list_paneled_profile(
+            sct_gene_lists_extended[[1]],
+            dirname,
+            assay.data.sc,
+            "tj"
+          ) %>%
+            list
+        )
   ),
-  tar_target(
-    name = fpkm.chic.sct.plot_Somatic,
-    chic_custom_gene_list_paneled_profile(
-      sct_gene_lists$somatic,
-      dirname(
-        c(
-          chic.bw_H3K4_Somatic,
-          chic.bw_H3K27_Somatic,
-          chic.bw_H3K9_Somatic
-        )[1]
-      ),
-      assay.data.sc,
-      'tj'
-    )
+    pattern = map(sct_gene_lists_extended)
   ),
+
   tar_map(
     data.frame(extension = c(".pdf", ".png")),
     tar_target(
