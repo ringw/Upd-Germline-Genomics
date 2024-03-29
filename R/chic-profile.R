@@ -137,14 +137,7 @@ chic_average_gene_list_profiles <- function(
       \(v) data.frame(pos=seq(-before, after-1), l2FC=v),
       simplify=F) %>%
     bind_rows(.id = "marks") %>%
-    mutate(marks = marks %>% factor(chic.mark.data$mark)) %>%
-    group_by(marks) %>%
-    mutate(
-      l2FC = with(
-        ksmooth(pos, l2FC, "normal", bandwidth = 100),
-        approx(x, y, xout = pos)$y
-      )
-    )
+    mutate(marks = marks %>% factor(chic.mark.data$mark))
   facet_data %>% ggplot(
     aes(x=pos, y=l2FC)
   ) + geom_line(
