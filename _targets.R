@@ -255,7 +255,7 @@ chic.experiments$chic_mod_files <- chic.experiments %>%
   pull(chic_mod_files)
 
 repli.samples = read.csv('repli/repli_samples.csv')
-repli.samples$replication_value = repli.samples$replication_value %>% factor
+repli.samples$replication_value = repli.samples$replication_value %>% factor(unique(.))
 repli.samples$full = repli.samples$replication_value
 levels(repli.samples$full) <- c("Early", "Early-Mid", "Mid-Late", "Late")
 repli.samples$abbrev = repli.samples$replication_value
@@ -363,8 +363,42 @@ repli_targets <- tar_map(
       ) %>%
         list
     ) %>%
-      pull(output_path),
-    cue = tar_cue("never")
+      pull(output_path)
+  )
+) %>%
+  list(
+    sapply(
+      c("nos", "tj"),
+      \(suffix) tar_target_raw(
+        paste0("repli.bams_", suffix),
+        subset(repli.samples, genotype == suffix) %>%
+          with(
+            call(
+              "tibble",
+              condition = as.character(abbrev),
+              rep = rep,
+              name = name,
+              source_file = "repli.bam_" %>%
+                paste0(name) %>%
+                rlang::syms() %>%
+                append("c", .) %>%
+                do.call(call, ., quote=T)
+            )
+          )
+      )
+    ),
+    tar_map(
+      tribble(~suffix, ~my_table, "nos", quote(repli.bams_nos), "tj", quote(repli.bams_tj)),
+      names = suffix,
+      tar_target(
+        repli.coverage,
+        read_replicated_coverage(
+          my_table,
+          flybase.lengths,
+          feature.lengths
+        ),
+        packages = "GenomicAlignments"
+      )
   )
 )
 
