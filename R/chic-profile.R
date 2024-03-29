@@ -283,32 +283,9 @@ pull_chic_average_gene_list_paneled_data <- function(
       paste0("+", 1:(num_tes - 1))
     ),
     track_value = c(
-      # Average profiles are kernel-smoothed, because the large effect of the
-      # nucleosome phasing would not be so useful to show on a small panel.
-      ksmooth(
-        seq(ncol(tss_data)),
         colMeans(tss_data),
-        kernel = "normal",
-        bandwidth = 100,
-        x.points = seq(ncol(tss_data))
-      )$y,
-      ksmooth(
-        seq(ncol(inter_data)),
         colMeans(inter_data),
-        kernel = "normal",
-        # 10 == 10% of the width of the gene body region, this is similar to a
-        # bandwidth of 100 bp for the TSS and TES regions, which each have
-        # 500+500 bp shown.
-        bandwidth = 10,
-        x.points = seq(ncol(inter_data))
-      )$y,
-      ksmooth(
-        seq(ncol(tes_data)),
-        colMeans(tes_data),
-        kernel = "normal",
-        bandwidth = 100,
-        x.points = seq(ncol(tes_data))
-      )$y
+      colMeans(tes_data)
     )
   )
   colnames(result)[2] <- basename(chic_bw) %>% str_replace("[.].*", "")
