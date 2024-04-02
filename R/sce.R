@@ -161,14 +161,14 @@ read_seurat_sctransform <- function(
 
 call_nos.1 <- function(nos.1) {
   nos.1 = nos.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F)
-  DotPlot(nos.1, 'SCT', c('vas','bam', 'tj','lncRNA:roX2', 'Mst77F','Act57B', 'H3-GFP'))
+  DotPlot(nos.1, c('vas','bam', 'tj','lncRNA:roX2', 'Mst77F','Act57B', 'H3-GFP'), assay='SCT')
   nos.1 = nos.1 %>% RenameIdents(`1`='germline', `2`='somatic', `4`='doublet',
                                  `3`='spermatocyte', `7`='muscle')
 }
 
 call_nos.2 <- function(nos.2) {
   nos.2 = nos.2 %>% FindNeighbors(dims=1:10, verb=F) %>% FindClusters(res = 0.15, verb=F)
-  DotPlot(nos.2, 'RNA', c('vas','bam', 'tj','lncRNA:roX2','mamo','wb', 'H3-GFP', 'w-cup', 'Act57B'))
+  DotPlot(nos.2, c('vas','bam', 'tj','lncRNA:roX2','mamo','wb', 'H3-GFP', 'w-cup', 'Act57B'), assay='RNA')
   # Cluster 3: wb+mamo+, but adjacent to somatic in PCA. These marker genes were
   # seen in GSC (low) in other batches, and in muscle in this batch,
   # respectively. This is a type of doublet cluster which was not observed in
