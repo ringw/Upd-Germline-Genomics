@@ -1998,57 +1998,38 @@ list(
       ),
       format = 'file'
     ),
-    tar_target(
-      name = fpkm.chic.sct.tss_Germline,
-      fpkm.chic.sct.tss.plot_Germline %>%
-        list %>%
+    tar_map(
         tibble(
-          name = "CHIC-TSS-AllMarks-RNAseq-SCT-AllGermlineGenes",
-          figure = .,
-          width = 8,
-          height = 4
+        experiment = c("Germline", "Somatic"),
+        experiment_dir = paste0("figure/", experiment),
+        plots = c(
+          "fpkm.chic.sct.plots_Germline", "fpkm.chic.sct.plots_Somatic"
         ) %>%
-        save_figures("figure/Germline", extension, ., dpi = 300),
-      format = 'file'
-    ),
+          rlang::syms()
+      ),
+      names = "experiment",
     tar_target(
-      name = fpkm.chic.sct_Germline,
-      fpkm.chic.sct.plot_Germline %>%
-        list %>%
-        tibble(
-          name = "CHIC-AllMarks-RNAseq-SCT-AllGermlineGenes",
-          figure = .,
-          width = 12,
+        name = fpkm.chic.genelists,
+        save_figures(
+          experiment_dir,
+          extension,
+          plots %>%
+            rowwise %>%
+            reframe(
+              experiment,
+              gene_list,
+              prefix = c("CHIC-TSS-", "CHIC-"),
+              width = c(8, 12),
+              figure = list(tss_plot, paneled_plot)
+            ) %>%
+            reframe(
+              filename = paste0(prefix, "AllMarks-RNAseq-SCT-", gene_list),
+              figure,
+              width,
           height = 4
-        ) %>%
-        save_figures("figure/Germline", extension, ., dpi = 300),
-      format = 'file'
-    ),
-    tar_target(
-      name = fpkm.chic.sct.tss_Somatic,
-      fpkm.chic.sct.tss.plot_Somatic %>%
-        list %>%
-        tibble(
-          name = "CHIC-TSS-AllMarks-RNAseq-SCT-AllSomaticGenes",
-          figure = .,
-          width = 8,
-          height = 4
-        ) %>%
-        save_figures("figure/Somatic", extension, ., dpi = 300),
-      format = 'file'
-    ),
-    tar_target(
-      name = fpkm.chic.sct_Somatic,
-      fpkm.chic.sct.plot_Somatic %>%
-        list %>%
-        tibble(
-          name = "CHIC-AllMarks-RNAseq-SCT-AllSomaticGenes",
-          figure = .,
-          width = 12,
-          height = 4
-        ) %>%
-        save_figures("figure/Somatic", extension, ., dpi = 300),
-      format = 'file'
+            )
+        )
+      )
     )
   ),
 
