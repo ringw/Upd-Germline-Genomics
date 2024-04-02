@@ -53,4 +53,5 @@ read_replicated_coverage <- function(
     new_col <- str_replace(c, "condition", "")
     elementMetadata(ref_windows)[[new_col]] <- exp(fit$Beta[, c])
   }
+  ref_windows
 }
