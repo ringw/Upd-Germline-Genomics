@@ -196,7 +196,7 @@ gene_pseudobulk_fpkm <- function(tx_files, seurats, seurat_names, gtf_path, meta
     percent_expressed = rowMeans(
       seurats %>%
         mapply(
-          \(seur, n) seur[['RNA']]@counts[
+          \(seur, n) seur[['RNA']]@layers$counts[
             ,
             metadata %>%
               subset(batch == n & nCount_RNA_filter == "nCount_RNA_pass") %>%
@@ -206,7 +206,8 @@ gene_pseudobulk_fpkm <- function(tx_files, seurats, seurat_names, gtf_path, meta
             rowMeans,
           .,
           seurat_names)
-    )
+    ),
+    row.names = rownames(seurats[[1]][['RNA']])
   )
 }
 
@@ -217,7 +218,7 @@ gene_cluster_fpkm <- function(Upd_fpkm, seurats, ident.quantify, metadata_path) 
     percent_expressed = rowMeans(
       seurats %>%
         mapply(
-          \(seur, n) seur[['RNA']]@counts[
+          \(seur, n) seur[['RNA']]@layers$counts[
             ,
             metadata %>%
               subset(batch == n & ident == ident.quantify & nCount_RNA_filter == "nCount_RNA_pass") %>%
@@ -227,7 +228,8 @@ gene_cluster_fpkm <- function(Upd_fpkm, seurats, ident.quantify, metadata_path) 
             rowMeans,
           .,
           names(.))
-    )
+    ),
+    row.names = rownames(seur[['RNA']])
   )
 }
 
