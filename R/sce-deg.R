@@ -7,7 +7,7 @@ plot_nCount_RNA_threshold <- function(Upd_sc, ident, gene) {
     sapply(
       \(n) Upd_sc@meta.data %>%
         subset(batch == n & Idents(Upd_sc) == ident) %>%
-        cbind(is.expressed = Upd_sc[['RNA']]@counts[
+        cbind(is.expressed = Upd_sc[['RNA']]@layers$counts[
           gene, Upd_sc$batch == n & Idents(Upd_sc) == ident
         ] != 0) %>%
         arrange(desc(nCount_RNA)) %>%
@@ -50,7 +50,7 @@ analyze_sce_to_csv <- function(seurats, output_path) {
     )
   }
   sce = SingleCellExperiment(
-    list(counts = do.call(cbind, seurats %>% sapply(\(seurat) seurat[['RNA']]@counts, simplify=F))),
+    list(counts = do.call(cbind, seurats %>% sapply(\(seurat) GetAssayData(seurat, assay='RNA', layer='counts'), simplify=F))),
     colData = do.call(rbind, seurats %>% setNames(NULL) %>% sapply(\(seurat) seurat@meta.data, simplify=F))
   )
   colData(sce) = cbind(
@@ -87,9 +87,11 @@ analyze_sce_to_csv <- function(seurats, output_path) {
 }
 
 build_model_matrix <- function(metadata) {
-  metadata <- metadata %>% read.csv(row.names = 1)
+  metadata <- metadata %>%
+    read.csv(row.names = 1)
+  # Factor levels should come from the filter_integrate_data function.
   metadata$ident <- metadata$ident %>%
-    factor(c("germline", "somatic", "spermatocyte", "muscle"))
+    fct_relevel(c("germline", "somatic", "spermatocyte", "muscle"))
   metadata$batch <- metadata$batch %>% factor
   mm <- model.matrix(~ ident + batch, metadata)
 
@@ -113,13 +115,17 @@ build_model_matrix <- function(metadata) {
       t %>%
       solve
   )
-  mm
+  mm[
+    ,
+    # Filtering of doublet clusters comes from the filter_integrate_data func.
+    !grepl("doublet", colnames(mm))
+  ]
 }
 
 fit_glm <- function(Upd_sc, model_matrix, metadata) {
   metadata <- metadata %>% read.csv(row.names = 1)
   Upd_glm <- glm_gp(
-    Upd_sc[['RNA']]@counts,
+    GetAssayData(Upd_sc, assay="RNA", layer="counts"),
     model_matrix[colnames(Upd_sc), ],
     size_factors = metadata[colnames(Upd_sc), "size_factor"],
     on_disk = F,

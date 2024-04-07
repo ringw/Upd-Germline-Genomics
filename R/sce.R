@@ -162,20 +162,36 @@ read_seurat_sctransform <- function(
 call_nos.1 <- function(nos.1) {
   nos.1 = nos.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F)
   DotPlot(nos.1, c('vas','bam', 'tj','lncRNA:roX2', 'Mst77F','Act57B', 'H3-GFP'), assay='SCT')
-  nos.1 = nos.1 %>% RenameIdents(`1`='germline', `2`='somatic', `4`='doublet',
-                                 `3`='spermatocyte', `7`='muscle')
+  nos.1 = nos.1 %>% RenameIdents(`1`='germline', `2`='somatic', `3`='doublet',
+                                 `4`='spermatocyte', `8`='muscle')
 }
 
 call_nos.2 <- function(nos.2) {
-  nos.2 = nos.2 %>% FindNeighbors(dims=1:10, verb=F) %>% FindClusters(res = 0.15, verb=F)
-  DotPlot(nos.2, c('vas','bam', 'tj','lncRNA:roX2','mamo','wb', 'H3-GFP', 'w-cup', 'Act57B'), assay='RNA')
-  # Cluster 3: wb+mamo+, but adjacent to somatic in PCA. These marker genes were
-  # seen in GSC (low) in other batches, and in muscle in this batch,
-  # respectively. This is a type of doublet cluster which was not observed in
-  # the clustering of the other samples.
+  # Doublets in Nos-Rep2 the most difficult to tease apart (including doublets
+  # of the differentiated cell types). We applied a greater clustering res,
+  # and then recombined somatic and germline cells that actually each form a
+  # large (e.g. blob, elliptical) population on a nos.2 UMAP. Then, the
+  # "doublet.spermatocyte" cells, when left in the Upd_sc object, are very
+  # spread-out germ cells, some of which are adjacent to either the germline
+  # ident or the somatic ident, and should be removed as they do have some %
+  # expression of vas and tj in this cluster. (along with medium % w-cup expr).
+  nos.2 = nos.2 %>% FindNeighbors(dims=1:9, verb=F) %>% FindClusters(res = 0.5, verb=F)
+  DotPlot(nos.2, c('vas','bam', 'tj','lncRNA:roX2','mamo','wb', 'H3-GFP', 'w-cup', 'Act57B'))
   nos.2 = nos.2 %>% RenameIdents(
-    `0`='germline', `1`='somatic', `3`='doublet.wb',
-    `4`='doublet', `5`='spermatocyte', `8`='muscle'
+    `0`='somatic',
+    `4`='somatic',
+    `5`='somatic',
+
+    `1`='germline',
+    `2`='germline',
+    `6`='germline',
+
+    `11`='spermatocyte',
+    `13`='muscle',
+
+    `7`='doublet.mamo',
+    `8`='doublet.stemlike',
+    `9`='doublet.spermatocyte'
   )
 }
 
@@ -220,14 +236,24 @@ gfp_pc = function(seurats) {
 }
 
 filter_integrate_data = function(seurats) {
-  # Remove doublets. Remove clusters that have not been renamed (numeric name).
+  assay_data = seurats[[1]][["RNA"]]@meta.data
+  # Remove doublets. Use relabeling of the numeric (unidentified) clusters so
+  # that we learn a cluster mean independently for each gene and for each
+  # unidentified cluster.
   seurats = seurats %>% sapply(
-    \(sce) sce %>% subset(
-      cells = Cells(sce) %>% subset(
-        !grepl('doublet', as.character(Idents(sce)))
-        & !grepl('[0-9]', as.character(Idents(sce)))
-      )
-    ),
+    \(sce) sce %>%
+      subset(
+        cells = Cells(sce) %>% subset(
+          !grepl('doublet', as.character(Idents(sce)))
+        )
+      ) %>%
+      `Idents<-`(
+        value = Idents(.) %>%
+          fct_relabel(
+            \(n) ifelse(grepl('[0-9]', n),
+                        paste(sce$batch[1], n, sep='.'),
+                        n))
+      ),
     simplify=F
   )
   gfp_dim_reduc = gfp_pc(seurats)
@@ -240,50 +266,21 @@ filter_integrate_data = function(seurats) {
     ),
     simplify=F
   )
-  for (i in seq_along(seurats)) {
-    Idents(seurats[[i]]) = Idents(seurats[[i]]) %>% fct_relabel(
-      \(n) ifelse(grepl('[0-9]', n),
-                  paste(seurats[[i]]$batch[1], n, sep='.'),
-                  n))
-  }
-  rna.key = Key(seurats[[1]]@assays[['RNA']])
-  merge_RNA = CreateAssayObject(
-    counts = do.call(
-      cbind,
-      seurats %>% sapply(\(sce) sce[['RNA']]@counts)
-    )
-  )
-  meta.features = seurats[[1]][['RNA']]@meta.features
-  Key(merge_RNA) = rna.key
-  for (i in seq_along(seurats)) {
-    # Integration features will be selected using RNA LogNormalize std variance.
-    seurats[[i]] = seurats[[i]] %>% NormalizeData(assay='RNA', verb=F) %>% FindVariableFeatures(assay='RNA', verb=F)
-    rna.key = Key(seurats[[i]]@assays[['RNA']])
-    seurats[[i]]@assays[['RNA']] = (
-      seurats[[i]]@assays[['RNA']]
-      %>% SetAssayData(
-        'counts',
-        sparseMatrix(
-          i=1,j=1,x=0,
-          dims=dim(.),
-          dimnames=dimnames(.)
-        )
-      ) %>% SetAssayData(
-        'data',
-        sparseMatrix(
-          i=1,j=1,x=0,
-          dims=dim(.),
-          dimnames=dimnames(.)
-        )
-      )
-    )
-    Key(seurats[[i]]@assays[['RNA']]) = rna.key
-  }
 
   integ.features = SelectIntegrationFeatures(object.list = seurats, nfeatures = 2001)
   # H3-GFP is not a high-quality feature for integration, as the batches differ
   # in their transgene and H3-GFP can be negatively correlated between batches.
   integ.features = integ.features %>% setdiff('H3-GFP')
+  # Now need scale.data to contain the integration features.
+  seurats <- seurats %>%
+    sapply(
+      \(sce) sce %>%
+        SCTransform(
+          vst.flavor = 'v2', do.correct.umi = F,
+          residual.features = integ.features,
+          verbose = F, min_cells = 0
+        )
+    )
   Upd_sc = (seurats
             %>% PrepSCTIntegration(anchor.features = integ.features)
             %>% FindIntegrationAnchors(normalization.method = 'SCT', anchor.features = integ.features)
@@ -297,14 +294,24 @@ filter_integrate_data = function(seurats) {
   ) * -1
 
   # Dim reduction
-  Upd_sc = Upd_sc %>% RunPCA(verb=F) %>% RunUMAP(dims=1:15)
-  # Update cell embedding so that GSC is on left, cytes/tids cluster is top, and
-  # contaminant cluster (muscle) is bottom.
-  Upd_sc[['umap']]@cell.embeddings = Upd_sc[['umap']]@cell.embeddings %*% matrix(
-    c(-1, 0, 0, -1),
-    nrow = 2,
-    dimnames = rep(list(colnames(Upd_sc[['umap']]@cell.embeddings)), 2)
+  Upd_sc = Upd_sc %>% RunPCA(verb=F) %>% RunUMAP(dims=1:15, seed.use=2)
+  # Update cell embedding so that GSC is on left. We would also like
+  # differentiated germline clusters (Mst77F+) in the +y direction while the
+  # largest contaminant cluster (muscle, Act57B+) is in the -y.
+  Upd_sc[['umap']]@cell.embeddings[,1] = (
+    Upd_sc[['umap']]@cell.embeddings[,1]
+    * sign(
+      coef(
+        lm(
+          identsomatic ~ umap_1,
+          FetchData(Upd_sc, c("ident", "umap_1")) %>%
+            mutate(identsomatic = ident == "somatic")
+        )
+      )['umap_1']
+    )
   )
+  # We noticed regardless of random seed that y needs to be flipped.
+  Upd_sc[['umap']]@cell.embeddings[,2] <- -Upd_sc[['umap']]@cell.embeddings[,2]
 
   # PCA of germline and somatic clusters only
   Upd_subset = Upd_sc %>% subset(idents = c('germline','somatic'))
@@ -318,37 +325,50 @@ filter_integrate_data = function(seurats) {
     )$residuals
     %>% scale %>% t
   )
-  Upd_subset = Upd_subset %>% RunPCA(verb=F)
+  DefaultAssay(Upd_subset) <- "integrated"
+  Upd_subset <- Upd_subset %>% RunPCA(verb=F)
   # Create a pca object and re-key it
-  pca.subset = Upd_sc[['pca']]
-  Key(pca.subset) = 'pcasubset_'
-  pca.subset@cell.embeddings[,] = NA
-  pca.subset@cell.embeddings[colnames(Upd_subset),] = Upd_subset[['pca']]@cell.embeddings
-  pca.subset@feature.loadings = Upd_subset[['pca']]@feature.loadings
-  pca.subset@stdev = Upd_subset[['pca']]@stdev
-  Upd_sc[['pca.subset']] = pca.subset
+  pcasubset = Upd_sc[['pca']]
+  pcasubset.key = 'pcasubset_'
+  cell.embeddings <- pcasubset@cell.embeddings
+  cell.embeddings[,] <- NA
+  cell.embeddings[colnames(Upd_subset),] <- Upd_subset[["pca"]]@cell.embeddings
+  colnames(cell.embeddings) <- paste0(pcasubset.key, 1:ncol(cell.embeddings))
+  feature.loadings <- Upd_subset[["pca"]]@feature.loadings
+  colnames(feature.loadings) <- colnames(cell.embeddings)
+  pcasubset <- CreateDimReducObject(
+    cell.embeddings,
+    feature.loadings,
+    stdev = Upd_subset[["pca"]]@stdev,
+    key = pcasubset.key,
+    assay = "integrated"
+  )
+  Upd_sc[['pcasubset']] = pcasubset
 
-  # merge_RNA = merge_RNA %>% NormalizeData(verb=F)
-  # Upd_sc@assays = list(RNA=merge_RNA)
-  # DefaultAssay(Upd_sc) = 'RNA'
-
-  # Include RNA, but kill SCT which is quite large
+  # Include RNA, but kill SCT which is quite large. We will use RNA assay for
+  # feature plots, and integrated assay for relating the transcriptome between
+  # different cells, but no longer need the individual runs of SCT (all genes).
   Upd_sc = Upd_sc %>% SetAssayData(
-    assay = 'SCT', slot = 'counts', Upd_sc[['RNA']]@counts
-  ) %>% SetAssayData(
-    assay = 'SCT', slot = 'data', Upd_sc[['RNA']]@counts
+    assay = 'SCT',
+    layer = 'counts',
+    sparseMatrix(i=1, j=1, x=0, dims=dim(Upd_sc[["SCT"]]), dimnames=dimnames(Upd_sc[["SCT"]]))
   ) %>% SetAssayData(
     assay = 'SCT',
-    slot = 'scale.data',
-    matrix(0, nrow=0, ncol=ncol(Upd_sc), dimnames=list(NULL, colnames(Upd_sc)))
+    layer = 'data',
+    sparseMatrix(i=1, j=1, x=0, dims=dim(Upd_sc[["SCT"]]), dimnames=dimnames(Upd_sc[["SCT"]]))
   ) %>% SetAssayData(
-    assay = 'RNA', slot = 'counts', merge_RNA@counts
+    assay = 'SCT',
+    layer = 'scale.data',
+    matrix(0, nrow=0, ncol=ncol(Upd_sc), dimnames=list(NULL, Cells(Upd_sc)))
   )
-  Upd_sc[['RNA']]@meta.features = meta.features
+  # Join RNA matrices (counts) together
+  Upd_sc[['RNA']] <- Upd_sc[['RNA']] %>% JoinLayers
+  Upd_sc[['RNA']]@meta.data = assay_data
 
   DefaultAssay(Upd_sc) = 'RNA'
 
-  Idents(Upd_sc) = Idents(Upd_sc) %>% factor(c('germline','somatic','spermatocyte','muscle'))
+  Idents(Upd_sc) <- Idents(Upd_sc) %>%
+    fct_relevel(c("germline", "somatic", "spermatocyte", "muscle"))
 
   Upd_sc
 }
