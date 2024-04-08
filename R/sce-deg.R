@@ -144,7 +144,7 @@ fit_glm <- function(Upd_sc, model_matrix, metadata) {
   Upd_glm
 }
 
-apeglm_coef_table <- function(g, coef=2) {
+apeglm_coef_table <- function(g, coef=2, test_mle=TRUE) {
   message('Construct dense matrices in memory for regression')
   g$Offset = matrix(
     g$Offset[1,, drop=T],
@@ -158,8 +158,12 @@ apeglm_coef_table <- function(g, coef=2) {
     model_matrix=g$model_matrix,
     offset_matrix=g$Offset
   )
-  message('F-test of regression without shrinkage')
-  mle = test_de(g, colnames(g$Beta)[coef])
+  if (test_mle) {
+    message('F-test of regression without shrinkage')
+    mle <- test_de(g, colnames(g$Beta)[coef])
+  } else {
+    mle <- NULL
+  }
   message('Calculate regression s.e. using QR decomposition')
   lfc = predict(
     g,
@@ -170,6 +174,11 @@ apeglm_coef_table <- function(g, coef=2) {
     offset=0,
     se.fit=T
   ) %>% with(cbind(fit, se.fit))
+  # Our Upd_glm generally has enough cells in each cluster that the se.fit is
+  # never NA. If we are testing an individual cluster other than the 4 factor
+  # levels used so far for fitting Upd_glm, then we might have NA or Inf and
+  # this could cause an error but can easily be excluded.
+  lfc[rowAnys(!is.finite(lfc)), ] <- NA
   # Garbage-collect Mu.
   g$Mu = NULL
   message('Optimize Approximate Posterior')
@@ -183,8 +192,79 @@ apeglm_coef_table <- function(g, coef=2) {
     method='nbinomCR',
     offset=g$Offset
   )
-  lfc$mle.test = mle
+  if (test_mle) lfc$mle.test <- mle
   lfc
+}
+
+small_cluster_test_glm <- function(Upd_glm, metadata, seurat_qc_obj, batch, level) {
+  metadata <- metadata %>% read.csv(row.names = 1)
+  known_cells_take <- metadata %>%
+    rownames_to_column %>%
+    filter(
+      ident %in% c("germline", "somatic"), batch == {{batch}}
+    ) %>%
+    pull(rowname) %>%
+    # The cells to include are determined by the filtering done in the
+    # filter_integrate_data function.
+    intersect(colnames(Upd_glm$data))
+  if (length(intersect(known_cells_take, Cells(seurat_qc_obj)[Idents(seurat_qc_obj) == level])) > 0)
+    return(NA)
+
+  sce <- SingleCellExperiment(
+    list(counts=assay(Upd_glm$data, "counts")[, known_cells_take]),
+    colData = metadata[known_cells_take, ]
+  )
+  rowData(sce)$overdispersions = Upd_glm$overdispersions
+  # Counts matrix for the level of interest.
+  counts_level <- GetAssayData(seurat_qc_obj, assay="RNA", layer="counts")[
+    rownames(sce),
+    Idents(seurat_qc_obj) == level
+  ]
+  # Only interested in genes where we can show positively as a marker for the
+  # level of interest.
+  genes_take <- names(which(rowSums(counts_level != 0) >= 20))
+  sce <- sce[genes_take, ]
+  counts_level <- counts_level[genes_take, ]
+
+  sce <- cbind(
+    sce,
+    SingleCellExperiment(
+      list(counts = counts_level),
+      colData = metadata[Cells(seurat_qc_obj)[Idents(seurat_qc_obj) == level], ]
+    )
+  )
+  sce$ident <- sce$ident %>% fct_relevel("germline", "somatic")
+  mm <- model.matrix(~ 0 + ident, colData(sce))
+  # Matrix of the contrasts
+  xform <- matrix(
+    c(1, 1, 1,
+      -0.5, 0.5, 0,
+      0, 0, 1),
+    ncol = 3,
+    dimnames = list(
+      # Rownames - disappear after multiplying by xform on the right
+      c("germline", "somatic", "other"),
+      # Names of the contrasts
+      c("Mean", "CySCoverGSC", "OtherOverMean")
+    )
+  )
+  mm <- mm %*% xform
+  glm_gp(
+    sce,
+    ~ 0 + mm,
+    size_factors = sce$size_factor,
+    overdispersion = rowData(sce)$overdispersions,
+    on_disk = F,
+    verbose = T
+  )
+}
+
+small_cluster_test_apeglm <- function(Upd_glm, metadata, seurat_qc_obj, batch, level, ...) {
+  result <- small_cluster_test_glm(Upd_glm, metadata, seurat_qc_obj, batch, level)
+  if (!is.list(result))
+    return(NA)
+  # Contrasts: GSC+CySC, CySCoverGSC, OtherOverMean
+  apeglm_coef_table(result, coef=3, ...)
 }
 
 download_bam_transcripts <- function(download_script, metadata, sample, cluster, output_path) {

@@ -508,6 +508,42 @@ list(
   tar_target(nos.2, call_nos.2(seurat_qc_nos.2)),
   tar_target(tj.1, call_tj.1(seurat_qc_tj.1)),
   tar_target(tj.2, call_tj.2(seurat_qc_tj.2)),
+  tar_map(
+    tibble(seurat = rlang::syms(c("nos.1", "nos.2", "tj.1", "tj.2"))),
+    tar_target(cluster.names, levels(Idents(seurat))),
+    tar_target(
+      cluster.deg.analysis,
+      tibble(
+        cluster = cluster.names,
+        glm_fit = if (grepl("doublet|[0-9]", cluster.names))
+          Upd_glm %>%
+            small_cluster_test_apeglm(
+              metadata, seurat, as.character(quote(seurat)), cluster.names,
+              test_mle=FALSE
+            ) %>%
+            list
+        else list(NA),
+        marker_genes = if (is.list(glm_fit[[1]]))
+          tibble(
+            name = rownames(glm_fit[[1]]$map),
+            `l2FC95-` = (
+              glm_fit[[1]]$map[, "mmOtherOverMean"] - qnorm(0.975) * glm_fit[[1]]$sd[, "mmOtherOverMean"]
+            ) / log(2),
+            `l2FC95+` = (
+              glm_fit[[1]]$map[, "mmOtherOverMean"] + qnorm(0.975) * glm_fit[[1]]$sd[, "mmOtherOverMean"]
+            ) / log(2),
+            lfsr = glm_fit[[1]]$fsr[, "mmOtherOverMean"]
+          ) %>%
+            # All marker genes will have a **** significance level.
+            filter(lfsr < 0.0001) %>%
+            arrange(desc(`l2FC95-`)) %>%
+            head(100) %>%
+            list
+        else NULL
+      ),
+      pattern = map(cluster.names)
+    )
+  ),
   tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
   tar_map(
     tibble(extension = c(".pdf", ".png")),
