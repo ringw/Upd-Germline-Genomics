@@ -7,7 +7,8 @@ excel_tables = list(
 )
 
 publish_excel_results <- function(
-  Upd_regression_somatic, Upd_regression_tid, Upd_regression_mscl,
+  Upd_regression_somatic, Upd_regression_tid,
+  Upd_regression_sompre, Upd_regression_mscl,
   Upd_cpm_transcripts, Upd_cpm, Upd_fpkm, sctransform_quantile,
   supplemental_bulk_fpkm, metafeatures, gtf_path, target_path
 ) {
@@ -30,13 +31,14 @@ publish_excel_results <- function(
     Upd_regression_somatic, sctransform_quantile, gtf_path, metafeatures
   )
 
-  baseMeanCPM <- exp(Upd_regression_somatic$map[, "Mean"]) %>% `*`(
+  baseMeanCPM <- exp(Upd_regression_somatic$map[, "(Intercept)"]) %>% `*`(
     1000 * 1000 / sum(.)
   ) %>% signif(digits=2)
   flybase = metafeatures$flybase[match(rownames(Upd_regression_somatic$map), rownames(metafeatures))]
   write_regression_table(wb, 'GSC&CySC Regression', 'log(CySC/GSC)', baseMeanCPM, Upd_regression_somatic, 2, flybase, excel_tables$cyan)
   write_regression_table(wb, 'S-Cyte&Tid-Like Regression', 'log(cyte&tid/GSC&CySC)', baseMeanCPM, Upd_regression_tid, 3, flybase, excel_tables$orange)
-  write_regression_table(wb, 'Muscle Regression', 'log(mscl/GSC&CySC)', baseMeanCPM, Upd_regression_mscl, 4, flybase, excel_tables$red)
+  write_regression_table(wb, 'Somatic Precursor Regression', 'log(SomPre/GSC&CySC)', baseMeanCPM, Upd_regression_sompre, 4, flybase, 'TableStyleMedium13')
+  write_regression_table(wb, 'Muscle Regression', 'log(mscl/GSC&CySC)', baseMeanCPM, Upd_regression_mscl, 5, flybase, excel_tables$red)
   dir.create('scRNA-seq-Regression', showW=F)
   saveWorkbook(wb, target_path, overwrite = T)
   target_path
@@ -44,7 +46,7 @@ publish_excel_results <- function(
 
 write_abundance_table <- function(
     wb, title, flybase, Upd_cpm, Upd_fpkm, sctransform_quantile, supplemental_bulk_fpkm, table_style) {
-  rename = c(germline='GSC', somatic="CySC", spermatocyte="tid", muscle="muscle")
+  rename = c(germline='GSC', somatic="CySC", spermatocyte="tid", somaticprecursor="SC", muscle="muscle")
   data = data.frame(
     symbol = rownames(Upd_fpkm),
     flybase = flybase

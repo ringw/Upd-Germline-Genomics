@@ -1,21 +1,17 @@
 cluster_colors = list(
-  germline=hsv(0.35,0.9,0.6),
-  somatic=hsv(0.5,0.75,0.95),
-  spermatocyte=hcl(86, 93, 85),
-  differentiated=hcl(86, 20, 75),
-  muscle=hcl(17, 112, 58),
-  others=hsv(0,0,0.9)
-)
-
-cluster_colors = list(
   # green
   germline=hcl(123, 113, 80),
   # magenta
   somatic="#FF5AEE",
-  spermatocyte=hcl(86, 93, 85),
+  # cyan 
+  spermatocyte=hcl(176, 62, 80),
+  # old spermatocyte label
   differentiated=hcl(86, 20, 75),
   muscle=hcl(17, 112, 58),
-  others=hsv(0,0,0.9)
+  others=hsv(0,0,0.9),
+
+  # purple
+  somaticprecursor=hcl(277, 86, 66)
 )
 
 cluster_bar_color1 = list(
@@ -53,11 +49,11 @@ Upd_sc_plot_idents <- function(Upd_sc) {
   cbind(
     Upd_sc@meta.data,
     Upd_sc[['umap']]@cell.embeddings,
-    ident=Idents(Upd_sc) %>%
-      recode(spermatocyte='differentiated') %>%
-      fct_relevel(c('germline', 'somatic', 'muscle', 'differentiated'))
+    ident=FetchData(Upd_sc, "ident") # %>%
+      # recode(spermatocyte='differentiated') %>%
+      # fct_relevel(c('germline', 'somatic', 'muscle', 'differentiated'))
   ) %>% ggplot(
-    aes(UMAP_1, UMAP_2, color=ident)
+    aes(umap_1, umap_2, color=ident)
   ) + rasterize(geom_point(
     shape = 20, size = 0.001
   ), dpi=120, scale=0.5) + scale_color_manual(
@@ -81,16 +77,17 @@ Upd_sc_plot_subset <- function(sc.plot.idents) {
 }
 
 Upd_sc_feature_plot <- function(Upd_sc, gene) {
+  dplyr_rename_lookup_gene = setNames("LogNormalize", gene)
   gene.data = Upd_sc@meta.data %>%
     cbind(
       Upd_sc[['umap']]@cell.embeddings,
-      ident=Idents(Upd_sc),
-      LogNormalize=Upd_sc[['RNA']][gene,] %>% as.numeric
+      FetchData(Upd_sc, c(gene, "ident")) %>%
+        rename(all_of(dplyr_rename_lookup_gene))
     )
   gene.max.intensity = quantile(gene.data$LogNormalize, 0.99)
-  gene.max.intensity = c(Mst87F=5, Act57B=4, soti=3, sunz=2)[gene] %>% replace(is.na(.), gene.max.intensity)
+  gene.max.intensity = c(Mst87F=5, Act57B=4, soti=3, sunz=2, `Amy-d`=2, `scpr-B`=3)[gene] %>% replace(is.na(.), gene.max.intensity)
   gene.data %>% ggplot(
-    aes(UMAP_1, UMAP_2, color=LogNormalize)
+    aes(umap_1, umap_2, color=LogNormalize)
   ) + rasterize(geom_point(
     shape = 20, size = 0.001
   ), dpi=240) + # + scale_color_viridis_c(
@@ -121,7 +118,7 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
       recode(spermatocyte='differentiated') %>%
       fct_relevel(c('germline', 'somatic', 'muscle', 'differentiated'))
   ) %>% ggplot(
-    aes(UMAP_1, UMAP_2, color=ident)
+    aes(umap_1, umap_2, color=ident)
   ) + rasterize(geom_point(
     size = 0.01
   ), dpi=120, scale=0.5) + scale_color_manual(
@@ -155,7 +152,7 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
     gene.max.intensity = quantile(gene.data$LogNormalize, 0.99)
     gene.max.intensity = c(Mst87F=5, Act57B=4, soti=3, sunz=2)[gene] %>% replace(is.na(.), gene.max.intensity)
     gene.data %>% ggplot(
-      aes(UMAP_1, UMAP_2, color=LogNormalize)
+      aes(umap_1, umap_2, color=LogNormalize)
     ) + rasterize(geom_point(
       size = 0.01
     ), dpi=240) + # + scale_color_viridis_c(
@@ -200,7 +197,8 @@ gene_pseudobulk_fpkm <- function(tx_files, seurats, seurat_names, gtf_path, meta
             ,
             metadata %>%
               subset(batch == n & nCount_RNA_filter == "nCount_RNA_pass") %>%
-              rownames
+              rownames %>%
+              match(Cells(seur))
           ] %>%
             `!=`(0) %>%
             rowMeans,

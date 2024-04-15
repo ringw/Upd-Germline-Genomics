@@ -427,16 +427,21 @@ glm_make_cpm_table <- function(Upd_glm) {
     dimnames = list(rownames(Upd_glm$Beta), sce.clusters$cluster)
   )
   for (i in seq(nrow(sce.clusters))) {
+    # Contrast is a "short" vector and is missing the later model matrix columns
+    # such as batch effect.
     contrast <- sce.clusters[i, "contrast"] %>% unlist
-    contrast_cols <- grep(
-      "batch",
-      colnames(Upd_glm$model_matrix),
-      invert = TRUE
-    )
-    col_data = colData(Upd_glm$data)[
-      colAlls(t(Upd_glm$model_matrix[contrast_cols, ]))
-      == contrast[contrast_cols],
+    contrast_cols <- seq(length(contrast))
+    col_data <- cbind(colData(Upd_glm$data), size_factor = Upd_glm$size_factors)
+    col_data = col_data[
+      colAlls(
+        t(Upd_glm$model_matrix)[contrast_cols, ]
+        == contrast[contrast_cols]
+      ),
     ]
+    # Now we do not need to model batch effect when predicting cpm.
+    contrast <- c(
+      contrast, rep(0, ncol(Upd_glm$model_matrix) - length(contrast))
+    )
     # Predict the sum of counts where the offset is the sum of size factors for
     # the cells. Normalize by sum of UMI count. Multiply by 1MM yielding counts
     # per million.

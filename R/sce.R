@@ -162,8 +162,13 @@ read_seurat_sctransform <- function(
 call_nos.1 <- function(nos.1) {
   nos.1 = nos.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F)
   DotPlot(nos.1, c('vas','bam', 'tj','lncRNA:roX2', 'Mst77F','Act57B', 'H3-GFP'), assay='SCT')
-  nos.1 = nos.1 %>% RenameIdents(`1`='germline', `2`='somatic', `3`='doublet',
-                                 `4`='spermatocyte', `8`='muscle')
+  nos.1 = nos.1 %>% RenameIdents(
+    `1`='germline', `2`='somatic', `3`='doublet',
+    `4`='spermatocyte', `8`='muscle',
+
+    `5`='somaticprecursor',
+    `6`='somaticprecursor'
+  )
 }
 
 call_nos.2 <- function(nos.2) {
@@ -176,6 +181,7 @@ call_nos.2 <- function(nos.2) {
   # ident or the somatic ident, and should be removed as they do have some %
   # expression of vas and tj in this cluster. (along with medium % w-cup expr).
   nos.2 = nos.2 %>% FindNeighbors(dims=1:9, verb=F) %>% FindClusters(res = 0.5, verb=F)
+  # mamo, wb may be somaticprecursor markers
   DotPlot(nos.2, c('vas','bam', 'tj','lncRNA:roX2','mamo','wb', 'H3-GFP', 'w-cup', 'Act57B'))
   nos.2 = nos.2 %>% RenameIdents(
     `0`='somatic',
@@ -189,22 +195,32 @@ call_nos.2 <- function(nos.2) {
     `11`='spermatocyte',
     `13`='muscle',
 
-    `7`='doublet.mamo',
     `8`='doublet.stemlike',
-    `9`='doublet.spermatocyte'
+    # Cluster "9" has quantile(vas[assay=SCT], 0.90) > 1 so it looks like it is
+    # a differentiated cluster significantly contaminated by vasa (stem cells),
+    # may be doublet cells.
+    `9`='doublet.spermatocyte',
+
+    `12`='somaticprecursor'
   )
 }
 
 call_tj.1 <- function(tj.1) {
   tj.1 = tj.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.15, verb=F)
-  tj.1 = tj.1 %>% RenameIdents(`1`='germline', `0`='somatic', `2`='doublet',
-                               `3`='spermatocyte', `6`='muscle')
+  tj.1 = tj.1 %>% RenameIdents(
+    `1`='germline', `0`='somatic', `2`='doublet',
+    `3`='spermatocyte', `6`='muscle',
+    `4`='somaticprecursor'
+  )
 }
 
 call_tj.2 <- function(tj.2) {
   tj.2 = tj.2 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F)
-  tj.2 = tj.2 %>% RenameIdents(`2`='germline', `0`='somatic', `1`='doublet',
-                               `4`='spermatocyte', `5`='muscle')
+  tj.2 = tj.2 %>% RenameIdents(
+    `2`='germline', `0`='somatic', `1`='doublet',
+    `4`='spermatocyte', `5`='muscle',
+    `3`='somaticprecursor'
+  )
 }
 
 gfp_pc = function(seurats) {
@@ -365,10 +381,24 @@ filter_integrate_data = function(seurats) {
   Upd_sc[['RNA']] <- Upd_sc[['RNA']] %>% JoinLayers
   Upd_sc[['RNA']]@meta.data = assay_data
 
-  DefaultAssay(Upd_sc) = 'RNA'
-
+  Upd_sc$indep_idents = Idents(Upd_sc)
+  DefaultAssay(Upd_sc) <- "integrated"
+  Upd_sc <- Upd_sc %>%
+    FindNeighbors(dims = 1:7, nn.method = "rann") %>%
+    FindClusters(res = 0.1, random.seed = 0)
+  DefaultAssay(Upd_sc) <- "RNA"
   Idents(Upd_sc) <- Idents(Upd_sc) %>%
-    fct_relevel(c("germline", "somatic", "spermatocyte", "muscle"))
+    fct_recode(
+      germline="0",
+      somatic="1",
+      germline="2",
+      spermatocyte="3",
+      somaticprecursor="4",
+      muscle="5"
+    ) %>%
+    fct_relevel(
+      c("germline", "somatic", "spermatocyte", "somaticprecursor", "muscle")
+    )
 
   Upd_sc
 }

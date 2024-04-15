@@ -90,10 +90,12 @@ sce.data = data.frame(
 sce.clusters = data.frame(cluster = c('germline','somatic','spermatocyte','muscle'))
 sce.clusters <- tribble(
   ~ cluster, ~ contrast,
-  'germline', c(1, CySCoverGSC=-0.5, 0,0,0,0,0),
-  'somatic', c(1, CySCoverGSC=0.5, 0,0,0,0,0),
-  'spermatocyte', c(1,0,1,0,0,0,0),
-  'muscle', c(1,0,0,1,0,0,0)
+  # from computing Upd_celltype_model_matrix
+  'germline', c(1, CySCoverGSC=-0.5, 0,0,0),
+  'somatic', c(1, CySCoverGSC=0.5, 0,0,0),
+  'spermatocyte', c(1,0,1,0,0),
+  'somaticprecursor', c(1,0,0,1,0),
+  'muscle', c(1,0,0,0,1)
 )
 
 repli.processing = data.frame(
@@ -545,6 +547,7 @@ list(
     )
   ),
   tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
+  tar_target(Upd_model_matrix, build_model_matrix(FetchData(Upd_sc, c("ident", "batch")))),
   tar_map(
     tibble(extension = c(".pdf", ".png")),
     tar_target(
@@ -569,7 +572,28 @@ list(
         "figure/Integrated-scRNAseq/Genes-of-Interest", extension,
         tribble(
           ~gene,
-          "AGO3","RpL22-like","RpL22","vas","nos","tj","lncRNA:roX1","lncRNA:roX2","Mst87F","soti","sunz","w-cup","Act57B","Dl","E(spl)m3-HLH"
+          "AGO3",
+          "RpL22-like",
+          "RpL22",
+          "vas",
+          "nos",
+          "bam",
+          "tj",
+          "Stat92E",
+          "zfh1",
+          "lncRNA:roX1",
+          "lncRNA:roX2",
+          "Mst87F",
+          "soti",
+          "sunz",
+          "w-cup",
+          "can",
+          "Act57B",
+          "Dl",
+          "E(spl)m3-HLH",
+          "Amy-d",
+          "scpr-B",
+          "wb"
         ) %>%
           mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
           rowwise %>%
@@ -584,7 +608,11 @@ list(
       )
     )
   ),
-  tar_target(metadata, analyze_sce_to_csv(list(nos.1=nos.1, nos.2=nos.2, tj.1=tj.1, tj.2=tj.2), 'scRNA-seq-Metadata.csv'), format='file'),
+  tar_target(
+    metadata,
+    extract_upd_metadata_to_csv(Upd_sc, Upd_glm, "scRNA-seq-Metadata.csv"),
+    format='file'
+  ),
   tar_combine(
     sctransform_quantile,
     sce_targets$sctransform_quantile,
@@ -596,14 +624,9 @@ list(
     command = combine_gene_quantiles(list(!!!.x))
   ),
   tar_target(
-    model_matrix,
-    build_model_matrix(metadata)
-  ),
-  tar_target(
     Upd_glm,
-    fit_glm(Upd_sc, model_matrix, metadata),
-    # glm is quite slow and doesn't need to re-run as we are adding other colData to the seurat
-    ), # cue=tar_cue('never')),
+    fit_glm(Upd_sc, Upd_model_matrix),
+  ),
   tar_target(
     Upd_regression_somatic,
     apeglm_coef_table(Upd_glm)
@@ -613,8 +636,31 @@ list(
     apeglm_coef_table(Upd_glm, coef = 3)
   ),
   tar_target(
-    Upd_regression_mscl,
+    Upd_regression_sompre,
     apeglm_coef_table(Upd_glm, coef = 4)
+  ),
+  tar_target(
+    Upd_regression_mscl,
+    apeglm_coef_table(Upd_glm, coef = 5)
+  ),
+  tar_target(
+    Upd_regression_somvssompre,
+    apeglm_coef_table(
+      FetchData(Upd_sc, c("ident", "batch")) %>%
+        subset(ident %in% c("somatic", "somaticprecursor")) %>%
+        glm_gp(
+          GetAssayData(Upd_sc, assay="RNA", layer="counts")[
+            ,
+            Idents(Upd_sc) %in% c("somatic", "somaticprecursor")
+          ],
+          ~ ident + batch,
+          .,
+          size_factors = with(Upd_glm, size_factors)[rownames(.)],
+          overdispersion = with(Upd_glm, overdispersions),
+          on_disk = F,
+          verb = T
+        )
+    )
   ),
   sce_targets,
   tar_combine(
@@ -622,6 +668,7 @@ list(
     sce_targets[["pseudobulk.tx_germline"]],
     sce_targets[["pseudobulk.tx_somatic"]],
     sce_targets[["pseudobulk.tx_spermatocyte"]],
+    sce_targets[["pseudobulk.tx_somaticprecursor"]],
     sce_targets[["pseudobulk.tx_muscle"]],
     command = cbind(sce.data, tx_file = c(!!!.x))
   ),
@@ -630,6 +677,7 @@ list(
     sce_targets[["pseudobulk.library.size_germline"]],
     sce_targets[["pseudobulk.library.size_somatic"]],
     sce_targets[["pseudobulk.library.size_spermatocyte"]],
+    sce_targets[["pseudobulk.library.size_somaticprecursor"]],
     sce_targets[["pseudobulk.library.size_muscle"]],
     command = cbind(sce.data, size_factor = c(!!!.x))
   ),
@@ -833,7 +881,8 @@ list(
   tar_target(
     sc_excel,
     publish_excel_results(
-      Upd_regression_somatic, Upd_regression_tid, Upd_regression_mscl,
+      Upd_regression_somatic, Upd_regression_tid,
+      Upd_regression_sompre, Upd_regression_mscl,
       Upd_cpm_transcripts, Upd_cpm, Upd_fpkm, sctransform_quantile,
       supplemental_bulk_fpkm, assay.data.sc, flybase.gtf,
       'scRNA-seq-Regression/Enriched-Genes.xlsx'
