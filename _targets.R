@@ -2192,6 +2192,8 @@ list(
 
   # Repli-Seq
   tar_file(run_fastqc_sh, "scripts/run_fastqc.sh"),
-  repli_targets
+  repli_targets,
+
+  targets.sce
 )
  
