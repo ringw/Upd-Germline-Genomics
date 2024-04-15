@@ -428,45 +428,6 @@ list(
     sce.present.features,
     select_features(tenx_file_nos.1, flybase.annotations)
   ),
-  tar_file(
-    flybase.gtf,
-    # https://ftp.flybase.org/releases/FB2022_04/dmel_r6.47/gtf/dmel-all-r6.47.gtf.gz
-    'dmel-all-r6.47.gtf.gz'
-  ),
-  tar_file(
-    flybase.fa,
-    'references/dmel-r6.47.fa.gz'
-  ),
-  tar_file(
-    flybase.transposon,
-    # https://ftp.flybase.org/releases/FB2022_04/precomputed_files/transposons/transposon_sequence_set.fa.gz
-    'references/transposon_sequence_set.fa.gz'
-  ),
-  tar_file(
-    flybase.genome,
-    tibble(input_file=c(flybase.fa, flybase.transposon)) %>%
-      rowwise() %>%
-      mutate(contents = list(read.table(input_file, quote="", sep="\x1B"))) %>%
-      ungroup() %>%
-      summarize(
-        contents = list(do.call(rbind, contents)),
-        output_file = "references/chic_reference.fa",
-        write_table = write.table(contents[[1]], output_file, row.names=F, col.names=F, quote=F)
-      ) %>%
-      pull(output_file),
-    cue = tar_cue("never")
-  ),
-  tar_file(
-    flybase.genome.index,
-    tibble(
-      input_file = flybase.genome,
-      index_table = processx::run(
-        "samtools", c("faidx", input_file)
-      ) %>% list,
-      faidx = paste0(input_file, ".fai")
-    ) %>%
-      pull(faidx)
-  ),
   tar_target(
     flybase.lengths,
     read.table(flybase.genome.index, header=F) %>%
@@ -481,24 +442,7 @@ list(
     feature.rle,
     Rle(factor(names(feature.lengths), names(feature.lengths)), as.numeric(feature.lengths))
   ),
-  tar_file(
-    flybase.bowtie,
-    tibble(input_file=list(list(flybase.fa, flybase.transposon)), output_file="references/chic_bowtie2", output_base="chic_bowtie2") %>%
-      mutate(
-        rename_folder =
-          if (file.exists(output_file))
-            file.rename(output_file, paste0(output_file, "~")),
-        make_folder = dir.create(output_file),
-        run_bowtie2 = processx::run(
-          "bowtie2-build",
-          c(
-            input_file[[1]] %>% append(list(sep=",")) %>% do.call(paste, .),
-            paste(output_file, output_base, sep="/")
-          )
-        ) %>% list
-      ) %>%
-      pull(output_file)
-  ),
+ 
   tar_file(
     assay.data.sc,
     create_assay_data_sc(
@@ -2194,6 +2138,7 @@ list(
   tar_file(run_fastqc_sh, "scripts/run_fastqc.sh"),
   repli_targets,
 
+  targets.flybase,
   targets.sce
 )
  
