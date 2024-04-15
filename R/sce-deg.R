@@ -1,3 +1,23 @@
+# Contrasts matrix for the cell type idents.
+Upd_celltype_contrasts <- matrix(
+  c(0.5, 0.5, 0, 0, 0,
+    -1, 1, 0, 0, 0,
+    -0.5, -0.5, 1, 0, 0,
+    -0.5, -0.5, 0, 1, 0,
+    -0.5, -0.5, 0, 0, 1),
+  nrow = 5,
+  byrow = TRUE,
+  dimnames = list(
+    c("germline", "somatic", "spermatocyte", "somaticprecursor", "muscle"),
+    c("Mean", "CySCoverGSC", "TidOverMean", "SPOverMean", "MuscleOverMean")
+  )
+)
+Upd_celltype_model_matrix <- matrix(
+  Upd_celltype_contrasts %>% solve,
+  nrow = 5,
+  dimnames = dimnames(Upd_celltype_contrasts)
+)
+
 # Find an nCount_RNA threshold so that % expressed is more comparable between
 # the Nos and tj-driven samples. This is saved in the csv metadata and is
 # applied later for a supplemental dot plot.
@@ -33,108 +53,49 @@ plot_nCount_RNA_threshold_summary <- function() {
   mapply(plot_nCount_RNA_threshold, rep(list(Upd_sc), 2), c("germline","germline","germline","somatic","somatic","somatic"), c("vas","RpL22-like","blanks","tj","lncRNA:roX1","zfh1"), SIMPLIFY=F) %>% bind_rows(.id = "gene") %>% ggplot(aes(thresholds,sd,group=gene,color=gene)) + geom_line()
 }
 
-# Differentially expressed genes.
-analyze_sce_to_csv <- function(seurats, output_path) {
-  stopifnot(
-    length(
-      purrr::reduce(sapply(seurats, Cells, simplify=FALSE), intersect)
-    ) == 0
+extract_upd_metadata_to_csv <- function(Upd_sc, Upd_glm, output_path) {
+  meta.data <- cbind(
+    FetchData(Upd_sc, "ident"),
+    colData(Upd_glm$data) %>%
+      subset(select=c(nCount_RNA, nFeature_RNA, batch)),
+    nCount_RNA_filter = "nCount_RNA_pass",
+    size_factor = Upd_glm$size_factors
   )
-  for (i in seq_along(seurats)) {
-    Idents(seurats[[i]]) = Idents(seurats[[i]]) %>% fct_relabel(
-      \(n) ifelse(grepl('[0-9]', n),
-                  paste(seurats[[i]]$batch[1], n, sep='.'),
-                  n))
-    seurats[[i]]@meta.data = seurats[[i]]@meta.data %>% subset(
-      select = -grep('SCT_snn_res', colnames(.))
-    )
-  }
-  sce = SingleCellExperiment(
-    list(counts = do.call(cbind, seurats %>% sapply(\(seurat) GetAssayData(seurat, assay='RNA', layer='counts'), simplify=F))),
-    colData = do.call(rbind, seurats %>% setNames(NULL) %>% sapply(\(seurat) seurat@meta.data, simplify=F))
-  )
-  colData(sce) = cbind(
-    ident = do.call(
-      c,
-      sapply(seurats, Idents, simplify=F)
-    ) %>% setNames(colnames(sce)),
-    colData(sce)
-  )
-  # Bulk analysis: We will output cell barcodes, and these are the cells that we
-  # will analyze 10X transcript-level quantification. We are also going to
-  # compute % cells with each transcript present, so we are chiefly interested
-  # in applying the same total UMI filter that we are going to apply later.
-  # % Cells would be a more reproducible statistic if cells are more similar in
-  # sequencing depth.
-  colData(sce)$nCount_RNA_filter <- (
-    between(sce$nCount_RNA, 2200, 7500)
-  ) %>%
-    factor %>%
-    recode(`FALSE`="nCount_RNA_fail", `TRUE`="nCount_RNA_pass")
+  write.csv(meta.data, output_path)
+  output_path
+}
 
+pooled_size_factors_multi_cell_type_seurat <- function(seurat) {
+  sce <- GetAssayData(seurat, assay = "RNA", layer = "counts") %>%
+    list(counts = .) %>%
+    SingleCellExperiment
   quickClusters = quickCluster(sce, min.size = 1000)
   # Choose the large germline-like cluster as reference cluster with an average
   # size factor of 1, as this is the cluster that we are going to use to
   # establish the baseMean quantification of the gene.
   ref.clust = assay(sce)['vas',] %>% split(quickClusters) %>% sapply(sum) %>% which.max
-  colData(sce)$size_factor = pooledSizeFactors(
+  pooledSizeFactors(
     sce,
     clusters = quickClusters,
     ref.clust = ref.clust
   )
-  write.csv(colData(sce), file=output_path)
-  output_path
 }
 
-build_model_matrix <- function(metadata) {
-  metadata <- metadata %>%
-    read.csv(row.names = 1)
-  # Factor levels should come from the filter_integrate_data function.
-  metadata$ident <- metadata$ident %>%
-    fct_relevel(c("germline", "somatic", "spermatocyte", "muscle"))
-  metadata$batch <- metadata$batch %>% factor
-  mm <- model.matrix(~ ident + batch, metadata)
-
-  # Let Beta be a row vector:
-  # [germline germlinecyst LFCtid LFCmuscle], where germline is the intercept
-  # coefficient, and germlinecyst, LFCtid, and LFCmuscle are all deltas relative
-  # to germline.
-  # We want to add germlinecyst/2 to the first entry (intercept: germ/cyst avg)
-  # and subtract it from the third and fourth entries (again, using
-  # germ/cyst avg as the baseline for both outlier clusters).
-  # X (in model matrix) is also a row vector, and the model is fitted such that:
-  #   E[count] = Offset * beta * t(X).
-  # If we want a different beta vector, then solve for the column operations
-  # that we are going to apply: X -> X * solve(t(M)).
-  # In columns: Update to Intercept, germlinecyst unchanged, subtract the new
-  # Intercept from the values for the smaller clusters.
-  solve(t(matrix(c(1,0.5,0,0, 0,1,0,0, 0,-0.5,1,0, 0,-0.5,0,1), nrow=4)))
-  colnames(mm)[1:4] <- c("Mean", "CySCoverGSC", "TidOverMean", "MuscleOverMean")
-  mm[, 1:4] <- mm[, 1:4] %*% (
-    matrix(c(1,0.5,0,0, 0,1,0,0, 0,-0.5,1,0, 0,-0.5,0,1), nrow=4) %>%
-      t %>%
-      solve
-  )
-  mm[
-    ,
-    # Filtering of doublet clusters comes from the filter_integrate_data func.
-    !grepl("doublet", colnames(mm))
-  ]
+build_model_matrix <- function(data_frame) {
+  contrasts(data_frame$ident) <- Upd_celltype_model_matrix[, -1]
+  model.matrix(~ ident + batch, data_frame)
 }
 
-fit_glm <- function(Upd_sc, model_matrix, metadata) {
-  metadata <- metadata %>% read.csv(row.names = 1)
+fit_glm <- function(Upd_sc, Upd_model_matrix) {
   Upd_glm <- glm_gp(
     GetAssayData(Upd_sc, assay="RNA", layer="counts"),
-    model_matrix[colnames(Upd_sc), ],
-    size_factors = metadata[colnames(Upd_sc), "size_factor"],
+    Upd_model_matrix,
+    size_factors = pooled_size_factors_multi_cell_type_seurat(Upd_sc),
     on_disk = F,
     verbose = T
   )
   # Quite useful to keep the metadata in the GLM object.
-  colData(Upd_glm$data)[, colnames(metadata)] <- metadata[
-    colnames(Upd_glm$data),
-  ]
+  colData(Upd_glm$data)[, colnames(Upd_sc@meta.data)] <- Upd_sc@meta.data
   # We did not specify an offset per gene. Grab the offset per cell (column).
   # We can reconstruct a full-size Offset matrix later.
   Upd_glm$Offset = as.matrix(Upd_glm$Offset[1,, drop=F])
@@ -482,7 +443,10 @@ join_cpm_data <- function(
     which %>%
     names
   replace_genes <- intersect(replace_genes, rownames(Upd_cpm_regression))
-  Upd_cpm_by_fpkm[replace_genes,] <- Upd_cpm_regression[replace_genes,]
+  Upd_cpm_by_fpkm[replace_genes,] <- Upd_cpm_regression[
+    replace_genes,
+    c("germline", "somatic", "spermatocyte", "somaticprecursor", "muscle")
+  ]
 
   Upd_cpm_by_fpkm
 }
