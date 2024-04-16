@@ -306,8 +306,6 @@ sce_targets <- tar_map(
       )
   ),
 
-  # Map over clusters (below, from metadata) and extract pseudobulk counts.
-  tar_file(download_bam_tx_sh, "scripts/download_bam_tx.sh"),
   tar_map(
     unlist = FALSE,
     sce.clusters,
@@ -325,11 +323,24 @@ sce_targets <- tar_map(
     ),
     tar_target(
       pseudobulk.library.size,
-        seurat_qc$nCount_RNA %>%
-        subset(
-          read.csv(metadata, row.names = 1)[names(.), 'ident'] == cluster
-        ) %>% sum
+      system2(
+        c(
+          estimate_library_size_bam_tx_sh,
+          metadata,
+          batch,
+          cluster
+        ),
+        stdout=TRUE
+      ) %>%
+        as.numeric
     )
+  )
+) %>%
+  append(
+    list(
+      # Map over clusters (below, from metadata) and extract pseudobulk counts.
+      tar_file(download_bam_tx_sh, "scripts/download_bam_tx.sh"),
+      tar_file(estimate_library_size_bam_tx_sh, "scripts/estimate_library_size_bam_tx.sh")
   )
 )
 
