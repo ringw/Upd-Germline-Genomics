@@ -245,6 +245,7 @@ download_bam_transcripts <- function(download_script, metadata, sample, cluster,
   output_path
 }
 
+# Pseudobulk the filtered exonic UMIs from the Cell Ranger BAM file.
 pseudobulk_cpm <- function(tx_files, size_factors, gtf_file) {
   cluster_name = factor(
     tx_files$tx_file %>% str_extract('([a-z]+)\\.txt', group=1),
@@ -254,7 +255,9 @@ pseudobulk_cpm <- function(tx_files, size_factors, gtf_file) {
     pseudobulk_colData = cbind(size_factors, ident = cluster_name)
   else
     pseudobulk_colData = cbind(size_factors, ident = 'intercept')
-  # Use nos.2 as reference level for FPKM calculation
+  # Use nos.2 as reference level for CPM calculation. All 4 batches have plenty
+  # of GSC and CySC cells, but nos.2 has the most cyte/tid and eya+ somatic
+  # cells so we want to quantify those cells clearly.
   pseudobulk_colData$batch = pseudobulk_colData$batch %>%
     factor(
       c('nos.2', 'nos.1', 'tj.1', 'tj.2')
@@ -274,27 +277,44 @@ pseudobulk_cpm <- function(tx_files, size_factors, gtf_file) {
   sizeFactors(dds) <- pseudobulk_colData$size_factor
   dds <- dds %>% DESeq(fitType = 'local')
 
-  gtf <- read.table(
+  gtf.all.types <- read.table(
     gtf_file,
     sep = '\t',
     col.names = c('chr', 'source', 'type', 'start', 'end', 'sc', 'strand', 'fr', 'annotation'),
     header = F,
     quote = ''
-  ) %>% subset(grepl('RNA', type)) # include "transcript" types in the reference
-  gtf$tx <- gtf$annotation %>% str_extract(
+  )
+  gtf.all.types$tx <- gtf.all.types$annotation %>% str_extract(
     'transcript_id "([^"]+)"',
     group = 1
   )
-  gtf$gene_id <- gtf$annotation %>% str_extract(
+  gtf.all.types$gene_id <- gtf.all.types$annotation %>% str_extract(
     'gene_id "([^"]+)"',
     group = 1
   )
-
+  # include "transcript" types in the reference
+  gtf <- gtf.all.types %>% subset(grepl('RNA', type))
   cpm_table <- data.frame(
     tx = gtf$tx,
     gene_id = gtf$gene_id,
-    length = abs(gtf$end - gtf$start) + 1
+    cds_length = abs(gtf$end - gtf$start) + 1
   )
+
+  # Now calculate the exon "hitbox" for Cell Ranger UMIs of type "E" (exonic).
+  # First, try summing the exon lengths. Second, using Cell Ranger documentation
+  # that the read (known length 50 bp) must have at least 50% overlap with the
+  # exon, we create a "hitbox" by removing half the read length from each end.
+  exons <- gtf.all.types %>% subset(type == "exon") %>% group_by(tx)
+  cpm_table <- cpm_table %>%
+    left_join(
+      exons %>% summarise(exon_length = sum(abs(end - start) + 1)),
+      "tx"
+    ) %>%
+    left_join(
+      exons %>% summarise(cell_ranger_exon_length = sum((abs(end - start) + 1 - 50) %>% pmax(0))),
+      "tx"
+    )
+
   if (length(resultsNames(dds)) > 1)
     for (cluster_name in sce.clusters$cluster) {
       res <- results(dds, name = paste0("ident", cluster_name))
@@ -321,64 +341,6 @@ pseudobulk_cpm <- function(tx_files, size_factors, gtf_file) {
   }
   cpm_table %>%
     column_to_rownames("tx") %>% replace(is.na(.), 0)
-}
-
-tx_cpm_to_fpkm <- function(cpm_table, metafeatures_path) {
-  metafeatures <- read.csv(metafeatures_path, row.names = 1)
-  fpkm_table <- cpm_table %>%
-    subset(select=-c(gene_id)) %>%
-    as.matrix %>%
-    `*`(1000 / .[, "length"]) %>%
-    subset(select=-length) %>%
-    cbind(cpm_table %>% subset(select=gene_id), .)
-  fpkm_table <- fpkm_table %>%
-    group_by(gene_id) %>%
-    summarise_all(max)
-
-  # We have per-transcript values which are either "cpm" (bulk) or each
-  # pseudobulk cluster name. TODO: Get something more dynamic here using
-  # dplyr functions to aggregate transcript_id with each column.
-  if ("cpm" %in% colnames(cpm_table))
-    perform_summarize_transcripts <- \(df) df %>%
-      summarize(
-        cpm = transcript_id[which.max(cpm)]
-      )
-  else
-    perform_summarize_transcripts <- \(df) df %>%
-      summarize(
-        germline = transcript_id[which.max(germline)],
-        somatic = transcript_id[which.max(somatic)],
-        spermatocyte = transcript_id[which.max(spermatocyte)],
-        muscle = transcript_id[which.max(muscle)]
-      )
-
-  cluster_transcript <- apply(
-    cpm_table %>% subset(select=-c(gene_id, length)),
-    2,
-    \(v) v / cpm_table$length
-  ) %>%
-    as.data.frame %>%
-    rownames_to_column("transcript_id") %>%
-    cbind(gene_id = cpm_table$gene_id) %>%
-    group_by(gene_id) %>%
-    perform_summarize_transcripts %>%
-    right_join(
-      data.frame(
-        gene_id = metafeatures$flybase, rowname = rownames(metafeatures)
-      ), by = "gene_id"
-    ) %>%
-    column_to_rownames
-
-  colnames(fpkm_table)[1] <- "flybase"
-  fpkm_table <- metafeatures %>%
-    rownames_to_column %>%
-    subset(select=c(rowname,flybase)) %>%
-    left_join(fpkm_table, "flybase") %>%
-    column_to_rownames %>%
-    subset(select = -flybase) %>%
-    as.matrix
-  attr(fpkm_table, "transcript_id") <- cluster_transcript
-  fpkm_table
 }
 
 glm_make_cpm_table <- function(Upd_glm) {
@@ -421,34 +383,73 @@ glm_make_cpm_table <- function(Upd_glm) {
   cpm_table
 }
 
+cpm_select_transcript_to_quantify <- function(cpms, assay_data) {
+  assay_data <- assay_data %>% read.csv(row.names = 1)
+  cpms$gene_id <- cpms$gene_id %>% factor(assay_data$flybase)
+  cpms %>%
+    rownames_to_column %>%
+    group_by(gene_id) %>%
+    summarise(
+      germline = rowname[which.max(germline)],
+      somatic = rowname[which.max(somatic)],
+      spermatocyte = rowname[which.max(spermatocyte)],
+      somaticprecursor = rowname[which.max(somaticprecursor)],
+      muscle = rowname[which.max(muscle)]
+    ) %>%
+    mutate(gene_id = gene_id %>% replace_na("")) %>%
+    column_to_rownames(var = "gene_id")
+}
+
 join_cpm_data <- function(
-    Upd_cpm_transcripts, Upd_fpkm, Upd_cpm_regression) {
-  Upd_fpkm_transcript_id <- (
-    attr(Upd_fpkm, "transcript_id")[rownames(Upd_fpkm), ]
+  assay_data,
+  Upd_cpm_transcripts,
+  Upd_cpm_transcript_to_use,
+  Upd_cpm_regression
+) {
+  assay_data <- read.csv(assay_data, row.names = 1)
+  Upd_cpm_transcript_to_use <- left_join(
+    assay_data %>% rownames_to_column %>% reframe(rowname, flybase),
+    Upd_cpm_transcript_to_use %>%
+      rownames_to_column(var = "flybase") %>%
+      subset(flybase != ""),
+    "flybase"
   )
-  Upd_cpm_by_fpkm <- mapply(
-    \(n, transcripts) Upd_cpm_transcripts[transcripts, ] %>%
-      cbind(symbol = rownames(Upd_fpkm)) %>%
-      pull(n, symbol),
-    sce.clusters$cluster,
-    Upd_fpkm_transcript_id %>%
-      subset(select = c(germline, somatic, spermatocyte, muscle))
+  Upd_cpm <- mapply(
+    \(tnames, transcripts, transcript_lookup) transcripts[
+      match(transcript_lookup, tnames)
+    ],
+    list(rownames(Upd_cpm_transcripts)),
+    Upd_cpm_transcripts %>%
+      subset(select = c(germline, somatic, spermatocyte, somaticprecursor, muscle)),
+    Upd_cpm_transcript_to_use %>%
+      subset(select = c(germline, somatic, spermatocyte, somaticprecursor, muscle))
+  )
+  dimnames(Upd_cpm) = list(
+    Upd_cpm_transcript_to_use$rowname,
+    colnames(Upd_cpm_transcript_to_use)[3:7]
   )
 
   # Find genes that didn't have a transcript_id in the 10X BAM file, but which
   # were present in enough cells so that we included the gene when computing
   # Upd_cpm_regression.
-  replace_genes <- is.na(Upd_cpm_by_fpkm) %>%
+  replace_genes <- is.na(Upd_cpm) %>%
     rowAnys(useNames = TRUE) %>%
     which %>%
     names
   replace_genes <- intersect(replace_genes, rownames(Upd_cpm_regression))
-  Upd_cpm_by_fpkm[replace_genes,] <- Upd_cpm_regression[
+  Upd_cpm[replace_genes,] <- Upd_cpm_regression[
     replace_genes,
     c("germline", "somatic", "spermatocyte", "somaticprecursor", "muscle")
   ]
 
-  Upd_cpm_by_fpkm
+  Upd_cpm
+}
+
+table_to_tpm <- function(quant_table) {
+  quant_table %>%
+    t %>%
+    `*`(1000 * 1000 / rowSums(., na.rm=T)) %>%
+    t
 }
 
 reference_sort_by_fpkm_table <- function(

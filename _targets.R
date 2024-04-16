@@ -822,23 +822,30 @@ list(
       flybase.gtf
     )
   ),
-  # Call the most abundant gene isoform which maximizes FPKM value.
+  # Isoform calling for the purpose of selecting one isoform per genomic feature
+  # before TPM calculation. We simply select the transcript for the feature with
+  # the largest CPM value, and discard UMIs that are incompatible with the
+  # reference transcript of interest.
   tar_target(
-    Upd_fpkm,
-    tx_cpm_to_fpkm(Upd_cpm_transcripts, assay.data.sc)
+    Upd_cpm_transcript_to_use,
+    cpm_select_transcript_to_quantify(Upd_cpm_transcripts, assay.data.sc),
+    packages = tar_option_get("packages") %>% c("tidyr")
   ),
   # Final table of gene abundances: CPM of the abundant isoform based on FPKM
   # calculation. Also join with H3-GFP gene mean coming from the GLM.
   tar_target(
-    Upd_cpm,
-    join_cpm_data(Upd_cpm_transcripts, Upd_fpkm, Upd_cpm_regression)
+    Upd_tpm,
+    join_cpm_data(
+      assay.data.sc, Upd_cpm_transcripts,
+      Upd_cpm_transcript_to_use, Upd_cpm_regression) %>%
+      table_to_tpm
   ),
   tar_target(
     sc_excel,
     publish_excel_results(
       Upd_regression_somatic, Upd_regression_tid,
       Upd_regression_sompre, Upd_regression_mscl,
-      Upd_cpm_transcripts, Upd_cpm, Upd_fpkm, sctransform_quantile,
+      Upd_cpm_transcripts, Upd_cpm, sctransform_quantile,
       supplemental_bulk_fpkm, assay.data.sc, flybase.gtf,
       'scRNA-seq-Regression/Enriched-Genes.xlsx'
     ),
