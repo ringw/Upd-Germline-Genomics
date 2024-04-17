@@ -53,32 +53,26 @@ plot_nCount_RNA_threshold_summary <- function() {
   mapply(plot_nCount_RNA_threshold, rep(list(Upd_sc), 2), c("germline","germline","germline","somatic","somatic","somatic"), c("vas","RpL22-like","blanks","tj","lncRNA:roX1","zfh1"), SIMPLIFY=F) %>% bind_rows(.id = "gene") %>% ggplot(aes(thresholds,sd,group=gene,color=gene)) + geom_line()
 }
 
-extract_upd_metadata_to_csv <- function(Upd_sc, Upd_glm, output_path) {
-  meta.data <- cbind(
-    FetchData(Upd_sc, "ident"),
-    colData(Upd_glm$data) %>%
-      subset(select=c(nCount_RNA, nFeature_RNA, batch)),
-    nCount_RNA_filter = "nCount_RNA_pass",
-    size_factor = Upd_glm$size_factors
-  )
-  write.csv(meta.data, output_path)
-  output_path
-}
-
-pooled_size_factors_multi_cell_type_seurat <- function(seurat) {
+pooled_size_factors_seurat_ident_autosome <- function(seurat) {
   sce <- GetAssayData(seurat, assay = "RNA", layer = "counts") %>%
     list(counts = .) %>%
     SingleCellExperiment
-  quickClusters = quickCluster(sce, min.size = 1000)
-  # Choose the large germline-like cluster as reference cluster with an average
-  # size factor of 1, as this is the cluster that we are going to use to
-  # establish the baseMean quantification of the gene.
-  ref.clust = assay(sce)['vas',] %>% split(quickClusters) %>% sapply(sum) %>% which.max
+  sce <- sce[seurat[["RNA"]]@meta.data$chr %in% c("2L", "2R", "3L", "3R"), ]
   pooledSizeFactors(
     sce,
-    clusters = quickClusters,
-    ref.clust = ref.clust
+    clusters = Idents(seurat)
   )
+}
+
+extract_upd_metadata_to_csv <- function(Upd_sc, size_factors, output_path) {
+  Upd_sc$size_factors <- size_factors
+  meta.data <- cbind(
+    FetchData(Upd_sc, "ident"),
+    Upd_sc@meta.data,
+    nCount_RNA_filter = "nCount_RNA_pass"
+  )
+  write.csv(meta.data, output_path)
+  output_path
 }
 
 build_model_matrix <- function(data_frame) {
@@ -86,16 +80,19 @@ build_model_matrix <- function(data_frame) {
   model.matrix(~ ident + batch, data_frame)
 }
 
-fit_glm <- function(Upd_sc, Upd_model_matrix) {
+fit_glm <- function(Upd_sc, Upd_model_matrix, Upd_metadata) {
+  Upd_metadata <- Upd_metadata %>% read.csv(row.names = 1)
   Upd_glm <- glm_gp(
     GetAssayData(Upd_sc, assay="RNA", layer="counts"),
     Upd_model_matrix,
-    size_factors = pooled_size_factors_multi_cell_type_seurat(Upd_sc),
+    size_factors = Upd_metadata[Cells(Upd_sc), "size_factors"],
     on_disk = F,
     verbose = T
   )
   # Quite useful to keep the metadata in the GLM object.
-  colData(Upd_glm$data)[, colnames(Upd_sc@meta.data)] <- Upd_sc@meta.data
+  colData(Upd_glm$data)[, colnames(Upd_metadata)] <- (
+    Upd_metadata[colnames(Upd_glm$data), ]
+  )
   # We did not specify an offset per gene. Grab the offset per cell (column).
   # We can reconstruct a full-size Offset matrix later.
   Upd_glm$Offset = as.matrix(Upd_glm$Offset[1,, drop=F])

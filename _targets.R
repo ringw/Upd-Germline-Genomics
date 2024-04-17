@@ -566,8 +566,12 @@ list(
     )
   ),
   tar_target(
+    Upd_sc_size_factors,
+    Upd_sc %>% pooled_size_factors_seurat_ident_autosome
+  ),
+  tar_target(
     metadata,
-    extract_upd_metadata_to_csv(Upd_sc, Upd_glm, "scRNA-seq-Metadata.csv"),
+    extract_upd_metadata_to_csv(Upd_sc, Upd_sc_size_factors, "scRNA-seq-Metadata.csv"),
     format='file'
   ),
   tar_combine(
@@ -582,7 +586,7 @@ list(
   ),
   tar_target(
     Upd_glm,
-    fit_glm(Upd_sc, Upd_model_matrix),
+    fit_glm(Upd_sc, Upd_model_matrix, metadata),
   ),
   tar_target(
     Upd_regression_somatic,
