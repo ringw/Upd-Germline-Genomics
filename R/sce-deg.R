@@ -2,14 +2,14 @@
 Upd_celltype_contrasts <- matrix(
   c(0.5, 0.5, 0, 0, 0,
     -1, 1, 0, 0, 0,
-    -0.5, -0.5, 1, 0, 0,
-    -0.5, -0.5, 0, 1, 0,
-    -0.5, -0.5, 0, 0, 1),
+    -1, 0, 1, 0, 0,
+    0, -1, 0, 1, 0,
+    0, -1, 0, 0, 1),
   nrow = 5,
   byrow = TRUE,
   dimnames = list(
     c("germline", "somatic", "spermatocyte", "somaticprecursor", "muscle"),
-    c("Mean", "CySCoverGSC", "TidOverMean", "SPOverMean", "MuscleOverMean")
+    c("Mean", "CySCoverGSC", "TidOverGSC", "SPOverCySC", "MuscleOverCySC")
   )
 )
 Upd_celltype_model_matrix <- matrix(

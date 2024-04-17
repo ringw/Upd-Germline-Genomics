@@ -90,12 +90,13 @@ sce.data = data.frame(
 sce.clusters = data.frame(cluster = c('germline','somatic','spermatocyte','muscle'))
 sce.clusters <- tribble(
   ~ cluster, ~ contrast,
-  # from computing Upd_celltype_model_matrix
+  # Contrasts taken from Upd_celltype_model_matrix and hardcoded into the
+  # targets here.
   'germline', c(1, CySCoverGSC=-0.5, 0,0,0),
   'somatic', c(1, CySCoverGSC=0.5, 0,0,0),
-  'spermatocyte', c(1,0,1,0,0),
-  'somaticprecursor', c(1,0,0,1,0),
-  'muscle', c(1,0,0,0,1)
+  'spermatocyte', c(1,-0.5,1,0,0),
+  'somaticprecursor', c(1,0.5,0,1,0),
+  'muscle', c(1,0.5,0,0,1)
 )
 
 repli.processing = data.frame(
@@ -597,25 +598,6 @@ list(
   tar_target(
     Upd_regression_mscl,
     apeglm_coef_table(Upd_glm, coef = 5)
-  ),
-  tar_target(
-    Upd_regression_somvssompre,
-    apeglm_coef_table(
-      FetchData(Upd_sc, c("ident", "batch")) %>%
-        subset(ident %in% c("somatic", "somaticprecursor")) %>%
-        glm_gp(
-          GetAssayData(Upd_sc, assay="RNA", layer="counts")[
-            ,
-            Idents(Upd_sc) %in% c("somatic", "somaticprecursor")
-          ],
-          ~ ident + batch,
-          .,
-          size_factors = with(Upd_glm, size_factors)[rownames(.)],
-          overdispersion = with(Upd_glm, overdispersions),
-          on_disk = F,
-          verb = T
-        )
-    )
   ),
   sce_targets,
   tar_combine(
