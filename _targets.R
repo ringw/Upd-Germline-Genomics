@@ -455,11 +455,12 @@ list(
     Rle(factor(names(feature.lengths), names(feature.lengths)), as.numeric(feature.lengths))
   ),
  
+  tar_file(h3.gfp.gtf, "scRNA-seq/H3-GFP-transcript-descriptive.gtf"),
   tar_file(
     assay.data.sc,
     create_assay_data_sc(
       tenx_file_nos.1, sce.features,
-      flybase.annotations, flybase.gtf, sce.present.features,
+      flybase.annotations, flybase.gtf, h3.gfp.gtf, sce.present.features,
       'scRNA-seq-Assay-Metadata.csv')
   ),
   tar_target(nos.1, call_nos.1(seurat_qc_nos.1)),

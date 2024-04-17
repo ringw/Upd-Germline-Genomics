@@ -72,7 +72,7 @@ select_features <- function(paths, fbgn_paths) {
 }
 
 create_assay_data_sc <- function(
-    path, sce.features, fbgn_paths, gtf_path, present.symbols, output_path) {
+    path, sce.features, fbgn_paths, gtf_path, h3_gfp_gtf_path, present.symbols, output_path) {
   cg_names = (
     path
     %>% paste0('/features.tsv.gz')
@@ -93,13 +93,20 @@ create_assay_data_sc <- function(
   )
 
   # Now build a length column, for FPKM calculation.
+  col.names <- c('chr', 'source', 'type', 'start', 'end', 'sc', 'strand', 'fr', 'annotation')
+  # Include "transcript" types in the reference (RNA). What would be left out
+  # are some rRNAs, which have a "pseudogene" annotation for the putative
+  # transcript. Genes that have an "mRNA" may have multiple isoforms, but the
+  # Cell Ranger workflow is including introns, so we can report the longest of
+  # these isoforms from 5' of the first exon to 3' of the last exon. This is
+  # generally the "CDS" which is another annotation that we get for these genes.
   gtf = read.table(
     gtf_path,
     sep = '\t',
-    col.names = c('chr', 'source', 'type', 'start', 'end', 'sc', 'strand', 'fr', 'annotation'),
+    col.names = col.names,
     header = F,
     quote = ''
-  ) %>% subset(grepl('RNA', type)) # include "transcript" types in the reference
+  ) %>% subset(grepl('RNA|pseudogene', type))
   gtf$flybase = gtf$annotation %>% str_extract(
     'gene_id "([^"]+)"',
     group=1
@@ -112,6 +119,13 @@ create_assay_data_sc <- function(
     transcript.length = max(abs(end - start)) + 1
   )
   meta.data = meta.data %>% left_join(gtf, 'flybase') %>% column_to_rownames
+  meta.data["H3-GFP", "transcript.length"] <- with(
+    read.table(h3_gfp_gtf_path, sep = "\t", col.names = col.names, header = F, quote = "") %>%
+      subset(type == "mRNA") %>%
+      head(1) %>%
+      as.list,
+    abs(end - start) + 1
+  )
 
   write.csv(meta.data, output_path)
   output_path
@@ -307,7 +321,7 @@ filter_integrate_data = function(seurats) {
   gfp_pc1 = gfp_dim_reduc$u[,1]
   Upd_sc$somatic.score = (
     t(Upd_sc[['SCT']]@scale.data[names(gfp_pc1), ]) %*% gfp_pc1
-  ) * -1
+  )
 
   # Dim reduction
   Upd_sc = Upd_sc %>% RunPCA(verb=F) %>% RunUMAP(dims=1:15, seed.use=2)
