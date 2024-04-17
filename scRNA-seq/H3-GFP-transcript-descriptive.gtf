@@ -1,0 +1,10 @@
+H3-GFP	ChenLab	gene	1	1379	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP";
+H3-GFP	ChenLab	mRNA	1	1379	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP"; transcript_id "UrbanChen_H3-GFP_transcript"; transcript_symbol "H3-GFP-RA";
+H3-GFP	ChenLab	CDS	20	1162	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP"; transcript_id "UrbanChen_H3-GFP_transcript"; transcript_symbol "H3-GFP-RA"; gene_biotype "protein_coding";
+H3-GFP	ChenLab	5UTR	1	19	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP"; transcript_id "UrbanChen_H3-GFP_transcript"; transcript_symbol "H3-GFP-RA";
+H3-GFP	ChenLab	exon	1	19	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP"; transcript_id "UrbanChen_H3-GFP_transcript"; transcript_symbol "H3-GFP-RA"; exon_number "1"; exon_id "5UTR"; gene_biotype "protein_coding";  
+H3-GFP	ChenLab	exon	20	430	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP"; transcript_id "UrbanChen_H3-GFP_transcript"; transcript_symbol "H3-GFP-RA"; exon_number "1"; exon_id "H3"; gene_biotype "protein_coding";
+H3-GFP	ChenLab	exon	431	445	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP"; transcript_id "UrbanChen_H3-GFP_transcript"; transcript_symbol "H3-GFP-RA"; exon_number "1"; exon_id "intervening"; gene_biotype "protein_coding";
+H3-GFP	ChenLab	exon	446	1162	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP"; transcript_id "UrbanChen_H3-GFP_transcript"; transcript_symbol "H3-GFP-RA"; exon_number "1"; exon_id "GFP"; gene_biotype "protein_coding";
+H3-GFP	ChenLab	exon	1163	1379	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP"; transcript_id "UrbanChen_H3-GFP_transcript"; transcript_symbol "H3-GFP-RA"; exon_number "1"; exon_id "3UTR"; gene_biotype "protein_coding";
+H3-GFP	ChenLab	3UTR	1163	1379	.	+	.	gene_id "UrbanChen_H3-GFP"; gene_symbol "H3-GFP"; transcript_id "UrbanChen_H3-GFP_transcript"; transcript_symbol "H3-GFP-RA";
