@@ -89,19 +89,19 @@ Upd_sc_feature_plot <- function(Upd_sc, gene) {
   gene.data %>% ggplot(
     aes(umap_1, umap_2, color=LogNormalize)
   ) + rasterize(geom_point(
-    shape = 20, size = 0.001
-  ), dpi=240) + # + scale_color_viridis_c(
-    # option='magma', limits=c(0,gene.max.intensity), oob=squish
-  scale_color_viridis_c(
+    shape = 20, size = 0.25
+  ), dpi=72) + scale_color_viridis_c(
     begin = 0.2,
     limits = c(0, gene.max.intensity), oob = squish
   ) + scale_x_continuous(
     breaks=c(-10,0,10)
   ) + scale_y_continuous(breaks=c(-10,0,5)) + theme_cowplot(
+    font_size = 14 * 4,
+    line_size = 0.5 * 4
   ) + labs(
     tag=gene
   ) + theme(
-    plot.tag.position = c(0.1, 0.94),
+    plot.tag.position = c(0.14, 0.94),
     aspect.ratio = 0.75
   )
 }

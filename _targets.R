@@ -572,8 +572,8 @@ list(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
             figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
-            width = 6,
-            height = 4
+            width = 6*4,
+            height = 4*4
           ) %>%
           subset(select=c(name, figure, width, height))
       )
