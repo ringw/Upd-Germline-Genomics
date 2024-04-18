@@ -320,7 +320,11 @@ sce_targets <- tar_map(
         cluster,
         paste0('scRNA-seq-Regression/pseudobulk_', batch, '_', cluster, '.txt')
       ),
-      format = 'file'
+      format = 'file',
+      # Remove tar_cue if the Upd_sc object changes. WHY do these targets keep
+      # re-running so often when we expect no real changes to the Upd_sc and its
+      # metadata csv?
+      cue = tar_cue("never")
     ),
     tar_target(
       pseudobulk.library.size,
@@ -333,7 +337,11 @@ sce_targets <- tar_map(
         ),
         stdout=TRUE
       ) %>%
-        as.numeric
+        as.numeric,
+      # Remove tar_cue if the Upd_sc object changes. WHY do these targets keep
+      # re-running so often when we expect no real changes to the Upd_sc and its
+      # metadata csv?
+      cue = tar_cue("never")
     )
   )
 ) %>%
