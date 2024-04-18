@@ -307,6 +307,12 @@ sce_targets <- tar_map(
       )
   ),
 
+  # Consider that all of these targets can be replaced with one call to a new
+  # perl script per batch. We are intentionally streaming down the bam file as
+  # that may be faster than the disk, and we only need to do that once and split
+  # the outputs. Or instead of a single-threaded script, we can generate a tee
+  # command-line that uses process substitution to read the SAM output in
+  # several processes.
   tar_map(
     unlist = FALSE,
     sce.clusters,
