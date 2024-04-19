@@ -535,17 +535,22 @@ quantify_quantiles <- function(
   seurat, metadata, assay = "SCT", slot = "scale.data",
   per_million = FALSE
 ) {
-  assay_data <- GetAssayData(seurat, assay = assay, layer = slot)
+  if (assay == "RNA" && slot == "data")
+    seurat <- seurat %>% NormalizeData(assay = assay)
+  assay_data <- as.matrix(GetAssayData(seurat, assay = assay, layer = slot))
   assay_cells <- data.frame(rowname = colnames(assay_data))
   metadata <- metadata %>% read.csv(row.names = 1) %>%
     rownames_to_column %>%
-    right_join(assay_cells, by="rowname")
+    inner_join(assay_cells, by="rowname")
   cells <- sce.clusters$cluster %>%
     sapply(
       \(n) assay_data[
         ,
-        as.character(metadata$ident) == n
-        & metadata$nCount_RNA_filter == "nCount_RNA_pass"
+        metadata %>%
+          subset(
+            as.character(ident) == n & nCount_RNA_filter == "nCount_RNA_pass"
+          ) %>%
+          pull(rowname)
       ],
       simplify = FALSE
     )
