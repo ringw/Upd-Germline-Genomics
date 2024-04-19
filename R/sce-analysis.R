@@ -176,9 +176,8 @@ Upd_sc_figures = function(figures_dir, Upd_sc) {
   filenames
 }
 
-# Plots for the replicates, using our filter by pct.mito and pct.ribo but no
-# clustering or downstream doublet removal.
-gene_pseudobulk_fpkm <- function(tx_files, seurats, seurat_names, gtf_path, metadata_path, metafeatures_path) {
+# Plots for bulk expression of genes in each batch.
+gene_pseudobulk_cpm <- function(tx_files, seurats, seurat_names, gtf_path, metadata_path, metafeatures_path) {
   metadata <- read.csv(metadata_path, row.names = 1)
   size_factors <- seurat_names %>%
     sapply(\(n) metadata %>% subset(batch == n & nCount_RNA_filter == "nCount_RNA_pass") %>% pull(nCount_RNA) %>% sum)
@@ -187,9 +186,8 @@ gene_pseudobulk_fpkm <- function(tx_files, seurats, seurat_names, gtf_path, meta
     data.frame(batch = 'nos.1', size_factor = size_factors),
     gtf_path
   )
-  fpkm_table <- cpm_table %>% tx_cpm_to_fpkm(metafeatures_path)
   data.frame(
-    fpkm = fpkm_table[rownames(seurats[[1]][['RNA']]), 1],
+    cpm = cpm_table[rownames(seurats[[1]][['RNA']]), 1],
     percent_expressed = rowMeans(
       seurats %>%
         mapply(

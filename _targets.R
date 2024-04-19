@@ -575,6 +575,75 @@ list(
             width = 6*4,
             height = 4*4
           ) %>%
+          subset(select=c(name, figure, width, height)),
+        dpi=30
+      )
+    ),
+    tar_target(
+      sc_genes_histone_mod,
+      save_figures(
+        "figure/Integrated-scRNAseq/Genes-Histone-Modifying", extension,
+        tribble(
+          ~gene,
+          "Set1", "trx", "trr", "egg", "G9a", "Su(var)3-9", "ash1", "E(z)",
+          "Set2", "NSD", "Su(var)3-3", "Kdm5", "Kdm4A", "Kdm4B", "Jarid2",
+          "Utx", "Kdm2", "Kdm4A", "Kdm4B", "HP1b", "HP1c", "rhi", "Su(var)205",
+          "HP6", "Su(var)3-7", "Su(var)2-10"
+        ) %>%
+          mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
+          rowwise %>%
+          mutate(
+            gene_short_name = gene %>% str_replace("lncRNA:", ""),
+            name = paste0("RNAseq-FeaturePlot-", gene_short_name),
+            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
+            width = 6*4,
+            height = 4*4
+          ) %>%
+          subset(select=c(name, figure, width, height)),
+        dpi=30
+      )
+    ),
+    tar_target(
+      sc_genes_remodeling,
+      save_figures(
+        "figure/Integrated-scRNAseq/Genes-Remodeling", extension,
+        tribble(
+          ~gene,
+          "Bap60", "Bap55", "brm", "Iswi", "Acf", "Chrac-16", "Nurf-38",
+          "Ino80", "Arp8", "Arp5"
+        ) %>%
+          mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
+          rowwise %>%
+          mutate(
+            gene_short_name = gene %>% str_replace("lncRNA:", ""),
+            name = paste0("RNAseq-FeaturePlot-", gene_short_name),
+            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
+            width = 6*4,
+            height = 4*4
+          ) %>%
+          subset(select=c(name, figure, width, height)),
+        dpi=30
+      )
+    ),
+    tar_target(
+      sc_genes_replication,
+      save_figures(
+        "figure/Integrated-scRNAseq/Genes-Replication", extension,
+        tribble(
+          ~gene,
+          "PolA1", "PolA2", "Prim1", "Prim2", "PolD1", "PolD2", "PolD3",
+          "Chrac-14", "PolE1", "PolE2", "PolE4", "Mcm2", "Mcm3", "dpa", "Mcm5",
+          "Mcm6", "Mcm7", "Orc1", "Orc2", "Orc4", "Orc5", "Orc6"
+        ) %>%
+          mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
+          rowwise %>%
+          mutate(
+            gene_short_name = gene %>% str_replace("lncRNA:", ""),
+            name = paste0("RNAseq-FeaturePlot-", gene_short_name),
+            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
+            width = 6*4,
+            height = 4*4
+          ) %>%
           subset(select=c(name, figure, width, height))
       )
     )
@@ -650,8 +719,8 @@ list(
     ),
     names = name,
     tar_target(
-      supplemental_bulk_fpkm,
-      gene_pseudobulk_fpkm(
+      supplemental_bulk_cpm,
+      gene_pseudobulk_cpm(
         paste0(
           "scRNA-seq-Regression/pseudobulk_",
           name,
@@ -667,8 +736,8 @@ list(
     )
   ),
   tar_target(
-    supplemental_bulk_fpkm,
-    gene_pseudobulk_fpkm(
+    supplemental_bulk_cpm,
+    gene_pseudobulk_cpm(
       paste0(
         "scRNA-seq-Regression/pseudobulk_",
         c("nos", "nos", "tj", "tj"),
@@ -701,7 +770,7 @@ list(
   tar_target(
     supplemental_bulk_figure,
     dot_plot_fpkm(
-      list(Nos=supplemental_bulk_fpkm_nos, tj=supplemental_bulk_fpkm_tj),
+      list(Nos=supplemental_bulk_cpm_nos, tj=supplemental_bulk_cpm_tj),
       supplemental_gene_list
     )
   ),
@@ -781,7 +850,7 @@ list(
   ),
   tar_target(
     sct_gene_lists,
-    determine_gene_list(sctransform_quantile, supplemental_bulk_fpkm)
+    determine_gene_list(sctransform_quantile, supplemental_bulk_cpm)
   ),
   tar_target(
     sct_gene_venn,
@@ -814,7 +883,10 @@ list(
     Upd_cpm_regression,
     glm_make_cpm_table(Upd_glm)
   ),
-  # Estimate gene isoform means using summary of 10X BAM transcript id tags.
+  tar_target(
+    Upd_fpkm_regression,
+    Upd_cpm_regression %>% cpm_to_fpkm_using_cds(assay.data.sc)
+  ),
   tar_target(
     Upd_cpm_transcripts,
     pseudobulk_cpm(
@@ -823,22 +895,35 @@ list(
       flybase.gtf
     )
   ),
-  # Isoform calling for the purpose of selecting one isoform per genomic feature
-  # before TPM calculation. We simply select the transcript for the feature with
-  # the largest CPM value, and discard UMIs that are incompatible with the
-  # reference transcript of interest.
   tar_target(
     Upd_cpm_transcript_to_use,
     cpm_select_transcript_to_quantify(Upd_cpm_transcripts, assay.data.sc),
     packages = tar_option_get("packages") %>% c("tidyr")
   ),
-  # Final table of gene abundances: CPM of the abundant isoform based on FPKM
-  # calculation. Also join with H3-GFP gene mean coming from the GLM.
   tar_target(
-    Upd_tpm,
+    Upd_isoform_exonic_length,
+    lookup_mat_transcripts_exon_length(
+      Upd_cpm_transcripts, Upd_cpm_transcript_to_use, assay.data.sc
+    )
+  ),
+  # TPM values based on exon length correction, then scale to sum to 1MM.
+  tar_target(
+    Upd_tpm_do_not_use_for_quantification,
     join_cpm_data(
       assay.data.sc, Upd_cpm_transcripts,
-      Upd_cpm_transcript_to_use, Upd_cpm_regression) %>%
+      Upd_cpm_transcript_to_use, Upd_fpkm_regression) %>%
+      table_to_tpm
+  ),
+  # CPM values based on dominant isoform (by max FPKM or TPM value for the
+  # isoform). We will fix the values to sum to 1MM because we are adding back in
+  # the H3-GFP value from Upd_cpm_regression, but we do not apply the correction
+  # by exonic length before calculating this TPM.
+  tar_target(
+    Upd_cpm,
+    join_cpm_data(
+      assay.data.sc, Upd_cpm_transcripts,
+      Upd_cpm_transcript_to_use, Upd_cpm_regression,
+      corr=F) %>%
       table_to_tpm
   ),
   tar_target(
@@ -846,11 +931,13 @@ list(
     publish_excel_results(
       Upd_regression_somatic, Upd_regression_tid,
       Upd_regression_sompre, Upd_regression_mscl,
-      Upd_cpm_transcripts, Upd_cpm, sctransform_quantile,
-      supplemental_bulk_fpkm, assay.data.sc, flybase.gtf,
+      Upd_cpm_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
+      Upd_isoform_exonic_length,
+      sctransform_quantile, supplemental_bulk_cpm, assay.data.sc, flybase.gtf,
       'scRNA-seq-Regression/Enriched-Genes.xlsx'
     ),
-    format='file'
+    format='file',
+    packages = tar_option_get("packages") %>% c("lme4")
   ),
 
   # Section: Parameter selection for omics data, tuning MAPQ threshold and

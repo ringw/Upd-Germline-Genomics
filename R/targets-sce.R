@@ -10,11 +10,11 @@ targets.sce <- list(
   ),
   tar_target(
     Upd_genes_dendrogram_raw,
-    sc_genes_dendrogram(Upd_sc, gene_ = rowAnys(Upd_cpm > 100)[rownames(Upd_sc[["RNA"]])])
+    sc_genes_dendrogram(Upd_sc, gene_ = rowAnys(Upd_tpm > 100)[rownames(Upd_sc[["RNA"]])])
   ),
   tar_target(
     Upd_genes_dendrogram,
-    sc_sort_genes_dendrogram(Upd_cpm, Upd_genes_dendrogram_raw),
+    sc_sort_genes_dendrogram(Upd_tpm, Upd_genes_dendrogram_raw),
     packages = tar_option_get("packages") %>% c("dendextend")
   ),
   tar_file(

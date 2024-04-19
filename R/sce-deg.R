@@ -306,10 +306,6 @@ pseudobulk_cpm <- function(tx_files, size_factors, gtf_file) {
     left_join(
       exons %>% summarise(exon_length = sum(abs(end - start) + 1)),
       "tx"
-    ) %>%
-    left_join(
-      exons %>% summarise(cell_ranger_exon_length = sum((abs(end - start) + 1 - 50) %>% pmax(0))),
-      "tx"
     )
 
   if (length(resultsNames(dds)) > 1)
@@ -380,28 +376,49 @@ glm_make_cpm_table <- function(Upd_glm) {
   cpm_table
 }
 
-cpm_select_transcript_to_quantify <- function(cpms, assay_data) {
+cpm_to_fpkm_using_cds <- function(cpm_table, assay_data_sc) {
+  assay_data_sc <- assay_data_sc %>% read.csv(row.names = 1)
+  cpm_table %>%
+    `/`(assay_data_sc[rownames(cpm_table), "transcript.length"] / 1000) %>%
+    replace(!is.finite(.), 0)
+}
+
+cpm_select_transcript_to_quantify <- function(
+  cpms, assay_data, correct_for_exon_length = T
+) {
   assay_data <- assay_data %>% read.csv(row.names = 1)
   cpms$gene_id <- cpms$gene_id %>% factor(assay_data$flybase)
   cpms %>%
     rownames_to_column %>%
     group_by(gene_id) %>%
     summarise(
-      germline = rowname[which.max(germline)],
-      somatic = rowname[which.max(somatic)],
-      spermatocyte = rowname[which.max(spermatocyte)],
-      somaticprecursor = rowname[which.max(somaticprecursor)],
-      muscle = rowname[which.max(muscle)]
+      germline = rowname[which.max(germline / if (correct_for_exon_length) exon_length else 1)],
+      somatic = rowname[which.max(somatic / if (correct_for_exon_length) exon_length else 1)],
+      spermatocyte = rowname[which.max(spermatocyte / if (correct_for_exon_length) exon_length else 1)],
+      somaticprecursor = rowname[which.max(somaticprecursor / if (correct_for_exon_length) exon_length else 1)],
+      muscle = rowname[which.max(muscle / if (correct_for_exon_length) exon_length else 1)]
     ) %>%
     mutate(gene_id = gene_id %>% replace_na("")) %>%
     column_to_rownames(var = "gene_id")
+}
+
+lookup_mat_transcripts_exon_length <- function(Upd_cpm_transcripts, Upd_cpm_transcript_to_use, assay.data.sc) {
+  assay.data.sc <- assay.data.sc %>% read.csv(row.names = 1)
+  exon_length <- matrix(
+    Upd_cpm_transcripts[Upd_cpm_transcript_to_use[assay.data.sc$flybase, ] %>% as.matrix %>% as.character %>% cbind("exon_length")] %>%
+      # character to numeric
+      as.numeric,
+    ncol=5,
+    dimnames=list(rownames(assay.data.sc), colnames(Upd_cpm_transcript_to_use))
+  )
 }
 
 join_cpm_data <- function(
   assay_data,
   Upd_cpm_transcripts,
   Upd_cpm_transcript_to_use,
-  Upd_cpm_regression
+  Upd_cpm_regression,
+  correct_for_exon_length = T
 ) {
   assay_data <- read.csv(assay_data, row.names = 1)
   Upd_cpm_transcript_to_use <- left_join(
@@ -417,7 +434,8 @@ join_cpm_data <- function(
     ],
     list(rownames(Upd_cpm_transcripts)),
     Upd_cpm_transcripts %>%
-      subset(select = c(germline, somatic, spermatocyte, somaticprecursor, muscle)),
+      subset(select = c(germline, somatic, spermatocyte, somaticprecursor, muscle)) %>%
+      `/`(if (correct_for_exon_length) Upd_cpm_transcripts$exon_length else 1),
     Upd_cpm_transcript_to_use %>%
       subset(select = c(germline, somatic, spermatocyte, somaticprecursor, muscle))
   )

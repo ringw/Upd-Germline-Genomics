@@ -9,8 +9,10 @@ excel_tables = list(
 publish_excel_results <- function(
   Upd_regression_somatic, Upd_regression_tid,
   Upd_regression_sompre, Upd_regression_mscl,
-  Upd_cpm_transcripts, Upd_cpm, Upd_fpkm, sctransform_quantile,
-  supplemental_bulk_fpkm, metafeatures, gtf_path, target_path
+  Upd_cpm_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
+  Upd_isoform_exonic_length,
+  sctransform_quantile, supplemental_bulk_pct_expressed, metafeatures, gtf_path,
+  target_path
 ) {
   wb = createWorkbook()
 
@@ -20,14 +22,14 @@ publish_excel_results <- function(
     'Gene Quantification',
     metafeatures$flybase,
     Upd_cpm,
-    Upd_fpkm,
     sctransform_quantile,
-    supplemental_bulk_fpkm,
+    supplemental_bulk_pct_expressed,
     excel_tables$mono
   )
 
   write_quant_stats(
-    wb, "Gene Quantification Summary", Upd_cpm_transcripts, Upd_cpm, Upd_fpkm,
+    wb, "Gene Quantification Summary", Upd_cpm_transcripts, Upd_cpm,
+    Upd_tpm_do_not_use_for_quantification, Upd_isoform_exonic_length,
     Upd_regression_somatic, sctransform_quantile, gtf_path, metafeatures
   )
 
@@ -36,31 +38,25 @@ publish_excel_results <- function(
   ) %>% signif(digits=2)
   flybase = metafeatures$flybase[match(rownames(Upd_regression_somatic$map), rownames(metafeatures))]
   write_regression_table(wb, 'GSC&CySC Regression', 'log(CySC/GSC)', baseMeanCPM, Upd_regression_somatic, 2, flybase, excel_tables$cyan)
-  write_regression_table(wb, 'S-Cyte&Tid-Like Regression', 'log(cyte&tid/GSC&CySC)', baseMeanCPM, Upd_regression_tid, 3, flybase, excel_tables$orange)
-  write_regression_table(wb, 'Somatic Precursor Regression', 'log(SomPre/GSC&CySC)', baseMeanCPM, Upd_regression_sompre, 4, flybase, 'TableStyleMedium13')
-  write_regression_table(wb, 'Muscle Regression', 'log(mscl/GSC&CySC)', baseMeanCPM, Upd_regression_mscl, 5, flybase, excel_tables$red)
+  write_regression_table(wb, 'S-Cyte&Tid-Like Regression', 'log(cyte&tid/GSC)', baseMeanCPM, Upd_regression_tid, 3, flybase, excel_tables$orange)
+  write_regression_table(wb, 'Somatic Precursor Regression', 'log(SomPre/CySC)', baseMeanCPM, Upd_regression_sompre, 4, flybase, 'TableStyleMedium13')
+  write_regression_table(wb, 'Muscle Regression', 'log(mscl/CySC)', baseMeanCPM, Upd_regression_mscl, 5, flybase, excel_tables$red)
   dir.create('scRNA-seq-Regression', showW=F)
   saveWorkbook(wb, target_path, overwrite = T)
   target_path
 }
 
 write_abundance_table <- function(
-    wb, title, flybase, Upd_cpm, Upd_fpkm, sctransform_quantile, supplemental_bulk_fpkm, table_style) {
-  rename = c(germline='GSC', somatic="CySC", spermatocyte="tid", somaticprecursor="SC", muscle="muscle")
+    wb, title, flybase, Upd_cpm, sctransform_quantile, supplemental_bulk_pct_expressed, table_style) {
+  rename = c(germline='GSC', somatic="CySC", spermatocyte="tid", somaticprecursor="SP", muscle="muscle")
   data = data.frame(
-    symbol = rownames(Upd_fpkm),
+    symbol = rownames(Upd_cpm),
     flybase = flybase
   )
 
   for (n in names(rename)) {
     name = rename[n]
-    data = cbind(
-      data,
-      setNames(
-        list(Upd_cpm[,n], Upd_fpkm[,n]),
-        paste(c('CPM','FPKM'), name, sep='_')
-      )
-    )
+    data[str_glue("CPM_{name}")] <- Upd_cpm[,n]
     if (n %in% names(sctransform_quantile)) {
       sct_ranking <- sctransform_quantile[[n]][, '90%']
       sct_ranking <- sct_ranking %>% round(2)
@@ -78,8 +74,8 @@ write_abundance_table <- function(
   data = data %>%
     left_join(
       data.frame(
-        symbol = rownames(supplemental_bulk_fpkm),
-        pctAllCells = supplemental_bulk_fpkm$percent_expressed
+        symbol = rownames(supplemental_bulk_pct_expressed),
+        pctAllCells = supplemental_bulk_pct_expressed$percent_expressed
       ),
       by = "symbol"
     )
@@ -94,35 +90,86 @@ write_abundance_table <- function(
 }
 
 write_quant_stats <- function(
-  wb, title, Upd_cpm_transcripts, Upd_cpm, Upd_fpkm, Upd_regression_somatic,
-  sctransform_quantile, gtf_path, metafeatures
+  wb, title, Upd_cpm_transcripts, Upd_cpm,
+  Upd_tpm_do_not_use_for_quantification, Upd_isoform_exonic_length,
+  Upd_regression_somatic, sctransform_quantile, gtf_path, metafeatures
 ) {
   addWorksheet(wb, title)
 
   n_genes <- tribble(
-    ~ cluster, ~ CPM, ~ FPKM, ~ SCT, ~ L2FC,
+    ~ cluster, ~ CPM, ~ SCT, ~ L2FC,
     "GSC",
     sum((Upd_cpm[, "germline"] > 0) %>% replace(is.na(.), FALSE)),
-    sum((Upd_fpkm[, "germline"] > 0) %>% replace(is.na(.), FALSE)),
     sum(is.finite(sctransform_quantile[["germline"]][, "90%"])),
     sum(is.finite(Upd_regression_somatic$map[, 2])),
     "CySC",
     sum((Upd_cpm[, "somatic"] > 0) %>% replace(is.na(.), FALSE)),
-    sum((Upd_fpkm[, "somatic"] > 0) %>% replace(is.na(.), FALSE)),
     sum(is.finite(sctransform_quantile[["somatic"]][, "90%"])),
     sum(is.finite(Upd_regression_somatic$map[, 2]))
   )
 
-  writeData(wb, title, paste0("# Genes Quantified by Method (Genes in Reference: ", nrow(Upd_fpkm), ")"), colNames = F, startRow = 1, startCol = 1)
+  writeData(wb, title, paste0("# Genes Quantified by Method (Genes in Reference: ", nrow(Upd_cpm), ")"), colNames = F, startRow = 1, startCol = 1)
   writeDataTable(wb, title,
                  n_genes, withFilter = FALSE,
                  startCol = 1, startRow = 2)
-  
+
   start_row <- 6
   group_names <- c(germline="GSC", somatic="CySC")
-  analyze_genes <- rownames(Upd_fpkm) %>%
-    setdiff(rownames(Upd_fpkm) %>% subset(is.na(Upd_fpkm[, "germline"]))) %>%
-    setdiff(rownames(Upd_fpkm) %>% subset(is.na(Upd_fpkm[, "somatic"]))) %>%
+  Upd_cpm_transcripts$gene_id <- Upd_cpm_transcripts$gene_id %>% factor
+
+  analyze_transcripts <- (as.matrix(Upd_cpm_transcripts[,-1]) > 0) %>%
+    rowAlls(useNames=T) %>%
+    which %>%
+    names
+  gene_id_transcripts <- Upd_cpm_transcripts[analyze_transcripts, "gene_id"] %>%
+    droplevels
+  exons <- log(Upd_cpm_transcripts[analyze_transcripts, "exon_length"])
+  for (n in names(group_names)) {
+    writeData(
+      wb,
+      title,
+      matrix(
+        c(
+          str_glue("{group_names[n]}: CPM or TPM for Isoform Calling (avoid isoform corr. with exon_length)"),
+          "Beta (coef. for exon_length) similar to Pearson's R is shown."
+        ),
+        ncol = 1
+      ),
+      colNames = F,
+      startRow = start_row, startCol = 1
+    )
+    start_row <- start_row + 2
+    logCPM <- log(Upd_cpm_transcripts[analyze_transcripts, n])
+    logTPM <- log(Upd_cpm_transcripts[analyze_transcripts, n]) - exons
+    # Fit slope and intercept to isoform length and CPM:
+    # germline ~ gene_id + exon_length
+    lme.cpm <- lmer(logCPM ~ exons + (1 | gene_id_transcripts))
+    lme.tpm <- lmer(logTPM ~ exons + (1 | gene_id_transcripts))
+    # Calculate Beta (standardize the exons coefficient) which is similar to a
+    # Pearson correlation estimate between log(exon_length) and log(CPM).
+    beta <- data.frame(
+      CPM=coef(lme.cpm)[[1]][1, "exons"] * sd(exons) / sd(logCPM),
+      TPM=coef(lme.tpm)[[1]][1, "exons"] * sd(exons) / sd(logTPM)
+    )
+    colnames(beta) <- str_glue(
+      "log({group_names[n]}_{colnames(beta)}) ~ gene + log(exon_length)"
+    )
+    writeDataTable(
+      wb,
+      title,
+      beta,
+      startRow = start_row, startCol = 1
+    )
+    start_row <- start_row + 3
+  }
+
+  group_names <- c(germline="GSC", somatic="CySC")
+  analyze_genes <- rownames(Upd_tpm_do_not_use_for_quantification) %>%
+    setdiff(rownames(Upd_tpm_do_not_use_for_quantification) %>% subset(is.na(Upd_tpm_do_not_use_for_quantification[, "germline"]))) %>%
+    setdiff(rownames(Upd_tpm_do_not_use_for_quantification) %>% subset(is.na(Upd_tpm_do_not_use_for_quantification[, "somatic"]))) %>%
+    setdiff(names(which(rowAnys(Upd_tpm_do_not_use_for_quantification == 0, na.rm=T, useNames=T)))) %>%
+    setdiff(names(which(rowAnys(is.na(Upd_isoform_exonic_length), useNames=T)))) %>%
+    setdiff(names(which(rowAnys((Upd_isoform_exonic_length == 0), na.rm=T, useNames=T)))) %>%
     intersect(rownames(Upd_regression_somatic$map) %>% subset(is.finite(Upd_regression_somatic$map[, 2])))
   gtf <- read.table(
     gtf_path,
@@ -141,24 +188,19 @@ write_quant_stats <- function(
     writeData(
       wb,
       title,
-      paste0(group_names[n], ": Transcript Length as a Confounding Factor"),
+      paste0(group_names[n], ": Gene CPM or TPM (exon-length-normalized) to avoid corr. with Exon Length"),
       colNames = F,
       startRow = start_row, startCol = 1
     )
     start_row <- start_row + 1
-    transcripts <- attr(Upd_fpkm, "transcript_id")[analyze_genes, n]
-    CPM_naive = (
-      Upd_cpm_transcripts[, n] %>% split(Upd_cpm_transcripts$gene_id) %>% sapply(max)
-    )[metafeatures[analyze_genes, "flybase"]]
-    CPM = Upd_cpm[analyze_genes, n]
-    FPKM = Upd_fpkm[analyze_genes, n]
+    CPM <- Upd_cpm[analyze_genes, n]
+    TPM <- Upd_tpm_do_not_use_for_quantification[analyze_genes, n]
     SCT = sctransform_quantile[[n]][analyze_genes, "90%"]
-    lengths <- gtf$length[match(transcripts, gtf$tx)]
+    lengths <- Upd_isoform_exonic_length[analyze_genes, n]
 
     analysis <- data.frame(
-      `cor(log(CPM[naive]), log(length))` = cor(log(CPM_naive) %>% subset(CPM != 0), log(lengths) %>% subset(CPM != 0)),
-      `cor(log(CPM), log(length))` = cor(log(CPM) %>% subset(CPM != 0), log(lengths) %>% subset(CPM != 0)),
-      `cor(log(FPKM), log(length))` = cor(log(FPKM) %>% subset(CPM != 0), log(lengths) %>% subset(CPM != 0)),
+      `cor(log(CPM), log(exon_length))` = cor(log(CPM), log(lengths)),
+      `cor(log(TPM), log(exon_length))` = cor(log(TPM), log(lengths)),
       `cor(SCT90%, log(length))` = cor(SCT, log(lengths)),
       check.names = FALSE
     )
