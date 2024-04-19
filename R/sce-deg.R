@@ -535,16 +535,14 @@ quantify_quantiles <- function(
   seurat, metadata, assay = "SCT", slot = "scale.data",
   per_million = FALSE
 ) {
+  assay_data <- GetAssayData(seurat, assay = assay, layer = slot)
+  assay_cells <- data.frame(rowname = colnames(assay_data))
   metadata <- metadata %>% read.csv(row.names = 1) %>%
     rownames_to_column %>%
-    right_join(data.frame(rowname = colnames(seurat)), by="rowname")
-  clusters_of_interest <- c("germline", "somatic")
-  cells <- clusters_of_interest %>%
+    right_join(assay_cells, by="rowname")
+  cells <- sce.clusters$cluster %>%
     sapply(
-      \(n) GetAssayData(
-        seurat[[assay]],
-        slot
-      )[
+      \(n) assay_data[
         ,
         as.character(metadata$ident) == n
         & metadata$nCount_RNA_filter == "nCount_RNA_pass"
@@ -574,9 +572,8 @@ quantify_quantiles <- function(
 }
 
 combine_gene_quantiles <- function(nested_list) {
-  clusters_of_interest <- c("germline", "somatic")
   sapply(
-    clusters_of_interest,
+    sce.clusters$cluster,
     \(n) purrr::reduce(
       sapply(nested_list, \(l) l[[n]], simplify=F),
       `+`
