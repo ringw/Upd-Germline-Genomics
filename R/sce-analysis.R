@@ -78,26 +78,22 @@ Upd_sc_plot_subset <- function(sc.plot.idents) {
 
 Upd_sc_feature_plot <- function(Upd_sc, gene) {
   dplyr_rename_lookup_gene = setNames("LogNormalize", gene)
-  gene.data = Upd_sc@meta.data %>%
-    cbind(
-      Upd_sc[['umap']]@cell.embeddings,
-      FetchData(Upd_sc, c(gene, "ident")) %>%
+  gene.data = FetchData(Upd_sc, c("umap_1", "umap_2", gene, "ident")) %>%
         rename(all_of(dplyr_rename_lookup_gene))
-    )
   gene.max.intensity = quantile(gene.data$LogNormalize, 0.99)
-  gene.max.intensity = c(Mst87F=5, Act57B=4, soti=3, sunz=2, `Amy-d`=2, `scpr-B`=3)[gene] %>% replace(is.na(.), gene.max.intensity)
+  gene.max.intensity = c(Mst87F=5, Act57B=4, soti=3, sunz=2, `Amy-d`=2, `scpr-B`=3, ey=1.5)[gene] %>% replace(is.na(.), gene.max.intensity)
   gene.data %>% ggplot(
     aes(umap_1, umap_2, color=LogNormalize)
   ) + rasterize(geom_point(
-    shape = 20, size = 0.25
-  ), dpi=72) + scale_color_viridis_c(
+    shape = 20, size = 0.0005
+  ), dpi=300) + scale_color_viridis_c(
     begin = 0.2,
     limits = c(0, gene.max.intensity), oob = squish
   ) + scale_x_continuous(
     breaks=c(-10,0,10)
   ) + scale_y_continuous(breaks=c(-10,0,5)) + theme_cowplot(
-    font_size = 14 * 4,
-    line_size = 0.5 * 4
+    font_size = 14,
+    line_size = 0.5
   ) + labs(
     tag=gene
   ) + theme(

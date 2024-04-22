@@ -564,7 +564,10 @@ list(
           "E(spl)m3-HLH",
           "Amy-d",
           "scpr-B",
-          "wb"
+          "wb",
+          "Act5C",
+          "ey",
+          "eya"
         ) %>%
           mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
           rowwise %>%
@@ -572,11 +575,10 @@ list(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
             figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
-            width = 6*4,
-            height = 4*4
+            width = 6,
+            height = 4
           ) %>%
-          subset(select=c(name, figure, width, height)),
-        dpi=30
+          subset(select=c(name, figure, width, height))
       )
     ),
     tar_target(
@@ -596,11 +598,10 @@ list(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
             figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
-            width = 6*4,
-            height = 4*4
+            width = 6,
+            height = 4
           ) %>%
-          subset(select=c(name, figure, width, height)),
-        dpi=30
+          subset(select=c(name, figure, width, height))
       )
     ),
     tar_target(
@@ -618,11 +619,10 @@ list(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
             figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
-            width = 6*4,
-            height = 4*4
+            width = 6,
+            height = 4
           ) %>%
-          subset(select=c(name, figure, width, height)),
-        dpi=30
+          subset(select=c(name, figure, width, height))
       )
     ),
     tar_target(
@@ -641,8 +641,8 @@ list(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
             figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
-            width = 6*4,
-            height = 4*4
+            width = 6,
+            height = 4
           ) %>%
           subset(select=c(name, figure, width, height))
       )
