@@ -595,3 +595,98 @@ write_Upd_sc_cell_cycle_phases = function(Upd_sc, cell_cycle_drosophila, metafea
       simplify = FALSE
     )
 }
+
+plot_genes_on_chrs <- function(
+  regression_table,
+  coef,
+  assay.data.sc,
+  do_smooth=FALSE
+) {
+  assay.data.sc <- assay.data.sc %>%
+    read.csv(row.names = 1) %>%
+    subset(
+      rownames(.) %in% rownames(regression_table)
+      & chr %in% names(chr.lengths)
+    ) %>%
+    mutate(
+      pos = start + c(
+        `2L`=0, `2R`=chr.lengths["2L"], `3L`=0, `3R`=chr.lengths["3L"],
+        `4`=0, `X`=0, `Y`=0
+      )[chr],
+      chromosome = chr %>%
+        factor %>%
+        recode(
+          `2L`="2", `2R`="2", `3L`="3", `3R`="3"
+        )
+    ) %>%
+    arrange(chromosome, pos)
+  print_data <- cbind(
+    assay.data.sc,
+    log2FC = regression_table[rownames(assay.data.sc), coef] / log(2)
+  )
+  print_data$log2FC <- print_data$log2FC %>%
+    split(print_data$chromosome) %>%
+    sapply(\(v) rollmean(v, pmin(10, length(v) * 0.1), c("extend", "extend", "extend"))) %>%
+    do.call(c, .)
+  ggplot(
+    print_data,
+    aes(pos, log2FC, group=chromosome)
+  ) + facet_grid(
+    . ~ chromosome,
+    scales = "free_x", space = "free_x"
+  ) + geom_line(
+    data = cross_join(
+      data.frame(pos = c(-Inf, Inf), log2FC = 0),
+      data.frame(chromosome = levels(print_data$chromosome))
+    ),
+    color = "red"
+  ) + (if (do_smooth) geom_smooth(method="loess") else geom_line()) + coord_cartesian(
+    NULL, c(-1.25, 1.25), expand=F
+  ) + scale_x_continuous(
+    labels = NULL,
+    breaks = c(1, seq(2000000, 50000000, by=2000000)),
+    minor_breaks = seq(1000000, 51000000, by=2000000)
+  )
+}
+
+plot_chr_ratio_on_clusters <- function(Upd_sc) {
+  X_genes <- (Upd_sc[["RNA"]]@meta.data$chr == "X") %>%
+    replace_na(0) %>%
+    `/`(sum(.))
+  AA_genes <- (Upd_sc[["RNA"]]@meta.data$chr %in% c("2L", "2R", "3L", "3R", "4")) %>%
+    replace_na(0) %>%
+    `/`(sum(.))
+  feature_matrix <- t(GetAssayData(Upd_sc, assay = "RNA", layer = "counts"))
+  Upd_sc$X_AA <- (
+    feature_matrix %*% X_genes
+    /
+    feature_matrix %*% AA_genes
+  ) %>%
+    as.data.frame %>%
+    rownames_to_column %>%
+    deframe
+  ggplot(
+    FetchData(Upd_sc, c("ident", "X_AA", "batch")),
+    aes(ident, X_AA)
+  ) + geom_segment(
+    aes(xend = xend, yend = yend),
+    data.frame(ident = -Inf, xend = Inf, X_AA = 1, yend = 1),
+    linetype = "dashed"
+  ) + geom_boxplot(
+    aes(fill = ident), outlier.shape=NA
+  ) + scale_fill_manual(
+    values = cluster_colors, guide = NULL
+  ) + theme_bw() + theme(
+    aspect.ratio = 4/3,
+    axis.text.x = element_text(size = 10),
+    axis.text.y = element_text(size = 12)
+  ) + coord_cartesian(
+    NULL,
+    c(0.45, 1.85)
+  ) + scale_y_continuous(
+    breaks = c(0.5, 1, 1.5)
+  ) + labs(
+    title = "X ratio per cell: avg_X(Gene UMI) / avg_AA(Gene UMI)",
+    x = NULL, y = NULL
+  )
+}
