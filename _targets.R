@@ -519,6 +519,10 @@ list(
   ),
   tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
   tar_target(Upd_model_matrix, build_model_matrix(FetchData(Upd_sc, c("ident", "batch")))),
+  tar_target(
+    shuffle_feature_plot,
+    sample(Cells(Upd_sc))
+  ),
   tar_map(
     tibble(extension = c(".pdf", ".png")),
     tar_target(
@@ -574,12 +578,13 @@ list(
           mutate(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
-            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
-            width = 6,
-            height = 4
+            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene, shuffle_feature_plot) + labs(tag = gene_short_name)),
+            width = 3,
+            height = 2
           ) %>%
           subset(select=c(name, figure, width, height))
-      )
+      ),
+      format = "file"
     ),
     tar_target(
       sc_genes_histone_mod,
@@ -597,12 +602,13 @@ list(
           mutate(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
-            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
-            width = 6,
-            height = 4
+            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene, shuffle_feature_plot) + labs(tag = gene_short_name)),
+            width = 3,
+            height = 2
           ) %>%
           subset(select=c(name, figure, width, height))
-      )
+      ),
+      format = "file"
     ),
     tar_target(
       sc_genes_remodeling,
@@ -618,12 +624,13 @@ list(
           mutate(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
-            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
-            width = 6,
-            height = 4
+            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene, shuffle_feature_plot) + labs(tag = gene_short_name)),
+            width = 3,
+            height = 2
           ) %>%
           subset(select=c(name, figure, width, height))
-      )
+      ),
+      format = "file"
     ),
     tar_target(
       sc_genes_replication,
@@ -640,12 +647,13 @@ list(
           mutate(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
-            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene) + labs(tag = gene_short_name)),
-            width = 6,
-            height = 4
+            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene, shuffle_feature_plot) + labs(tag = gene_short_name)),
+            width = 3,
+            height = 2
           ) %>%
           subset(select=c(name, figure, width, height))
-      )
+      ),
+      format = "file"
     )
   ),
   tar_target(
