@@ -87,8 +87,8 @@ Upd_sc_feature_plot <- function(Upd_sc, gene, cells) {
     aes(umap_1, umap_2, color=LogNormalize)
   ) + rasterize(geom_point(
     # Scale point because we cut the print size in half for the graphic
-    shape = 20, size = 0.75 * 0.5, stroke = NA
-  ), dpi=450) + scale_color_viridis_c(
+    shape = 20, size = 0.5 * 0.5, stroke = NA
+  ), dpi=600) + scale_color_viridis_c(
     begin = 0.2,
     limits = c(0, gene.max.intensity), oob = squish
   ) + scale_x_continuous(

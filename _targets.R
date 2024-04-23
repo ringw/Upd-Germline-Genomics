@@ -582,7 +582,8 @@ list(
             width = 3,
             height = 2
           ) %>%
-          subset(select=c(name, figure, width, height))
+          subset(select=c(name, figure, width, height)),
+        dpi = 480
       ),
       format = "file"
     ),
@@ -606,7 +607,8 @@ list(
             width = 3,
             height = 2
           ) %>%
-          subset(select=c(name, figure, width, height))
+          subset(select=c(name, figure, width, height)),
+        dpi = 480
       ),
       format = "file"
     ),
@@ -628,7 +630,8 @@ list(
             width = 3,
             height = 2
           ) %>%
-          subset(select=c(name, figure, width, height))
+          subset(select=c(name, figure, width, height)),
+        dpi = 480
       ),
       format = "file"
     ),
@@ -651,7 +654,8 @@ list(
             width = 3,
             height = 2
           ) %>%
-          subset(select=c(name, figure, width, height))
+          subset(select=c(name, figure, width, height)),
+        dpi = 480
       ),
       format = "file"
     )
