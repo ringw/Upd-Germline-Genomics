@@ -775,8 +775,11 @@ list(
   tar_target(
     supplemental_gene_list,
     c(
-      "Act5C", "Act42A", "AGO3", "vas", "tj", "zfh1", "lncRNA:roX1",
-      "lncRNA:roX2", "soti", "w-cup", "Act57B", "Mlp60A", "lncRNA:Hsromega"
+      "Act5C", "alphaTub84B", "AGO3", "vas", "tj", "zfh1",
+      "soti", "w-cup",
+      "lncRNA:roX2",
+      "wb",
+      "Act57B"
     )
   ),
   tar_target(
@@ -790,9 +793,9 @@ list(
     sce.clusters,
     names = cluster,
     tar_target(
-      supplemental_cluster_fpkm,
-      gene_cluster_fpkm(
-        Upd_fpkm,
+      supplemental_cluster_cpm,
+      gene_cluster_cpm(
+        Upd_cpm,
         list(nos.1=nos.1, nos.2=nos.2, tj.1=tj.1, tj.2=tj.2),
         cluster,
         metadata
@@ -801,12 +804,13 @@ list(
   ),
   tar_target(
     supplemental_cluster_dot_plot_figure,
-    dot_plot_fpkm(
+    dot_plot_cpm(
       list(
-        GSC=supplemental_cluster_fpkm_germline,
-        CySC=supplemental_cluster_fpkm_somatic,
-        `other(germ)`=supplemental_cluster_fpkm_spermatocyte,
-        mus=supplemental_cluster_fpkm_muscle
+        GSC=supplemental_cluster_cpm_germline,
+        CySC=supplemental_cluster_cpm_somatic,
+        `other(germ)`=supplemental_cluster_cpm_spermatocyte,
+        `other(soma)`=supplemental_cluster_cpm_somaticprecursor,
+        mus=supplemental_cluster_cpm_muscle
       ),
       supplemental_gene_list,
       oob_squish=TRUE

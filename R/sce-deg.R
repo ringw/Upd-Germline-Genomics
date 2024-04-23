@@ -502,7 +502,7 @@ load_flybase_bed <- function(bed_path) {
     subset(chr %in% names(chr.lengths))
 }
 
-dot_plot_fpkm <- function(genotypes, gene_list, logfpkm_min=0, logfpkm_max=3, oob_squish=FALSE) {
+dot_plot_cpm <- function(genotypes, gene_list, logcpm_min=0, logcpm_max=3, oob_squish=FALSE) {
   data <- genotypes %>%
     sapply(\(df) df[gene_list, ] %>% rownames_to_column("gene"), simplify = FALSE) %>%
     bind_rows(.id = "genotype")
@@ -511,21 +511,21 @@ dot_plot_fpkm <- function(genotypes, gene_list, logfpkm_min=0, logfpkm_max=3, oo
     fct_relabel(\(v) v %>% str_replace('lncRNA:', '') %>% str_replace('Hsromega', 'Hsr\u03C9'))
   data$genotype <- data$genotype %>% factor(levels = names(genotypes))
   g <- data %>% ggplot(
-    aes(x = genotype, y = gene, size = percent_expressed, color = log(fpkm)/log(10))
+    aes(x = genotype, y = gene, size = percent_expressed, color = log(cpm)/log(10))
   ) + geom_point()
   if (oob_squish)
     g <- g + scale_color_gradient(
-      limits = c(logfpkm_min, logfpkm_max),
+      limits = c(logcpm_min, logcpm_max),
       oob = squish
     )
   else
     g <- g + scale_color_gradient(
-      limits = c(logfpkm_min, logfpkm_max)
+      limits = c(logcpm_min, logcpm_max)
     )
   g + scale_y_discrete(limits=rev) + scale_size_continuous(
     labels=percent, limits=c(0.01,0.99), range=c(1, 10)
   ) + labs(
-    x = NULL, y = NULL, color = bquote(log[10]*"(FPKM)"), size = "expression"
+    x = NULL, y = NULL, color = bquote(log[10]*"(CPM)"), size = "expression"
   ) + theme_cowplot()
 }
 

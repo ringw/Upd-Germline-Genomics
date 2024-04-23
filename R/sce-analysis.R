@@ -205,25 +205,28 @@ gene_pseudobulk_cpm <- function(tx_files, seurats, seurat_names, gtf_path, metad
   )
 }
 
-gene_cluster_fpkm <- function(Upd_fpkm, seurats, ident.quantify, metadata_path) {
+gene_cluster_cpm <- function(Upd_cpm, seurats, ident.quantify, metadata_path) {
   metadata <- read.csv(metadata_path, row.names = 1)
+  percent_expressed <- enframe(seurats) %>%
+    rowwise %>%
+    summarise(
+      gene_percents = subset(
+        value,
+        cells = metadata %>%
+          subset(batch == name & ident == ident.quantify & nCount_RNA_filter == "nCount_RNA_pass") %>%
+          rownames
+      ) %>%
+        GetAssayData %>%
+        `!=`(0) %>%
+        rowMeans %>%
+        list
+    ) %>%
+    pull(1) %>%
+    simplify2array %>%
+    rowMeans
   data.frame(
-    fpkm = Upd_fpkm[rownames(seurats[[1]]), ident.quantify],
-    percent_expressed = rowMeans(
-      seurats %>%
-        mapply(
-          \(seur, n) seur[['RNA']]@layers$counts[
-            ,
-            metadata %>%
-              subset(batch == n & ident == ident.quantify & nCount_RNA_filter == "nCount_RNA_pass") %>%
-              rownames
-          ] %>%
-            `!=`(0) %>%
-            rowMeans,
-          .,
-          names(.))
-    ),
-    row.names = rownames(seur[['RNA']])
+    cpm = Upd_cpm[rownames(seurats[[1]]), ident.quantify],
+    percent_expressed
   )
 }
 
