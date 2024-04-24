@@ -540,8 +540,23 @@ list(
           "RNAseq-UMAP-Ident", Upd_sc_plot_idents(Upd_sc), 6, 4,
           "RNAseq-UMAP-Germline-Somatic",
           Upd_sc %>% Upd_sc_plot_idents %>% Upd_sc_plot_subset, 6, 3,
-          "RNAseq-Quantification-Quarters",
-          fpkm_quarter_density(Upd_fpkm),
+          "RNAseq-Quantification-Quarters-CPM",
+          fpkm_quarter_density(log(Upd_cpm) / log(10), ylim = c(-3.75, 5)),
+          4, 4,
+          "RNAseq-Quantification-Quarters-SCT",
+          fpkm_quarter_density(
+            with(
+              list(
+                sct = cbind(
+                  germline = sctransform_quantile$germline[, "90%"],
+                  somatic = sctransform_quantile$somatic[, "90%"]
+                )
+              ),
+              sct %>% subset(rowAlls(abs(.) >= 0.01))
+            ),
+            y_label = bquote(Q["90%"]*"(SCT)"),
+            ylim = c(-0.5, 5)
+          ),
           4, 4
         )
       ),

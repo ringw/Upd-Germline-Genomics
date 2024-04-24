@@ -529,10 +529,11 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
   )
 }
 
-fpkm_quarter_density <- function(Upd_fpkm, clusters = c('germline', 'somatic')) {
-  Upd_fpkm <- Upd_fpkm %>% subset(rowAlls((. > 0) %>% replace(is.na(.), FALSE)))
-  names(dimnames(Upd_fpkm)) <- c('gene', 'cluster')
-  log_fpkm <- log(Upd_fpkm) / log(10)
+fpkm_quarter_density <- function(
+  log_fpkm, ylim = c(-5, NA), y_label = bquote(log[10]*"(CPM)"), clusters = c('germline', 'somatic')
+) {
+  log_fpkm <- log_fpkm %>% subset(rowAlls(is.finite(.)))
+  names(dimnames(log_fpkm)) <- c('gene', 'cluster')
   density_data <- apply(
     log_fpkm,
     2,
@@ -564,9 +565,9 @@ fpkm_quarter_density <- function(Upd_fpkm, clusters = c('germline', 'somatic')) 
     ) + rasterise(geom_tile(), dpi=240) + scale_fill_manual(
       values = sc_quartile_colors %>% setNames(NULL) %>% rev
     ) + coord_cartesian(
-      NULL, c(-5,NA)
+      NULL, ylim
     ) + theme_bw() + labs(
-      x = 'Cluster', y = bquote(log[10]*"(FPKM)")
+      x = 'Cluster', y = y_label
     )
 }
 
