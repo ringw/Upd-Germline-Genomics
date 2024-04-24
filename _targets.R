@@ -268,7 +268,7 @@ repli.samples <- repli.samples %>%
 
 sce_targets <- tar_map(
   unlist = FALSE,
-  sce.data,
+  sce.data %>% mutate(obj = rlang::syms(batch)),
   names = batch,
   tar_file(
     tenx_file, tenx_path,
@@ -305,6 +305,12 @@ sce_targets <- tar_map(
       quantify_quantiles(
         metadata, assay = "RNA", slot = "data", per_million = FALSE
       )
+  ),
+  # Plot every batch, for validation.
+  tar_target(
+    batch_umap,
+    run_umap_on_batch(obj, metadata),
+    packages = c(tar_option_get("packages"), "tidyr")
   ),
 
   # Consider that all of these targets can be replaced with one call to a new

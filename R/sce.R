@@ -436,3 +436,46 @@ celltype_Upd_sc = function(Upd_sc) {
   ) %>% fct_relevel('germline', 'somatic', 'spermatocyte', 'muscle', 'others')
   Upd_sc$celltype
 }
+
+run_umap_on_batch <- function(seurat, metadata) {
+  metadata <- metadata %>% read.csv(row.names = 1)
+  seurat <- seurat %>%
+    subset(
+      cells = Cells(seurat) %>% subset(
+        between(seurat$nCount_RNA, 2200, 7500)
+        & between(seurat$nFeature_RNA, 500, 2500)
+      )
+    )
+  Idents(seurat) <- metadata[Cells(seurat), "ident"] %>%
+    replace_na("doublet") %>%
+    factor(c(sce.clusters$cluster, "doublet"))
+  seurat <- seurat %>% RunUMAP(dims = 1:25)
+  DefaultAssay(seurat) <- "RNA"
+  seurat <- seurat %>% NormalizeData
+  cols_to_fetch <- c("ident", "umap_1", "umap_2", "tj", "vas", "H3-GFP")
+  data <- FetchData(seurat, cols_to_fetch)
+  # Flip UMAP. We want germline in -x direction and muscle in -y direction.
+  if (order(data %>% subset(ident == "germline", select=c(umap_1, umap_2)) %>% summarise_all(~ abs(mean(.))) %>% unlist)[1] != 2) {
+    seurat[["umap"]]@cell.embeddings <- seurat[["umap"]]@cell.embeddings %*% (
+      matrix(
+        c(0, 1, 1, 0),
+        nrow = 2,
+        dimnames = rep(list(colnames(seurat[["umap"]]@cell.embeddings)), 2)
+      )
+    )
+  }
+  data <- FetchData(seurat, cols_to_fetch)
+  seurat[["umap"]]@cell.embeddings <- seurat[["umap"]]@cell.embeddings %*% (
+    matrix(
+      c(
+        data %>% subset(ident == "germline") %>% with(-umap_1) %>% mean %>% sign,
+        0,
+        0,
+        data %>% subset(ident == "muscle") %>% with(-umap_2) %>% mean %>% sign
+      ),
+      nrow = 2,
+      dimnames = rep(list(colnames(seurat[["umap"]]@cell.embeddings)), 2)
+    )
+  )
+  FetchData(seurat, cols_to_fetch)
+}
