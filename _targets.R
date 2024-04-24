@@ -744,30 +744,6 @@ list(
     supplemental_genes,
     "tj,vas" %>% strsplit(",") %>% unlist
   ),
-  tar_map(
-    tribble(
-      ~name, ~batch_names, ~seurats,
-      "nos", list("nos.1", "nos.2"), rlang::syms(c("nos.1", "nos.2")),
-      "tj", list("tj.1", "tj.2"), rlang::syms(c("tj.1", "tj.2"))
-    ),
-    names = name,
-    tar_target(
-      supplemental_bulk_cpm,
-      gene_pseudobulk_cpm(
-        paste0(
-          "scRNA-seq-Regression/pseudobulk_",
-          name,
-          c(".1", ".2"),
-          "_filtered.txt"
-        ),
-        seurats,
-        unlist(batch_names),
-        flybase.gtf,
-        metadata,
-        assay.data.sc
-      )
-    )
-  ),
   tar_target(
     supplemental_bulk_cpm,
     gene_pseudobulk_cpm(
@@ -803,13 +779,6 @@ list(
       "Act57B"
     )
   ),
-  tar_target(
-    supplemental_bulk_figure,
-    dot_plot_fpkm(
-      list(Nos=supplemental_bulk_cpm_nos, tj=supplemental_bulk_cpm_tj),
-      supplemental_gene_list
-    )
-  ),
   tar_map(
     sce.clusters,
     names = cluster,
@@ -834,12 +803,12 @@ list(
         mus=supplemental_cluster_cpm_muscle
       ),
       supplemental_gene_list,
-      oob_squish=TRUE
+      logcpm_max=3.55
     )
   ),
   tar_target(
     supplemental_elbow_figure,
-    data.frame(stdev = Upd_sc[['pca.subset']]@stdev, x = 1:50) %>%
+    data.frame(stdev = Upd_sc[['pcasubset']]@stdev, x = 1:50) %>%
       head(10) %>%
       ggplot(aes(x, stdev^2))
       + geom_point(color = "#06470c", size = 3)
