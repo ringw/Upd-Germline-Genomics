@@ -903,10 +903,27 @@ list(
         "figure/Integrated-scRNAseq", extension,
         tribble(
           ~name, ~figure, ~width, ~height,
-          "RNAseq-Genotype-Bulk-Dots", supplemental_bulk_figure, 4, 9,
-          "RNAseq-Integrated-Cluster-Dots", supplemental_cluster_dot_plot_figure, 6, 9,
+          "RNAseq-Integrated-Cluster-Dots", supplemental_cluster_dot_plot_figure, 6, 7.5,
           "RNAseq-Validation-Elbow", supplemental_elbow_figure, 5, 2.5,
-          "RNAseq-SCT-Gene-List-Venn-Area-Blank", sct_gene_venn, 4, 3
+          "RNAseq-SCT-Gene-List-Venn-Area-Blank", sct_gene_venn, 4, 3,
+          "RNAseq-UMAP-Genotype",
+          Upd_sc %>%
+            AddMetaData(recode(Upd_sc$batch, nos.1="nos", nos.2="nos", tj.1="tj", tj.2="tj"), "genotype") %>%
+            Upd_sc_group_plot("genotype", shuffle_feature_plot)
+          + scale_color_manual(
+            values = c(
+              nos="#afd34d",
+              tj="#b85dd4"
+            )
+          ),
+          3, 2,
+          "RNAseq-Batch-UMAP-Doublets",
+          plot_multiple_umap_data(
+            list(nos.1=batch_umap_nos.1, nos.2=batch_umap_nos.2, tj.1=batch_umap_tj.1, tj.2=batch_umap_tj.2) %>%
+              bind_rows(.id = "batch")
+          ) + theme(aspect.ratio = 1),
+          6,
+          6
         )
       ),
       format = "file"

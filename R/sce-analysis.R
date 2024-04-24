@@ -104,6 +104,29 @@ Upd_sc_feature_plot <- function(Upd_sc, gene, cells) {
   )
 }
 
+Upd_sc_group_plot <- function(Upd_sc, group.by, cells) {
+  dplyr_rename_lookup_gene = setNames("group", group.by)
+  gene.data = FetchData(Upd_sc, c("umap_1", "umap_2", group.by, "ident")) %>%
+    rename(all_of(dplyr_rename_lookup_gene))
+  gene.data <- gene.data[cells, ]
+  gene.data %>% ggplot(
+    aes(umap_1, umap_2, color=group)
+  ) + geom_point(
+    # Scale point because we cut the print size in half for the graphic
+    shape = 20, size = 0.5 * 0.5, stroke = NA
+  ) + scale_x_continuous(
+    breaks=c(-10,0,10)
+  ) + scale_y_continuous(breaks=c(-10,0,5)) + theme_cowplot(
+    font_size = 14 * 0.5,
+    line_size = 0.5 * 0.5
+  ) + theme(
+    plot.tag.position = c(0.14, 0.94),
+    aspect.ratio = 0.75
+  ) + guides(
+    color = guide_legend(override.aes = list(size = 2))
+  )
+}
+
 # Single-cell dim reduc figure generator. Returns list of filenames.
 Upd_sc_figures = function(figures_dir, Upd_sc) {
   Upd_sc = Upd_sc %>% NormalizeData
@@ -265,7 +288,7 @@ load_cell_cycle_score_drosophila <- function(cell_cycle_drosophila_path, metafea
 plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
   Upd_sc = Upd_sc %>% NormalizeData
   Upd_sc = Upd_sc %>% CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
-  Upd_subset = Upd_sc[, !is.na(Upd_sc[['pca.subset']]@cell.embeddings[,1])]
+  Upd_subset = Upd_sc[, !is.na(Upd_sc[['pcasubset']]@cell.embeddings[,1])]
 
   meta.data = cbind(
     Upd_subset@meta.data,
@@ -286,7 +309,7 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
       manova(
         pca ~ gene,
         list(
-          pca = Upd_subset[['pca.subset']]@cell.embeddings[,1:5],
+          pca = Upd_subset[['pcasubset']]@cell.embeddings[,1:5],
           gene = append(
             list(
               pct.mito=Upd_subset$pct.mito,
@@ -307,29 +330,29 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
       manova(
         pca ~ ident,
         list(
-          pca = Upd_subset[['pca.subset']]@cell.embeddings[,1:5],
+          pca = Upd_subset[['pcasubset']]@cell.embeddings[,1:5],
           ident=Idents(Upd_subset)
         )
       )
     ),
     germline.var = colVars(
-      Upd_subset[['pca.subset']]@cell.embeddings[,1:5]
+      Upd_subset[['pcasubset']]@cell.embeddings[,1:5]
       %>% subset(Idents(Upd_subset) == 'germline')
     ) * mean(
       Idents(Upd_subset) == 'germline'
-    ) / colVars(Upd_subset[['pca.subset']]@cell.embeddings[,1:5]),
+    ) / colVars(Upd_subset[['pcasubset']]@cell.embeddings[,1:5]),
     somatic.var = colVars(
-      Upd_subset[['pca.subset']]@cell.embeddings[,1:5]
+      Upd_subset[['pcasubset']]@cell.embeddings[,1:5]
       %>% subset(Idents(Upd_subset) == 'somatic')
     ) * mean(
       Idents(Upd_subset) == 'somatic'
-    ) / colVars(Upd_subset[['pca.subset']]@cell.embeddings[,1:5]),
-    germline.phase.var = mn.expl(manova(pca ~ Phase, list(pca = Upd_subset[["pca.subset"]]@cell.embeddings[, 1:5], Phase = model.matrix(~ Phase, Upd_subset@meta.data)), subset = Idents(Upd_subset) == "germline"))
+    ) / colVars(Upd_subset[['pcasubset']]@cell.embeddings[,1:5]),
+    germline.phase.var = mn.expl(manova(pca ~ Phase, list(pca = Upd_subset[["pcasubset"]]@cell.embeddings[, 1:5], Phase = model.matrix(~ Phase, Upd_subset@meta.data)), subset = Idents(Upd_subset) == "germline"))
     * mean(Idents(Upd_subset) == 'germline'),
-    somatic.phase.var = mn.expl(manova(pca ~ Phase, list(pca = Upd_subset[["pca.subset"]]@cell.embeddings[, 1:5], Phase = model.matrix(~ Phase, Upd_subset@meta.data)), subset = Idents(Upd_subset) == "germline"))
+    somatic.phase.var = mn.expl(manova(pca ~ Phase, list(pca = Upd_subset[["pcasubset"]]@cell.embeddings[, 1:5], Phase = model.matrix(~ Phase, Upd_subset@meta.data)), subset = Idents(Upd_subset) == "germline"))
     * mean(Idents(Upd_subset) == 'somatic')
   ) %>% as.data.frame
-  DimPlot(Upd_subset, red='pca.subset')
+  DimPlot(Upd_subset, red='pcasubset')
 
   bar.data = expl.stats %>% with(
     data.frame(
@@ -436,13 +459,13 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
   )
 
   # "somatic" level comes after "germline" level, want this sign to be 1
-  Upd_subset[['pca.subset']]@cell.embeddings[,1] = (
-    Upd_subset[['pca.subset']]@cell.embeddings[,1]
+  Upd_subset[['pcasubset']]@cell.embeddings[,1] = (
+    Upd_subset[['pcasubset']]@cell.embeddings[,1]
     * sign(
       coef(
         lm(
           idents ~ pcasubset_1,
-          cbind(data.frame(idents=Idents(Upd_subset) == "somatic"), Upd_subset[['pca.subset']]@cell.embeddings[,'pcasubset_1',drop=F])
+          cbind(data.frame(idents=Idents(Upd_subset) == "somatic"), Upd_subset[['pcasubset']]@cell.embeddings[,'pcasubset_1',drop=F])
         )
       )['pcasubset_1']
     )
@@ -456,7 +479,7 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
     pc_expl_plot('PC_1')
     + pairs_borders,
     # Top center.
-    DimPlot(Upd_subset, c(2,1), red='pca.subset', com=F)[[1]] %>%
+    DimPlot(Upd_subset, c(2,1), red='pcasubset', com=F)[[1]] %>%
       rasterise(dpi = 160)
     + scale_color_manual(values=unlist(cluster_colors[1:2]))
     + scale_x_continuous(name = NULL, labels = NULL)
@@ -464,7 +487,7 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
     + theme(plot.margin = margin(l = 70, r = 70, t = 5.5, b = 5.5))
     + pairs_borders,
     # Top right.
-    DimPlot(Upd_subset, c(3,1), red='pca.subset', com=F)[[1]] %>%
+    DimPlot(Upd_subset, c(3,1), red='pcasubset', com=F)[[1]] %>%
       rasterise(dpi = 160)
     + scale_color_manual(values=unlist(cluster_colors[1:2]))
     + scale_x_continuous(name = NULL, labels = NULL)
@@ -473,25 +496,25 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
     + pairs_borders,
     # Center left: a lot of features that we need to explain using PC 1 and 2.
     plot_grid(
-      FeaturePlot(Upd_subset, 'AGO3', red='pca.subset', pt.size = 1e-3, com=F)[[1]] %>%
+      FeaturePlot(Upd_subset, 'AGO3', red='pcasubset', pt.size = 1e-3, com=F)[[1]] %>%
         rasterise(dpi = 160)
       + labs(x = NULL, y = NULL)
       + guides(color = guide_colorbar(barwidth = 0.5, barheight = 3))
       + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
       + scale_color_viridis_c(begin=0.2, breaks=pretty_breaks(3)),
-      FeaturePlot(Upd_subset, 'lncRNA:roX2', red='pca.subset', pt.size = 1e-3, com=F)[[1]] %>%
+      FeaturePlot(Upd_subset, 'lncRNA:roX2', red='pcasubset', pt.size = 1e-3, com=F)[[1]] %>%
         rasterise(dpi = 160)
       + labs(x = NULL, y = NULL, title = "roX2")
       + guides(color = guide_colorbar(barwidth = 0.5, barheight = 3))
       + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
       + scale_color_viridis_c(begin=0.2, breaks=pretty_breaks(3)),
-      FeaturePlot(Upd_subset, 'lncRNA:Hsromega', red='pca.subset', pt.size = 1e-3, com=F)[[1]] %>%
+      FeaturePlot(Upd_subset, 'lncRNA:Hsromega', red='pcasubset', pt.size = 1e-3, com=F)[[1]] %>%
         rasterise(dpi = 160)
       + labs(x = NULL, y = NULL, title = "Hsr\u03C9")
       + guides(color = guide_colorbar(barwidth = 0.5, barheight = 3))
       + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
       + scale_color_viridis_c(begin=0.2, breaks=pretty_breaks(2)),
-      DimPlot(Upd_subset, gr='Phase', red='pca.subset', pt.size = 1e-3, com=F)[[1]] %>%
+      DimPlot(Upd_subset, gr='Phase', red='pcasubset', pt.size = 1e-3, com=F)[[1]] %>%
         rasterise(dpi = 160)
       + scale_x_continuous(labels=NULL) + scale_y_continuous(labels=NULL)
       + labs(x = NULL, y = NULL)
@@ -501,7 +524,7 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
     pc_expl_plot('PC_2')
     + pairs_borders,
     # Center right: scatter plot.
-    DimPlot(Upd_subset, c(3,2), red='pca.subset', com=F)[[1]] %>%
+    DimPlot(Upd_subset, c(3,2), red='pcasubset', com=F)[[1]] %>%
       rasterise(dpi = 160)
     + scale_color_manual(values=unlist(cluster_colors[1:2]))
     + scale_x_continuous(name = NULL, labels = NULL)
@@ -509,14 +532,14 @@ plot_Upd_pca_components = function(Upd_sc, cell_cycle) {
     + theme(plot.margin = margin(l = 70, r = 70, t = 5.5, b = 5.5))
     + pairs_borders,
     # Bottom left: another PC 1-related feature (germline).
-    FeaturePlot(Upd_subset, 'vas', red='pca.subset', dim=c(1,3), com=F)[[1]] %>%
+    FeaturePlot(Upd_subset, 'vas', red='pcasubset', dim=c(1,3), com=F)[[1]] %>%
       rasterise(dpi = 160)
     + scale_color_viridis_c(begin=0.2)
     + scale_x_continuous(name = NULL, labels = NULL)
     + scale_y_continuous(name = NULL, labels = NULL)
     + pairs_borders,
     # Bottom center: A PC 3-related feature (unwanted cells in this subset).
-    FeaturePlot(Upd_subset, 'Mst84Da', red='pca.subset', dim=c(2,3), com=F)[[1]] %>%
+    FeaturePlot(Upd_subset, 'Mst84Da', red='pcasubset', dim=c(2,3), com=F)[[1]] %>%
       rasterise(dpi = 160)
     + scale_color_viridis_c(begin=0.2)
     + scale_x_continuous(name = NULL, labels = NULL)
@@ -589,11 +612,14 @@ write_Upd_sc_cell_cycle_phases = function(Upd_sc, cell_cycle_drosophila, metafea
         Upd_sc$Phase[Upd_sc$batch == n]
       ) %>% `/`(rowSums(.)) %>% round(3),
       simplify = F
-    )
+    ) %>%
+      # Prettify the sce.data batch names.
+      setNames(str_extract(sce.data$tenx_path, "/([^/]+)/", group=1))
   ) %>%
     sapply(
       # table to data frame of the table's entries
-      \(t) as.data.frame(matrix(t, nrow=nrow(t), ncol=ncol(t), dimnames=dimnames(t))),
+      \(t) as.data.frame(matrix(t, nrow=nrow(t), ncol=ncol(t), dimnames=dimnames(t))) %>%
+        rownames_to_column("cluster"),
       simplify = FALSE
     )
 }
@@ -690,5 +716,70 @@ plot_chr_ratio_on_clusters <- function(Upd_sc) {
   ) + labs(
     title = "X ratio per cell: avg_X(Gene UMI) / avg_AA(Gene UMI)",
     x = NULL, y = NULL
+  )
+}
+
+analyze_pcasubset_batch_effect <- function(Upd_sc) {
+  pcasubset <- Upd_sc[["pcasubset"]]@cell.embeddings
+  genotype <- recode(Upd_sc$batch, nos.1='nos', nos.2='nos', tj.1='tj', tj.2='tj')
+  batch_effect <- cbind(
+    nos_batch = as.numeric(Upd_sc$batch == "nos.1"),
+    tj_batch = as.numeric(Upd_sc$batch == "tj.1")
+  )
+  manova(pcasubset ~ 0 + genotype + batch_effect)
+}
+
+analyze_pcasubset_ident <- function(Upd_sc, cell_cycle_drosophila, assay.data.sc) {
+  pcasubset <- Upd_sc[["pcasubset"]]@cell.embeddings
+  ident <- Idents(Upd_sc)
+
+  Upd_sc = Upd_sc %>% NormalizeData
+  cell_cycle = load_cell_cycle_score_drosophila(cell_cycle_drosophila, assay.data.sc)
+  Upd_sc = Upd_sc %>% CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
+  Phase <- Upd_sc$Phase %>% factor(c("G1", "S", "G2M"))
+
+  manova(pcasubset ~ 0 + ident + Phase)
+}
+
+analyze_manova <- function(mn, term_names, ncol_mn) {
+  # Review the manova display of the terms, source code here:
+  # print(stats:::print.aov)
+  # The "effects" matrix is a change of basis of the dependent variable (in
+  # MANOVA, a matrix of response variables in the columns). The sum of
+  # squares of entries (rows) which correspond to model coefficients relating to
+  # the term of interest is the sum of squares explained.
+  cross_join(
+    data.frame(term = term_names),
+    data.frame(response = colnames(mn$effects)[seq(ncol_mn)])
+  ) %>%
+    rowwise %>%
+    mutate(
+      sse = sum(mn$effects[grepl(term, rownames(mn$effects)), response]^2),
+      ssr = sum(mn$fitted.values[, response]^2 + mn$residuals[, response]^2) - sse,
+      R2 = sse / (sse + ssr)
+    )
+}
+
+plot_multiple_umap_data <- function(data) {
+  ggplot(
+    data,
+    aes(umap_1, umap_2, color=ident)
+  ) + facet_wrap(
+    vars(batch),
+    nrow = 2,
+    scales = "free"
+  ) + rasterize(
+    geom_point(
+      shape = 20, size = 0.001
+    ),
+    dpi = 240,
+    scale = 0.5
+  ) + scale_color_manual(
+    values = c(unlist(cluster_colors), doublet="#cccccc"),
+    guide = guide_none()
+  ) + theme_cowplot() + theme(
+    # For facets with no labels indicating what the facet is.
+    strip.background = element_blank(),
+    strip.text.x = element_blank()
   )
 }

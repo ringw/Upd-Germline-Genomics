@@ -514,12 +514,14 @@ dot_plot_cpm <- function(genotypes, gene_list, logcpm_min=0, logcpm_max=3, oob_s
     aes(x = genotype, y = gene, size = percent_expressed, color = log(cpm)/log(10))
   ) + geom_point()
   if (oob_squish)
-    g <- g + scale_color_gradient(
+    g <- g + scale_color_viridis_c(
+      begin = 0.15,
       limits = c(logcpm_min, logcpm_max),
       oob = squish
     )
   else
-    g <- g + scale_color_gradient(
+    g <- g + scale_color_viridis_c(
+      begin = 0.15,
       limits = c(logcpm_min, logcpm_max)
     )
   g + scale_y_discrete(limits=rev) + scale_size_continuous(

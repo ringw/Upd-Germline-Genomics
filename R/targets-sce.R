@@ -75,5 +75,29 @@ targets.sce <- list(
       packages = c(tar_option_get("packages"), "tidyr"),
       format = "file"
     )
+  ),
+  tar_target(
+    manova_batch_effect,
+    analyze_pcasubset_batch_effect(Upd_sc)
+  ),
+  tar_target(
+    manova_ident,
+    analyze_pcasubset_ident(Upd_sc, cell_cycle_drosophila, assay.data.sc)
+  ),
+  tar_target(
+    manova_gt,
+    gt_group(
+      manova_batch_effect %>%
+        analyze_manova(c("genotype", "batch_effect"), 3) %>%
+        dcast(response ~ term, value.var="R2") %>%
+        gt("response", cap="Batch R-squared") %>%
+        fmt_number(decimals = 2),
+      manova_ident %>%
+        analyze_manova(c("ident", "Phase"), 3) %>%
+        dcast(response ~ term, value.var="R2") %>%
+        gt("response", cap="Cell identity R-squared") %>%
+        fmt_number(decimals = 2)
+    ),
+    packages = c(tar_option_get("packages"), "gt")
   )
 )
