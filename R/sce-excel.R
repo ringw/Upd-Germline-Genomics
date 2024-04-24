@@ -12,6 +12,7 @@ publish_excel_results <- function(
   Upd_cpm_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
   Upd_isoform_exonic_length,
   sctransform_quantile, supplemental_bulk_pct_expressed, metafeatures, gtf_path,
+  batch_data,
   target_path
 ) {
   wb = createWorkbook()
@@ -41,6 +42,9 @@ publish_excel_results <- function(
   write_regression_table(wb, 'S-Cyte&Tid-Like Regression', 'log(cyte&tid/GSC)', baseMeanCPM, Upd_regression_tid, 3, flybase, excel_tables$orange)
   write_regression_table(wb, 'Somatic Precursor Regression', 'log(SomPre/CySC)', baseMeanCPM, Upd_regression_sompre, 4, flybase, 'TableStyleMedium13')
   write_regression_table(wb, 'Muscle Regression', 'log(mscl/CySC)', baseMeanCPM, Upd_regression_mscl, 5, flybase, excel_tables$red)
+
+  write_batch_idents(wb, "Cluster&Batch Statistics", batch_data)
+
   dir.create('scRNA-seq-Regression', showW=F)
   saveWorkbook(wb, target_path, overwrite = T)
   target_path
@@ -250,15 +254,48 @@ write_regression_table <- function(
                  tableStyle = table_style)
 }
 
-write_excel_tables_list <- function(lst, output_path) {
+write_batch_idents <- function(wb, title, batch_data) {
+  addWorksheet(wb, title)
+  # Add percent style for 5 of the columns.
+  addStyle(wb, title, createStyle(numFmt = "0%"), rows = 1:100, cols = 2:6, gridExpand=TRUE)
+  batch_data$batch <- batch_data$batch %>% factor(sce.data$batch)
+  batch_data$ident <- batch_data$ident %>% factor(c(sce.clusters$cluster, "doublet"))
+  tbl <- with(batch_data, table(batch, ident)) %>%
+    matrix(nrow = nrow(.), dimnames = dimnames(.)) %>%
+    as.data.frame
+  ncells <- with(
+    tbl,
+    germline + somatic + spermatocyte + somaticprecursor + muscle
+  )
+  nice_experiment_name <- str_extract(sce.data$tenx_path, "/([^/]+)/", group=1)
+  data_table <- tibble(
+    Sample = nice_experiment_name,
+    Germline = tbl$germline / ncells,
+    Somatic = tbl$somatic / ncells,
+    `Germline Differentiated` = tbl$spermatocyte / ncells,
+    `Somatic Differentiated` = tbl$somaticprecursor / ncells,
+    Muscle = tbl$muscle / ncells,
+    Cells = ncells,
+    `Doublets (Removed)` = tbl$doublet
+  )
+  data_table[2:6] <- data_table[2:6] %>% round(4)
+  writeDataTable(
+    wb,
+    title,
+    data_table,
+    startCol = 1, startRow = 1
+  )
+}
+
+write_excel_tables_list_percentages <- function(lst, output_path) {
   wb <- createWorkbook()
   for (n in names(lst)) {
     addWorksheet(wb, n)
+    addStyle(wb, n, createStyle(numFmt = "0%"), rows = seq(1+nrow(lst[[n]])), cols = seq(ncol(lst[[n]])), gridExpand=TRUE)
     writeDataTable(
       wb,
       n,
-      lst[[n]],
-      rowNames = TRUE
+      lst[[n]]
     )
   }
   saveWorkbook(wb, output_path, overwrite = TRUE)

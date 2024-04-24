@@ -863,14 +863,12 @@ list(
   ),
   tar_target(
     cell_cycle_scoring_excel,
-    {
-      filename <- "scRNA-seq-Regression/Cell-Cycle-Scoring.xlsx"
-      write_excel_tables_list(
-        write_Upd_sc_cell_cycle_phases(Upd_sc, cell_cycle_drosophila, assay.data.sc),
-        filename
-      )
-      filename
-    },
+    tibble(
+      filename = "scRNA-seq-Regression/Cell-Cycle-Scoring.xlsx",
+      do_write = write_Upd_sc_cell_cycle_phases(Upd_sc, cell_cycle_drosophila, assay.data.sc) %>%
+        write_excel_tables_list_percentages(filename)
+    ) %>%
+      pull(filename),
     format = "file"
   ),
   tar_target(
@@ -988,6 +986,8 @@ list(
       Upd_cpm_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
       Upd_isoform_exonic_length,
       sctransform_quantile, supplemental_bulk_cpm, assay.data.sc, flybase.gtf,
+      list(nos.1=batch_umap_nos.1, nos.2=batch_umap_nos.2, tj.1=batch_umap_tj.1, tj.2=batch_umap_tj.2) %>%
+        bind_rows(.id = "batch"),
       'scRNA-seq-Regression/Enriched-Genes.xlsx'
     ),
     format='file',
