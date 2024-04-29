@@ -508,7 +508,8 @@ dot_plot_cpm <- function(genotypes, gene_list, logcpm_min=0, logcpm_max=3, oob_s
     bind_rows(.id = "genotype")
   # Show gene in order of appearance in gene_list
   data$gene <- data$gene %>% factor(levels = unique(.)) %>%
-    fct_relabel(\(v) v %>% str_replace('lncRNA:', '') %>% str_replace('Hsromega', 'Hsr\u03C9'))
+    fct_relabel(\(v) v %>% str_replace('lncRNA:', '') %>% str_replace('Hsromega', 'Hsr\u03C9')) %>%
+    recode(alphaTub84B="\u03B1Tub84B")
   data$genotype <- data$genotype %>% factor(levels = names(genotypes))
   g <- data %>% ggplot(
     aes(x = genotype, y = gene, size = percent_expressed, color = log(cpm)/log(10))
@@ -525,10 +526,15 @@ dot_plot_cpm <- function(genotypes, gene_list, logcpm_min=0, logcpm_max=3, oob_s
       limits = c(logcpm_min, logcpm_max)
     )
   g + scale_y_discrete(limits=rev) + scale_size_continuous(
-    labels=percent, limits=c(0.01,0.99), range=c(1, 10)
+    labels=percent, limits=c(0.01,0.99), range=c(0.25, 4)
   ) + labs(
     x = NULL, y = NULL, color = bquote(log[10]*"(CPM)"), size = "expression"
-  ) + theme_cowplot()
+  ) + theme_cowplot() + theme(
+    legend.title = element_text(size = 8),
+    legend.text = element_text(size = 8),
+    axis.text = element_text(size = 8),
+    axis.text.x = element_text(angle = 45, vjust = 0.8, hjust = 0.8)
+  )
 }
 
 # Another cluster-gene quantification method: Take the quantile of interest for
