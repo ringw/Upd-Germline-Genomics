@@ -102,6 +102,29 @@ fit_glm <- function(Upd_sc, Upd_model_matrix, Upd_metadata) {
   Upd_glm
 }
 
+fit_glm_with_offset <- function(Upd_counts, Upd_offset, Upd_model_matrix, Upd_metadata) {
+  Upd_metadata <- Upd_metadata %>% read.csv(row.names = 1)
+  stopifnot(isTRUE(all.equal(rownames(Upd_metadata), colnames(Upd_counts))))
+  stopifnot(isTRUE(all.equal(rownames(Upd_metadata), colnames(Upd_offset))))
+  Upd_glm <- glm_gp(
+    Upd_counts,
+    Upd_model_matrix,
+    size_factor = Upd_metadata$size_factors,
+    offset = Upd_offset,
+    on_disk = F,
+    verbose = T
+  )
+  # Quite useful to keep the metadata in the GLM object.
+  colData(Upd_glm$data)[, colnames(Upd_metadata)] <- Upd_metadata
+  # We will often not use the Offset matrix at all. For fit_glm_with_offset,
+  # where the dense Offset matrix with an entry for each cell-gene pair is
+  # provided, that Offset matrix should be stored in its own target.
+  Upd_glm$Offset = NULL
+  # Mu is calculated from Offset using glmGamPoi:::calculate_mu.
+  Upd_glm$Mu = NULL
+  Upd_glm
+}
+
 apeglm_coef_table <- function(g, coef=2, test_mle=TRUE) {
   message('Construct dense matrices in memory for regression')
   g$Offset = matrix(

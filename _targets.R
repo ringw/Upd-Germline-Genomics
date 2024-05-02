@@ -73,19 +73,17 @@ options(clustermq.scheduler = "multiprocess")
 # in {targets}, and its configuration for your machine is below.
 # Install packages {{future}}, {{future.callr}}, and {{future.batchtools}} to allow use_targets() to configure tar_make_future() options.
 
+sce.data = tibble(
+  batch=c('nos.1','nos.2','tj.1','tj.2'),
+  capitalized=c('Nos','Nos','tj','tj'),
+  batch_num=c('1','2','1','2'),
+  dir_name=str_glue("scRNA-seq/{capitalized}-Upd_H3-GFP_Rep{batch_num}"),
+  tenx_path=str_glue("{dir_name}/outs/filtered_feature_bc_matrix"),
+  bam_path=str_glue("{dir_name}/outs/possorted_genome_bam.bam")
+)
+
 # Run the R scripts in the R/ folder with your custom functions:
 tar_source()
-
-sce.data = data.frame(
-  batch=c('nos.1','nos.2','tj.1','tj.2'),
-  tenx_path=paste0(
-    'scRNA-seq/',
-    c('Nos','Nos','tj','tj'),
-    '-Upd_H3-GFP_Rep',
-    c(1,2,1,2),
-    '/outs/filtered_feature_bc_matrix'
-  )
-)
 
 sce.clusters = data.frame(cluster = c('germline','somatic','spermatocyte','muscle'))
 sce.clusters <- tribble(
@@ -2268,6 +2266,7 @@ list(
   repli_targets,
 
   targets.flybase,
+  targets.quantification,
   targets.sce
 )
  
