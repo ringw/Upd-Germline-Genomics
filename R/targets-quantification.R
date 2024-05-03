@@ -119,5 +119,17 @@ targets.quantification <- list(
       Upd_model_matrix,
       metadata
     )
+  ),
+  tar_target(
+    Upd_count_transcripts,
+    right_join(
+      transcript.ids,
+      Upd_glm_transcripts$Beta %>%
+        tcrossprod(Upd_celltype_contrasts_with_batch_effect) %>%
+        exp %>%
+        as.data.frame %>%
+        rownames_to_column("tx"),
+      "tx"
+    )
   )
 )
