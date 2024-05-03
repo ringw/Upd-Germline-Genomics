@@ -23,13 +23,14 @@ read_tenx_barcoded_bam_exons <- function(bam) {
 
 read_transcript_ids <- function(assay_data, gtf_path) {
   assay_data <- assay_data %>% read.csv(row.names = 1)
+  # Use exons so that we can count length.
   gtf <- read.table(
     gtf_path,
     sep = '\t',
     col.names = c('chr', 'source', 'type', 'start', 'end', 'sc', 'strand', 'fr', 'annotation'),
     header = F,
     quote = ''
-  ) %>% subset(grepl('RNA', type)) # include "transcript" types in the reference
+  ) %>% subset(grepl('exon', type))
   gtf$flybase <- gtf$annotation %>% str_extract(
     'gene_id "([^"]+)"',
     group = 1
@@ -38,9 +39,12 @@ read_transcript_ids <- function(assay_data, gtf_path) {
     'transcript_id "([^"]+)"',
     group = 1
   )
+  gtf_transcripts <- gtf %>%
+    group_by(flybase, tx) %>%
+    summarize(exon_length = sum(abs(end - start) + 1), .groups = "drop")
   left_join(
     data.frame(flybase = assay_data$flybase %>% setdiff(c("", NA))),
-    gtf %>% subset(select=c(flybase, tx)),
+    gtf_transcripts,
     "flybase"
   )
 }
