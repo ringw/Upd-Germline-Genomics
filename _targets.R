@@ -10,6 +10,7 @@
 library(grDevices)
 library(magrittr)
 library(reshape2)
+library(stringr)
 library(targets)
 library(tarchetypes)
 library(tibble)
