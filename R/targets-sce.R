@@ -78,11 +78,13 @@ targets.sce <- list(
   ),
   tar_target(
     manova_batch_effect,
-    analyze_pcasubset_batch_effect(Upd_sc)
+    analyze_pcasubset_batch_effect(Upd_sc),
+    cue = tar_cue("never")
   ),
   tar_target(
     manova_ident,
-    analyze_pcasubset_ident(Upd_sc, cell_cycle_drosophila, assay.data.sc)
+    analyze_pcasubset_ident(Upd_sc, cell_cycle_drosophila, assay.data.sc),
+    cue = tar_cue("never")
   ),
   tar_target(
     manova_gt,
