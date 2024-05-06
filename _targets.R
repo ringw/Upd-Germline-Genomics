@@ -1891,7 +1891,8 @@ list(
         repli.coverage.contrasts[[contrast]],
         num_sorted_bases = 10000
       ),
-      format = "file"
+      format = "file",
+      cue = tar_cue("never")
     ),
     tar_target(
       repli.quarters,
