@@ -368,7 +368,7 @@ repli_targets <- tar_map(
   repli.samples,
   names = name,
   tar_file(
-    fastqc,
+    repli.fastqc,
     tibble(
       input_path = paste0("Upd_Tumor/Repli/", filename),
       output_dir = "repli/fastqc",
