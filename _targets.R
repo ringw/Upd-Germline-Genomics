@@ -861,6 +861,21 @@ list(
       sct_gene_lists
     )
   ),
+  tar_target(
+    cpm_gene_lists,
+    apply(
+      Upd_cpm[, c("germline", "somatic")],
+      2,
+      \(v) (v >= 7) %>% which %>% names,
+      simplify=FALSE
+    )
+  ),
+  tar_target(
+    cpm_gene_venn,
+    plot_gene_lists(
+      cpm_gene_lists
+    )
+  ),
   tar_map(
     tibble(extension = c(".pdf", ".png")),
     tar_target(
@@ -1991,10 +2006,27 @@ list(
           AllSomaticGenes = somatic,
           ExclusiveGermlineGenes = setdiff(germline, somatic),
           ExclusiveSomaticGenes = setdiff(somatic, germline),
-          AllGermlineOrSomaticGenes = union(germline, somatic)
+          AllGermlineOrSomaticGenes = union(germline, somatic),
+          OffGenes = rownames(read.csv(assay.data.sc, row.names=1)) %>% setdiff(germline) %>% setdiff(somatic)
         )
     )
   ),
+  tar_target(sct_OffGenes, sct_gene_lists_extended$OffGenes),
+  tar_target(
+    cpm_gene_lists_extended,
+    cpm_gene_lists %>%
+      with(
+        list(
+          AllGermlineGenes = germline,
+          AllSomaticGenes = somatic,
+          ExclusiveGermlineGenes = setdiff(germline, somatic),
+          ExclusiveSomaticGenes = setdiff(somatic, germline),
+          AllGermlineOrSomaticGenes = union(germline, somatic),
+          OffGenes = rownames(read.csv(assay.data.sc, row.names=1)) %>% setdiff(germline) %>% setdiff(somatic)
+        )
+    )
+  ),
+  tar_target(cpm_OffGenes, cpm_gene_lists_extended$OffGenes),
   tar_target(
     name = fpkm.chic.sct.plots_Germline,
     list(
@@ -2011,22 +2043,27 @@ list(
           experiment = "Germline",
           gene_list = names(sct_gene_lists_extended),
           tss_plot = chic_average_gene_list_profiles(
-            sct_gene_lists_extended[[1]],
+            cpm_gene_lists_extended[[1]],
             dirname,
       assay.data.sc,
             "Nos"
           ) %>%
             list,
           paneled_plot = chic_custom_gene_list_paneled_profile(
-            sct_gene_lists_extended[[1]],
+            cpm_gene_lists_extended[[1]],
+            cpm_OffGenes,
             dirname,
             assay.data.sc,
-            "Nos"
+            "Nos",
+            track_color = if (grepl("Germline", names(cpm_gene_lists_extended)))
+              chic_line_track_colors$germline
+            else if (grepl("Somatic", names(cpm_gene_lists_extended)))
+              chic_line_track_colors$somatic
           ) %>%
             list
         )
       ),
-    pattern = map(sct_gene_lists_extended)
+    pattern = map(cpm_gene_lists_extended)
   ),
   tar_target(
     name = fpkm.chic.sct.plots_Somatic,
@@ -2042,24 +2079,29 @@ list(
       with(
         tibble(
           experiment = "Somatic",
-          gene_list = names(sct_gene_lists_extended),
+          gene_list = names(cpm_gene_lists_extended),
           tss_plot = chic_average_gene_list_profiles(
-            sct_gene_lists_extended[[1]],
+            cpm_gene_lists_extended[[1]],
             dirname,
       assay.data.sc,
             "tj"
           ) %>%
             list,
           paneled_plot = chic_custom_gene_list_paneled_profile(
-            sct_gene_lists_extended[[1]],
+            cpm_gene_lists_extended[[1]],
+            cpm_OffGenes,
             dirname,
             assay.data.sc,
-            "tj"
+            "tj",
+            track_color = if (grepl("Germline", names(cpm_gene_lists_extended)))
+              chic_line_track_colors$germline
+            else if (grepl("Somatic", names(cpm_gene_lists_extended)))
+              chic_line_track_colors$somatic
           ) %>%
             list
         )
   ),
-    pattern = map(sct_gene_lists_extended)
+    pattern = map(cpm_gene_lists_extended)
   ),
 
   tar_map(

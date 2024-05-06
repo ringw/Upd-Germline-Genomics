@@ -1,3 +1,8 @@
+chic_line_track_colors <- list(
+  germline = "#4ddf60",
+  somatic = "#de31e4"
+)
+
 # Sorted BED to quartiles. For deepTools, we had sorted the BED from high-to-low
 # and now will construct a feature which is in reverse order.
 bed_flybase_quartile_factor <- function(bed_path, metafeatures_path, nquartiles=4) {
@@ -448,6 +453,7 @@ chic_quartile_gene_list_paneled_profiles <- function(
 
 chic_custom_gene_list_paneled_profile <- function(
   gene_list,
+  bg_gene_list,
   chic_path,
   metafeatures_path,
   chic_driver,
@@ -456,7 +462,8 @@ chic_custom_gene_list_paneled_profile <- function(
   tss_size = 1,
   # 2 kb long - by convention
   inter_size = 2,
-  tes_size = 1
+  tes_size = 1,
+  track_color = "goldenrod"
 ) {
   data <- pull_chic_average_gene_list_paneled_profiles_data(
     list(gene_list),
@@ -470,6 +477,24 @@ chic_custom_gene_list_paneled_profile <- function(
     num_tes=heatmap_before_after
   ) %>%
     subset(select = -gene_list)
+  data <- sapply(
+    list(on = gene_list, off = bg_gene_list),
+    \(gene_list) pull_chic_average_gene_list_paneled_profiles_data(
+      list(gene_list),
+      chic_path,
+      metafeatures_path,
+      chic_driver,
+      tss_size,
+      inter_size,
+      tes_size,
+      num_tss=heatmap_before_after,
+      num_tes=heatmap_before_after
+    ) %>%
+      subset(select = -gene_list),
+    simplify=FALSE
+  ) %>%
+    bind_rows(.id = "group")
+  data$group <- data$group %>% factor(c("on", "off"))
 
   label_data <- data %>%
     subset(
@@ -540,14 +565,22 @@ chic_custom_gene_list_paneled_profile <- function(
     ),
     color = "darkred",
     linewidth = 0.25
-  ) + geom_line(color = "goldenrod", linewidth = 1) + labs(
+  ) + geom_line(
+    # Implement the actual ChIC profile track.
+    aes(group = group, color = group, linewidth = group)
+  ) + labs(
     x = "base pairs", y = "mean(mark/input)"
   ) + scale_x_continuous(
     breaks = label_data_show$x,
     labels = label_data_show$x_label,
     minor_breaks = minor_breaks_show$x
+  ) + scale_color_manual(
+    values = c(track_color, muted(track_color))
+  ) + scale_linewidth_manual(
+    values = c(1, 0.25)
   ) + theme(
-    panel.margin = unit(25, "pt")
+    panel.margin = unit(25, "pt"),
+    aspect.ratio = 1
   )
 }
 
