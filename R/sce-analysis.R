@@ -783,3 +783,46 @@ plot_multiple_umap_data <- function(data) {
     strip.text.x = element_blank()
   )
 }
+
+report_cpm_in_gene_sets <- function(Upd_cpm, gene_sets, output_html, output_pdf) {
+  tibble(
+    name = names(gene_sets),
+    num_genes = sapply(gene_sets, length),
+    marker_genes = sapply(
+      gene_sets,
+      \(v) v %>%
+        intersect(c("nos", "vas", "tj", "zfh1", "lncRNA:roX1", "lncRNA:roX2", "AGO1", "AGO3")) %>%
+        append(list(sep = ", ")) %>%
+        do.call(paste, .)
+    )
+  ) %>%
+    gt %>%
+    gtsave(output_html)
+  pdf(output_pdf)
+  for (n in names(gene_sets)) {
+    data <- Upd_cpm[gene_sets[[n]], c("germline", "somatic")]
+    names(dimnames(data)) <- c("gene", "cluster")
+    data <- log(data) %>% subset(rowAlls(is.finite(.)))
+    # melt(data, value.var = "log10CPM") %>%
+    print(
+      data %>%
+        as.data.frame %>%
+        ggplot(aes(germline, somatic)) + geom_point(
+        ) + geom_density_2d_filled(alpha=0.5) + scale_x_continuous(
+          labels = exp,
+          breaks = log(c(1, 10, 30, 50, 100, 1000))
+        ) + scale_y_continuous(
+          labels = exp,
+          breaks = log(c(1, 10, 30, 50, 100, 1000))
+        ) + coord_cartesian(
+          log(c(1, 1000)), log(c(1, 1000)), expand=F
+        ) + theme_bw() + guides(
+          fill = guide_legend(title = "density")
+        ) + labs(
+          title = n
+        )
+    )
+  }
+  dev.off()
+  return(c(output_html, output_pdf))
+}
