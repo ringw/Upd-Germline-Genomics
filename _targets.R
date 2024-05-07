@@ -573,12 +573,16 @@ list(
           "ey",
           "eya"
         ) %>%
-          mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
           rowwise %>%
           mutate(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
-            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene, shuffle_feature_plot) + labs(tag = gene_short_name)),
+            figure = (
+              Upd_sc %>% `[[<-`("DECONTX", value = Upd_decontX) %>%
+                Upd_sc_feature_plot(gene, shuffle_feature_plot, assay="DECONTX")
+              + labs(tag = gene_short_name)
+            ) %>%
+              list,
             width = 3,
             height = 2
           ) %>%
@@ -598,12 +602,16 @@ list(
           "Utx", "Kdm2", "Kdm4A", "Kdm4B", "HP1b", "HP1c", "rhi", "Su(var)205",
           "HP6", "Su(var)3-7", "Su(var)2-10"
         ) %>%
-          mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
           rowwise %>%
           mutate(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
-            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene, shuffle_feature_plot) + labs(tag = gene_short_name)),
+            figure = (
+              Upd_sc %>% `[[<-`("DECONTX", value = Upd_decontX) %>%
+                Upd_sc_feature_plot(gene, shuffle_feature_plot, assay="DECONTX")
+              + labs(tag = gene_short_name)
+            ) %>%
+              list,
             width = 3,
             height = 2
           ) %>%
@@ -621,12 +629,16 @@ list(
           "Bap60", "Bap55", "brm", "Iswi", "Acf", "Chrac-16", "Nurf-38",
           "Ino80", "Arp8", "Arp5"
         ) %>%
-          mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
           rowwise %>%
           mutate(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
-            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene, shuffle_feature_plot) + labs(tag = gene_short_name)),
+            figure = (
+              Upd_sc %>% `[[<-`("DECONTX", value = Upd_decontX) %>%
+                Upd_sc_feature_plot(gene, shuffle_feature_plot, assay="DECONTX")
+              + labs(tag = gene_short_name)
+            ) %>%
+              list,
             width = 3,
             height = 2
           ) %>%
@@ -645,12 +657,16 @@ list(
           "Chrac-14", "PolE1", "PolE2", "PolE4", "Mcm2", "Mcm3", "dpa", "Mcm5",
           "Mcm6", "Mcm7", "Orc1", "Orc2", "Orc4", "Orc5", "Orc6"
         ) %>%
-          mutate(Upd_sc = list(Upd_sc %>% NormalizeData)) %>%
           rowwise %>%
           mutate(
             gene_short_name = gene %>% str_replace("lncRNA:", ""),
             name = paste0("RNAseq-FeaturePlot-", gene_short_name),
-            figure = list(Upd_sc %>% Upd_sc_feature_plot(gene, shuffle_feature_plot) + labs(tag = gene_short_name)),
+            figure = (
+              Upd_sc %>% `[[<-`("DECONTX", value = Upd_decontX) %>%
+                Upd_sc_feature_plot(gene, shuffle_feature_plot, assay="DECONTX")
+              + labs(tag = gene_short_name)
+            ) %>%
+              list,
             width = 3,
             height = 2
           ) %>%
@@ -909,16 +925,11 @@ list(
     Upd_cpm_regression %>% cpm_to_fpkm_using_cds(assay.data.sc)
   ),
   tar_target(
-    Upd_cpm_transcripts,
-    pseudobulk_cpm(
-      Upd_pseudobulk,
-      Upd_pseudobulk_sf,
-      flybase.gtf
-    )
-  ),
-  tar_target(
     Upd_cpm_transcript_to_use,
-    cpm_select_transcript_to_quantify(Upd_cpm_transcripts, assay.data.sc),
+    cpm_select_transcript_to_quantify(
+      Upd_count_transcripts,
+      assay.data.sc
+    ),
     packages = tar_option_get("packages") %>% c("tidyr")
   ),
   tar_target(
@@ -942,8 +953,12 @@ list(
   tar_target(
     Upd_cpm,
     join_cpm_data(
-      assay.data.sc, Upd_cpm_transcripts,
-      Upd_cpm_transcript_to_use, Upd_cpm_regression,
+      assay.data.sc,
+      Upd_count_transcripts %>%
+        subset(select=c(germline, somatic, spermatocyte, somaticprecursor, muscle)) %>%
+        table_to_tpm,
+      Upd_cpm_transcript_to_use,
+      Upd_cpm_regression,
       corr=F) %>%
       table_to_tpm
   ),
@@ -952,7 +967,7 @@ list(
     publish_excel_results(
       Upd_regression_somatic, Upd_regression_tid,
       Upd_regression_sompre, Upd_regression_mscl,
-      Upd_cpm_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
+      Upd_count_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
       Upd_isoform_exonic_length,
       sctransform_quantile, supplemental_bulk_cpm, assay.data.sc, flybase.gtf,
       list(nos.1=batch_umap_nos.1, nos.2=batch_umap_nos.2, tj.1=batch_umap_tj.1, tj.2=batch_umap_tj.2) %>%

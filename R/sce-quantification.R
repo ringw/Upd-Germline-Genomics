@@ -140,39 +140,88 @@ coords_to_matrix_market <- function(coords_file, dimnames, n_counts, mm_output) 
   return(mm_output)
 }
 
-assemble_decont_to_glm_offset <- function(
-  counts_mats, deconts_objects, genes_to_use, metadata
+cbind_pseudobulk_decontaminated <- function(
+  named_counts, named_decontx_counts, metadata
 ) {
-  for (i in seq_along(counts_mats)) {
-    # Correct our issue with colnames(counts) not having the add'l prefix.
-    colnames(counts_mats[[i]]) <- colnames(deconts_objects[[i]]$decontXcounts)
-  }
-
   metadata <- metadata %>% read.csv(row.names = 1)
-  make_offset <- function(counts, deconts) {
-    # If the pattern of zeroes does not match, then it's unclear how we will
-    # compute the offset which has log link function.
-    stopifnot(isTRUE(all.equal(counts != 0, deconts$decontXcounts != 0)))
-    # Subset the genes to use within this function.
-    counts <- counts[genes_to_use, ]
-    deconts$decontXcounts <- deconts$decontXcounts[genes_to_use, ]
-    # Given the decontaminated value which can be estimated by our regression
-    # model, then the count that is actually observed comes from "counts". Apply
-    # this correction within the offset, which has log (natural) link function.
-    offset <- counts
-    offset@x <- log(offset@x) - log(deconts$decontXcounts@x)
-    return(offset)
+  metadata$ident <- metadata$ident %>% factor(sce.clusters$cluster)
+  # Use nos.2 as the reference level for batch. It has the greatest number of
+  # cells in the rare clusters.
+  metadata$batch <- metadata$batch %>%
+    factor(c("nos.2", "nos.1", "tj.1", "tj.2"))
+  addCellIdCols <- function(name, mat) {
+    colnames(mat) <- paste0(name, "_", colnames(mat))
+    mat
   }
-  offset_mats <- mapply(
-    make_offset, counts_mats, deconts_objects, SIMPLIFY=FALSE
+  which_rows <- (
+    !duplicated(rownames(named_counts[[1]]))
+    & !is.na(rownames(named_counts[[1]]))
   )
-  offset <- do.call(cbind, offset_mats)[, rownames(metadata)]
-  offset + rep(log(metadata$size_factors), each=nrow(offset))
+  SingleCellExperiment(
+    list(
+      counts = do.call(
+        cbind,
+        mapply(addCellIdCols, names(named_counts), named_counts, SIMPLIFY=F)
+      )[which_rows, rownames(metadata)],
+      decontXcounts = do.call(
+        cbind,
+        named_decontx_counts
+      )[which_rows, rownames(metadata)]
+    ),
+    colData = metadata
+  ) %>%
+    pseudobulk(
+      vars(ident, batch),
+      aggregation_functions = list(
+        .default = "rowSums2"
+      ),
+      nCount_RNA = sum(nCount_RNA),
+      nFeature_RNA = sum(nFeature_RNA),
+      pct.mito = mean(pct.mito),
+      pct.ribo = mean(pct.ribo),
+      somatic.score = mean(somatic.score),
+      size_factors = sum(size_factors)
+    )
 }
 
-combine_counts_mats <- function(named_counts_mats) {
-  for (n in names(named_counts_mats))
-    colnames(named_counts_mats[[n]]) <- colnames(named_counts_mats[[n]]) %>%
-      paste0(n, "_", .)
-  do.call(cbind, named_counts_mats)
+create_decontx_assay_fbgn_objects <- function(decontx_objects, Upd_sc_metadata, assay_data) {
+  Upd_sc_metadata <- Upd_sc_metadata %>% read.csv(row.names = 1)
+  assay_data <- assay_data %>% read.csv(row.names = 1)
+  # Just need to subset the RNA assay features (from assay_data) because we
+  # didn't check for the "GX" tag for genes such as H3-GFP.
+  genes_df <- rownames_to_column(assay_data) %>%
+    subset(
+      flybase %in% rownames(decontx_objects[[1]]$decontXcounts),
+      select=c(rowname, flybase)
+    )
+  counts <- do.call(
+    cbind,
+    sapply(
+      decontx_objects,
+      \(l) l$decontXcounts[genes_df$flybase, ],
+      simplify=F
+    )
+  )[, rownames(Upd_sc_metadata)]
+  rownames(counts) <- genes_df$rowname
+  assay_obj <- CreateAssayObject(
+    counts = counts,
+    min.cells = 5,
+    key = "decontx_"
+  )
+  assay_obj@misc$decontX <- sapply(
+    decontx_objects,
+    \(obj) obj[-match("decontXcounts", names(obj))],
+    simplify=F
+  )
+  assay_obj %>% NormalizeData
+}
+
+seurat_decontx_using_batches <- function(Upd_sc) {
+  dcx <- decontX(GetAssayData(Upd_sc, assay="RNA", layer="counts"), batch=Upd_sc$batch)
+  Upd_sc[["DECONTX"]] <- CreateAssayObject(
+    counts = dcx$decontXcounts,
+    key = "decontx_"
+  )
+  Upd_sc[["DECONTX"]]@misc$decontX <- dcx[-match("decontXcounts", names(dcx))]
+  Upd_sc[["DECONTX"]] %>% NormalizeData
 }
