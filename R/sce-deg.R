@@ -102,6 +102,23 @@ fit_glm <- function(Upd_sc, Upd_model_matrix, Upd_metadata) {
   Upd_glm
 }
 
+fit_glm_decontX <- function(sce, formula) {
+  offset_matrix <- (
+    log(assay(sce, "counts"))
+    - log(assay(sce, "decontXcounts"))
+    + rep(log(sce$size_factors), each = nrow(assay(sce)))
+  ) %>%
+    replace(!is.finite(.), 0)
+  glm_gp(
+    sce,
+    formula,
+    size_factor = 1,
+    offset = offset_matrix,
+    on_disk = F,
+    verbose = T
+  )
+}
+
 fit_glm_with_offset <- function(Upd_counts, Upd_offset, Upd_model_matrix, Upd_metadata) {
   Upd_metadata <- Upd_metadata %>% read.csv(row.names = 1)
   stopifnot(isTRUE(all.equal(rownames(Upd_metadata), colnames(Upd_counts))))
@@ -114,6 +131,8 @@ fit_glm_with_offset <- function(Upd_counts, Upd_offset, Upd_model_matrix, Upd_me
     on_disk = F,
     verbose = T
   )
+  # Replace the dense counts with the sparseMatrix.
+  assay(Upd_glm$data) <- Upd_counts
   # Quite useful to keep the metadata in the GLM object.
   colData(Upd_glm$data)[, colnames(Upd_metadata)] <- Upd_metadata
   # We will often not use the Offset matrix at all. For fit_glm_with_offset,
@@ -458,7 +477,8 @@ join_cpm_data <- function(
     list(rownames(Upd_cpm_transcripts)),
     Upd_cpm_transcripts %>%
       subset(select = c(germline, somatic, spermatocyte, somaticprecursor, muscle)) %>%
-      `/`(if (correct_for_exon_length) Upd_cpm_transcripts$exon_length else 1),
+      `/`(if (correct_for_exon_length) Upd_cpm_transcripts$exon_length else 1) %>%
+      as.data.frame,
     Upd_cpm_transcript_to_use %>%
       subset(select = c(germline, somatic, spermatocyte, somaticprecursor, muscle))
   )
@@ -470,7 +490,7 @@ join_cpm_data <- function(
   # Find genes that didn't have a transcript_id in the 10X BAM file, but which
   # were present in enough cells so that we included the gene when computing
   # Upd_cpm_regression.
-  replace_genes <- is.na(Upd_cpm) %>%
+  replace_genes <- replace_na(Upd_cpm == 0, replace=T) %>%
     rowAnys(useNames = TRUE) %>%
     which %>%
     names
