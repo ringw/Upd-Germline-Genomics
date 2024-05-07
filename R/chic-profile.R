@@ -54,7 +54,7 @@ chic_average_profiles <- function(
           profile = mapply(
             \(genes, mark) flybase_big_matrix(
               annotations %>% subset(group == genes & !is.na(chr) & !is.na(start) & !is.na(end)) %>% subset(!duplicated(flybase)),
-              paste0(chic_path, "/", chic_driver, "_", mark, ".FE.bw"),
+              paste0(chic_path, "/", chic_driver, "_", mark, ".new.FE.bw"),
               before = before,
               after = after
             ) %>%
@@ -127,7 +127,7 @@ chic_average_gene_list_profiles <- function(
     chic.mark.data$mark,
     \(mark) flybase_big_matrix(
       metafeatures %>% subset(!is.na(chr) & !is.na(start) & !is.na(end)) %>% subset(!duplicated(flybase)),
-      paste0(chic_path, "/", chic_driver, "_", mark, ".FE.bw"),
+      paste0(chic_path, "/", chic_driver, "_", mark, ".new.FE.bw"),
       before = before,
       after = after
     ) %>%
@@ -298,7 +298,7 @@ pull_chic_average_gene_list_paneled_profiles_data <- function(
   panel_data <- tibble(
     chic_driver = chic_driver,
     chic_mark = chic.mark.data$mark,
-    filename = paste0(chic_path, "/", chic_driver, "_", chic_mark, ".FE.bw")
+    filename = paste0(chic_path, "/", chic_driver, "_", chic_mark, ".new.FE.bw")
   ) %>%
     cross_join(
       tibble(
