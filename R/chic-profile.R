@@ -23,6 +23,8 @@ bed_flybase_quartile_factor <- function(bed_path, metafeatures_path, nquartiles=
 
 # Analysis with TSS profile as x-axis, with ChIC tracks.
 chic_average_profile_limits <- c(0.37, 3.3)
+chic_average_breaks <- c(1/2, 1, 2, 3)
+chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2), exp(0.5*(log(2) + log(3))))
 chic_average_profiles <- function(
   chic_factor,
   chic_path,
@@ -113,49 +115,75 @@ chic_average_profiles <- function(
 
 chic_average_gene_list_profiles <- function(
   gene_list,
+  bg_gene_list,
   chic_path,
   metafeatures_path,
-  chic_driver
+  chic_driver,
+  track_color = "goldenrod"
 ) {
   metafeatures <- read.csv(metafeatures_path, row.names = 1)
-  metafeatures <- metafeatures[gene_list, ] %>%
+  metafeatures_on <- metafeatures[gene_list, ] %>%
+    subset(chr %in% names(chr.lengths))
+  metafeatures_off <- metafeatures[bg_gene_list, ] %>%
     subset(chr %in% names(chr.lengths))
 
   before <- 500
   after <- 1500
-  mark_tracks <- sapply(
-    chic.mark.data$mark,
-    \(mark) flybase_big_matrix(
-      metafeatures %>% subset(!is.na(chr) & !is.na(start) & !is.na(end)) %>% subset(!duplicated(flybase)),
-      paste0(chic_path, "/", chic_driver, "_", mark, ".new.FE.bw"),
-      before = before,
-      after = after
-    ) %>%
-      subset(rowAlls(. > 0.001)) %>%
-      # log %>%
-      # `/`(log(2)) %>%
-      colMeans,
+  facet_data <- sapply(
+    list(on=metafeatures_on, off=metafeatures_off),
+    \(metafeatures) {
+      mark_tracks <- sapply(
+        chic.mark.data$mark,
+        \(mark) flybase_big_matrix(
+          metafeatures %>% subset(!is.na(chr) & !is.na(start) & !is.na(end)) %>% subset(!duplicated(flybase)),
+          paste0(chic_path, "/", chic_driver, "_", mark, ".new.FE.bw"),
+          before = before,
+          after = after
+        ) %>%
+          subset(rowAlls(. > 0.001)) %>%
+          # log %>%
+          # `/`(log(2)) %>%
+          colMeans,
+        simplify=FALSE
+      )
+      facet_data <- mark_tracks %>%
+        sapply(
+          \(v) data.frame(pos=seq(-before, after-1), l2FC=v),
+          simplify=F) %>%
+        bind_rows(.id = "marks") %>%
+        mutate(marks = marks %>% factor(chic.mark.data$mark))
+    },
     simplify=FALSE
-  )
-  facet_data <- mark_tracks %>%
-    sapply(
-      \(v) data.frame(pos=seq(-before, after-1), l2FC=v),
-      simplify=F) %>%
-    bind_rows(.id = "marks") %>%
-    mutate(marks = marks %>% factor(chic.mark.data$mark))
+  ) %>%
+    bind_rows(.id = "group")
+  facet_data$group <- facet_data$group %>% factor(c("on", "off"))
+ 
   facet_data %>% ggplot(
     aes(x=pos, y=l2FC)
   ) + geom_line(
     data = tribble(~pos, ~l2FC, -Inf, 1, Inf, 1),
     color = "darkred",
     linewidth = 0.25
-  ) + geom_line(color = "goldenrod", linewidth = 1) + facet_wrap(
+  ) + geom_line(
+    # Implement the actual ChIC profile track.
+    aes(group = group, color = group, linewidth = group)
+  ) + facet_wrap(
     vars(marks)
+  ) + scale_color_manual(
+    values = c(track_color, muted(track_color))
+  ) + scale_linewidth_manual(
+    values = c(1, 0.25)
   ) + scale_y_continuous(
+    trans = "log",
+    labels = \(v) round(log(v) / log(2), 1),
     limits = chic_average_profile_limits,
+    breaks = chic_average_breaks,
+    minor_breaks = chic_average_minor_breaks,
     expand = c(0, 0)
   ) + coord_cartesian(expand = FALSE) + labs(
-    x = "bp (from TSS)", y = "mean(mark/input)"
+    x = "bp (from TSS)", y = "log2(mean(mark/input))"
+  ) + theme(
+    aspect.ratio = 1
   )
 }
 
@@ -425,6 +453,11 @@ chic_quartile_gene_list_paneled_profiles <- function(
     c(0, tss_size + inter_size + tes_size),
     chic_average_profile_limits,
     expand=FALSE
+  ) + scale_y_continuous(
+    trans = "log",
+    limits = chic_average_profile_limits,
+    breaks = chic_average_breaks,
+    minor_breaks = chic_average_minor_breaks
   ) + theme(
     panel.background = element_rect(fill = NA),
     panel.ontop = TRUE
@@ -465,18 +498,6 @@ chic_custom_gene_list_paneled_profile <- function(
   tes_size = 1,
   track_color = "goldenrod"
 ) {
-  data <- pull_chic_average_gene_list_paneled_profiles_data(
-    list(gene_list),
-    chic_path,
-    metafeatures_path,
-    chic_driver,
-    tss_size,
-    inter_size,
-    tes_size,
-    num_tss=heatmap_before_after,
-    num_tes=heatmap_before_after
-  ) %>%
-    subset(select = -gene_list)
   data <- sapply(
     list(on = gene_list, off = bg_gene_list),
     \(gene_list) pull_chic_average_gene_list_paneled_profiles_data(

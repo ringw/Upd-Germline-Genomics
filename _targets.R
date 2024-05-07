@@ -117,22 +117,6 @@ repli.coverage <- list(
   contrast = c('EarlyLate', 'Weighted','EarlyLate','Weighted')
 )
 
-chic.samples = read.csv('chic/chic_samples.csv') %>%
-  subset(sample != "") %>%
-  # Further subsetting due to a sample with small library count
-  subset(sample != "GC3768013_S13_L001")
-
-chic.fpkm.data <- tribble(
-  ~name, ~contrast, ~driver,
-  'Germline', c(1,0,0,0,0,0,0), 'Nos',
-  'Somatic', c(1,1,0,0,0,0,0), 'tj'
-)
-# We are going to pull a "bed" target in the cross product below, which defines
-# the genomic features shown in a heatmap for this particular experiment.
-chic.fpkm.data$bed_sym <- rlang::syms(paste0("bed_", chic.fpkm.data$name))
-
-chic.mark.data = tribble(~mark, 'H3K4', 'H3K27', 'H3K9')
-
 chic.raw.tracks <- tar_map(
   chic.samples,
   names = sample,
@@ -226,21 +210,6 @@ chic.lookup$samples <- sapply(
 chic.lookup <- chic.lookup %>% within(
   lookup_name <- paste(input, mark, name, sep="_")
 )
-# ChIC experiments: For every driver x mark.
-chic.experiments <- chic.fpkm.data %>% cross_join(chic.mark.data)
-# Pull the "chic" (track) target by name for the driver x mark targets.
-chic.experiments <- chic.experiments %>% within({
-  experiment_name <- paste(mark, name, sep="_")
-  chic_input_sym <- rlang::syms(paste("chic.smooth_250", "input", mark, name, sep="_"))
-  chic_mod_sym <- rlang::syms(paste("chic.smooth_25", "mod", mark, name, sep="_"))
-  chic_smooth_input_sym <- rlang::syms(paste("chic.smooth", "input", mark, name, sep="_"))
-  chic_smooth_250_input_sym <- rlang::syms(paste("chic.smooth_250", "input", mark, name, sep="_"))
-  chic_smooth_mod_sym <- rlang::syms(paste("chic.smooth", "mod", mark, name, sep="_"))
-  chic_smooth_125_mod_sym <- rlang::syms(paste("chic.smooth_125", "mod", mark, name, sep="_"))
-  chic_smooth_250_mod_sym <- rlang::syms(paste("chic.smooth_250", "mod", mark, name, sep="_"))
-  chic_input_bam <- rlang::syms(paste("chic.merge.bam", "input", mark, name, sep="_"))
-  chic_mod_bam <- rlang::syms(paste("chic.merge.bam", "mod", mark, name, sep="_"))
-})
 chic.experiments$chic_input_files <- chic.experiments %>%
   mutate(input = "input") %>%
   left_join(
@@ -540,7 +509,18 @@ list(
           "RNAseq-UMAP-Germline-Somatic",
           Upd_sc %>% Upd_sc_plot_idents %>% Upd_sc_plot_subset, 6, 3,
           "RNAseq-Quantification-Quarters-CPM",
-          fpkm_quarter_density(log(Upd_cpm) / log(10), ylim = c(-3.75, 5)),
+          fpkm_quarter_density(log(Upd_cpm) / log(10), ylim = c(-2.75, 4.5))
+          +
+          annotate(
+            "segment",
+            -Inf, log(7) / log(10),
+            xend = Inf, yend = log(7) / log(10),
+            color = "#bb2e0b",
+            linewidth = 0.75
+          )
+          + scale_y_continuous(
+            breaks = seq(-2, 4)
+          ),
           4, 4,
           "RNAseq-Quantification-Quarters-SCT",
           fpkm_quarter_density(
@@ -884,9 +864,10 @@ list(
         "figure/Integrated-scRNAseq", extension,
         tribble(
           ~name, ~figure, ~width, ~height,
-          "RNAseq-Integrated-Cluster-Dots", supplemental_cluster_dot_plot_figure, 6, 7.5,
+          "RNAseq-Integrated-Cluster-Dots", supplemental_cluster_dot_plot_figure, 3, 4,
           "RNAseq-Validation-Elbow", supplemental_elbow_figure, 5, 2.5,
-          "RNAseq-SCT-Gene-List-Venn-Area-Blank", sct_gene_venn, 4, 3,
+          "RNAseq-CPM-Gene-List-Venn-Area-Blank", cpm_gene_venn, 3.6, 2.7,
+          "RNAseq-SCT-Gene-List-Venn-Area-Blank", sct_gene_venn, 3.6, 2.7,
           "RNAseq-UMAP-Genotype",
           Upd_sc %>%
             AddMetaData(recode(Upd_sc$batch, nos.1="nos", nos.2="nos", tj.1="tj", tj.2="tj"), "genotype") %>%
@@ -902,7 +883,12 @@ list(
           plot_multiple_umap_data(
             list(nos.1=batch_umap_nos.1, nos.2=batch_umap_nos.2, tj.1=batch_umap_tj.1, tj.2=batch_umap_tj.2) %>%
               bind_rows(.id = "batch")
-          ) + theme(aspect.ratio = 1),
+          ) + theme(
+            aspect.ratio = 1,
+            axis.text = element_text(size = 8),
+            panel.spacing = unit(1, "lines"),
+            panel.background = element_rect(fill = "white")
+          ),
           6,
           6
         )
@@ -2027,81 +2013,78 @@ list(
     )
   ),
   tar_target(cpm_OffGenes, cpm_gene_lists_extended$OffGenes),
-  tar_target(
-    name = fpkm.chic.sct.plots_Germline,
-    list(
-      dirname = dirname(
-        c(
-          chic.bw_H3K4_Germline,
-          chic.bw_H3K27_Germline,
-          chic.bw_H3K9_Germline
-        )[1]
-        )
-    ) %>%
-      with(
-        tibble(
-          experiment = "Germline",
-          gene_list = names(sct_gene_lists_extended),
-          tss_plot = chic_average_gene_list_profiles(
-            cpm_gene_lists_extended[[1]],
-            dirname,
-      assay.data.sc,
-            "Nos"
-          ) %>%
-            list,
-          paneled_plot = chic_custom_gene_list_paneled_profile(
-            cpm_gene_lists_extended[[1]],
-            cpm_OffGenes,
-            dirname,
-            assay.data.sc,
-            "Nos",
-            track_color = if (grepl("Germline", names(cpm_gene_lists_extended)))
-              chic_line_track_colors$germline
-            else if (grepl("Somatic", names(cpm_gene_lists_extended)))
-              chic_line_track_colors$somatic
-          ) %>%
-            list
-        )
+  tar_map(
+    cross_join(
+      tribble(
+        ~genelist, ~gene_obj, ~OffGenes,
+        "SCT", rlang::sym("sct_gene_lists_extended"), rlang::sym("sct_OffGenes"),
+        "CPM", rlang::sym("cpm_gene_lists_extended"), rlang::sym("cpm_OffGenes")
       ),
-    pattern = map(cpm_gene_lists_extended)
-  ),
-  tar_target(
-    name = fpkm.chic.sct.plots_Somatic,
-    list(
-      dirname = dirname(
-        c(
-          chic.bw_H3K4_Somatic,
-          chic.bw_H3K27_Somatic,
-          chic.bw_H3K9_Somatic
-        )[1]
-        )
-    ) %>%
-      with(
-        tibble(
-          experiment = "Somatic",
-          gene_list = names(cpm_gene_lists_extended),
-          tss_plot = chic_average_gene_list_profiles(
-            cpm_gene_lists_extended[[1]],
-            dirname,
-      assay.data.sc,
-            "tj"
+      chic.fpkm.data %>%
+        mutate(driver = driver %>% replace(. == "Nos", "nos"))
+    ),
+    names = genelist | name,
+    tar_target(
+      name = fpkm.chic.plots,
+      list(
+        # Fix deps on each bw file in this folder...
+        dirname = "chic"
+      ) %>%
+        with(
+          tibble(
+            experiment = name,
+            gene_list = names(gene_obj),
+            tss_plot = chic_average_gene_list_profiles(
+              gene_obj[[1]],
+              OffGenes,
+              dirname,
+              assay.data.sc,
+              driver,
+              track_color = if (grepl("Germline", names(gene_obj)))
+                chic_line_track_colors$germline
+              else if (grepl("Somatic", names(gene_obj)))
+                chic_line_track_colors$somatic
+            ) %>%
+              list,
+            paneled_plot = chic_custom_gene_list_paneled_profile(
+              gene_obj[[1]],
+              OffGenes,
+              dirname,
+              assay.data.sc,
+              driver,
+              track_color = if (grepl("Germline", names(gene_obj)))
+                chic_line_track_colors$germline
+              else if (grepl("Somatic", names(gene_obj)))
+                chic_line_track_colors$somatic
+            ) %>%
+              list
+          )
+        ),
+      pattern = map(gene_obj)
+    ),
+    tar_file(
+      name = fig.fpkm.chic,
+      save_figures(
+        paste0("figure/", name),
+        ".pdf",
+        plots %>%
+          filter(gene_list != "OffGenes") %>%
+          rowwise %>%
+          reframe(
+            experiment,
+            gene_list,
+            prefix = c("CHIC-TSS-", "CHIC-"),
+            width = c(8, 12),
+            figure = list(tss_plot, paneled_plot)
           ) %>%
-            list,
-          paneled_plot = chic_custom_gene_list_paneled_profile(
-            cpm_gene_lists_extended[[1]],
-            cpm_OffGenes,
-            dirname,
-            assay.data.sc,
-            "tj",
-            track_color = if (grepl("Germline", names(cpm_gene_lists_extended)))
-              chic_line_track_colors$germline
-            else if (grepl("Somatic", names(cpm_gene_lists_extended)))
-              chic_line_track_colors$somatic
-          ) %>%
-            list
-        )
-  ),
-    pattern = map(cpm_gene_lists_extended)
+          reframe(
+            filename = paste0(prefix, "AllMarks-RNAseq-", genelist, "-", gene_list),
+            figure,
+            width,
+            height = 4
+          )
+      )
+    )
   ),
 
   tar_map(
@@ -2197,39 +2180,6 @@ list(
         dpi = 300
       ),
       format = 'file'
-    ),
-    tar_map(
-        tibble(
-        experiment = c("Germline", "Somatic"),
-        experiment_dir = paste0("figure/", experiment),
-        plots = c(
-          "fpkm.chic.sct.plots_Germline", "fpkm.chic.sct.plots_Somatic"
-        ) %>%
-          rlang::syms()
-      ),
-      names = "experiment",
-    tar_target(
-        name = fpkm.chic.genelists,
-        save_figures(
-          experiment_dir,
-          extension,
-          plots %>%
-            rowwise %>%
-            reframe(
-              experiment,
-              gene_list,
-              prefix = c("CHIC-TSS-", "CHIC-"),
-              width = c(8, 12),
-              figure = list(tss_plot, paneled_plot)
-            ) %>%
-            reframe(
-              filename = paste0(prefix, "AllMarks-RNAseq-SCT-", gene_list),
-              figure,
-              width,
-          height = 4
-            )
-        )
-      )
     )
   ),
 
@@ -2309,6 +2259,7 @@ list(
   tar_file(run_fastqc_sh, "scripts/run_fastqc.sh"),
   repli_targets,
 
+  targets.chic,
   targets.flybase,
   targets.quantification,
   targets.sce
