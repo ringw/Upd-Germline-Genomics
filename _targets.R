@@ -1948,7 +1948,7 @@ list(
       assay.data.sc,
       'nos',
       'CPM Quartile',
-      rev(setNames(sc_quartile_annotations, NULL))
+      setNames(sc_quartile_annotations, NULL)
     )
   ),
   tar_target(
@@ -1965,7 +1965,7 @@ list(
       assay.data.sc,
       'tj',
       'CPM Quartile',
-      rev(setNames(sc_quartile_annotations, NULL))
+      setNames(sc_quartile_annotations, NULL)
     )
   ),
   tar_target(
@@ -1982,7 +1982,7 @@ list(
       assay.data.sc,
       'nos',
       'CPM Quartile',
-      rev(setNames(sc_quartile_annotations, NULL))
+      setNames(sc_quartile_annotations, NULL)
     )
   ),
   tar_target(
@@ -1999,7 +1999,7 @@ list(
       assay.data.sc,
       'tj',
       'CPM Quartile',
-      rev(setNames(sc_quartile_annotations, NULL))
+      setNames(sc_quartile_annotations, NULL)
     )
   ),
 

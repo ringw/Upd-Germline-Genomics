@@ -26,7 +26,7 @@ quant_quartile_factor <- function(v, q1_threshold) {
   vals <- v[-chop_lower]
   thirds <- cut(vals, c(0, quantile(vals, c(1/3, 2/3)), Inf))
   levels(thirds) <- c("Q2", "Q3", "Q4")
-  fct <- factor(rep("", length(v)), c("Q4", "Q3", "Q2", "Q1"))
+  fct <- factor(rep("", length(v)), c("Q1", "Q2", "Q3", "Q4"))
   fct[chop_lower] <- "Q1"
   fct[-chop_lower] <- as.character(thirds)
   setNames(fct, names(v))
@@ -113,10 +113,10 @@ chic_average_profiles <- function(
     vars(marks)
   ) + scale_color_manual(
     values = quartile_colors,
-    guide = guide_legend(title = legend_title)
+    guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_linewidth_manual(
-    values = c(1.75, 1.5, 0.75, 0.5),
-    guide = guide_legend(title = legend_title)
+    values = c(0.5, 0.75, 1.5, 1.75),
+    guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_y_continuous(
     trans = "log",
     labels = \(v) round(log(v) / log(2), 1),
@@ -463,10 +463,10 @@ chic_quartile_gene_list_paneled_profiles <- function(
     vars(chic_mark)
   ) + scale_color_manual(
     values = quartile_colors,
-    guide = guide_legend(title = legend_title, override.aes = list(fill = "transparent"))
+    guide = guide_legend(title = legend_title, reverse = TRUE, override.aes = list(fill = "transparent"))
   ) + scale_linewidth_manual(
-    values = c(1.75, 1.5, 0.75, 0.5),
-    guide = guide_legend(title = legend_title)
+    values = c(0.5, 0.75, 1.5, 1.75),
+    guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + coord_cartesian(
     c(0, tss_size + inter_size + tes_size),
     chic_average_profile_limits,
