@@ -85,13 +85,12 @@ bam_paired_fragment_ends <- function(bam_file, feature.lengths) {
               loc = values,
               count = lengths
             )
-          # For features that we summarize down to a length of 1, then we are
-          # not retaining the read coordinates within the reference sequence so
-          # we will sum their values.
+          # Count along the rle (length of the rle) and summarize down to a sum,
+          # as we are creating a GRanges with a single element.
           else
             data.frame(
               loc = 1,
-              count = sum(values)
+              count = sum(lengths)
             )
         ),
       simplify = F
