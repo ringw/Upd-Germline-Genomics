@@ -1931,7 +1931,7 @@ list(
   ),
 
   tar_target(
-    name = fpkm.chic.quarter.tss.plot_Germline,
+    name = cpm.chic.quarter.tss.plot_Germline,
     chic_average_profiles(
       quartile.factor_Germline,
       dirname(
@@ -1942,13 +1942,13 @@ list(
         )[1]
       ),
       assay.data.sc,
-      'Nos',
-      'FPKM Quartile',
-      setNames(sc_quartile_annotations, NULL)
+      'nos',
+      'CPM Quartile',
+      rev(setNames(sc_quartile_annotations, NULL))
     )
   ),
   tar_target(
-    name = fpkm.chic.quarter.tss.plot_Somatic,
+    name = cpm.chic.quarter.tss.plot_Somatic,
     chic_average_profiles(
       quartile.factor_Somatic,
       dirname(
@@ -1960,12 +1960,12 @@ list(
       ),
       assay.data.sc,
       'tj',
-      'FPKM Quartile',
-      setNames(sc_quartile_annotations, NULL)
+      'CPM Quartile',
+      rev(setNames(sc_quartile_annotations, NULL))
     )
   ),
   tar_target(
-    name = fpkm.chic.quarter.plot_Germline,
+    name = cpm.chic.quarter.plot_Germline,
     chic_quartile_gene_list_paneled_profiles(
       quartile.factor_Germline,
       dirname(
@@ -1976,13 +1976,13 @@ list(
         )[1]
       ),
       assay.data.sc,
-      'Nos',
-      'FPKM Quartile',
-      setNames(sc_quartile_annotations, NULL)
+      'nos',
+      'CPM Quartile',
+      rev(setNames(sc_quartile_annotations, NULL))
     )
   ),
   tar_target(
-    name = fpkm.chic.quarter.plot_Somatic,
+    name = cpm.chic.quarter.plot_Somatic,
     chic_quartile_gene_list_paneled_profiles(
       quartile.factor_Somatic,
       dirname(
@@ -1994,8 +1994,8 @@ list(
       ),
       assay.data.sc,
       'tj',
-      'FPKM Quartile',
-      setNames(sc_quartile_annotations, NULL)
+      'CPM Quartile',
+      rev(setNames(sc_quartile_annotations, NULL))
     )
   ),
 
@@ -2149,10 +2149,10 @@ list(
         tribble(
           ~name, ~figure, ~width, ~height,
           "CHIC-TSS-AllMarks-RNAseq-Quartile",
-          fpkm.chic.quarter.tss.plot_Germline,
+          cpm.chic.quarter.tss.plot_Germline,
           9, 4,
           "CHIC-AllMarks-RNAseq-Quartile",
-          fpkm.chic.quarter.plot_Germline,
+          cpm.chic.quarter.plot_Germline,
           15, 4,
           "CHIC-AllMarks-Peak-Annotation",
           plot.chic.peak.location_Germline
@@ -2177,10 +2177,10 @@ list(
         tribble(
           ~name, ~figure, ~width, ~height,
           "CHIC-TSS-AllMarks-RNAseq-Quartile",
-          fpkm.chic.quarter.tss.plot_Somatic,
+          cpm.chic.quarter.tss.plot_Somatic,
           9, 4,
           "CHIC-AllMarks-RNAseq-Quartile",
-          fpkm.chic.quarter.plot_Somatic,
+          cpm.chic.quarter.plot_Somatic,
           15, 4,
           "CHIC-AllMarks-Peak-Annotation",
           plot.chic.peak.location_Somatic
