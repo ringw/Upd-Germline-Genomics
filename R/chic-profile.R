@@ -115,10 +115,14 @@ chic_average_profiles <- function(
     values = quartile_colors,
     guide = guide_legend(title = legend_title)
   ) + scale_linewidth_manual(
-    values = c(0.5, 0.75, 1.5, 1.75),
+    values = c(1.75, 1.5, 0.75, 0.5),
     guide = guide_legend(title = legend_title)
   ) + scale_y_continuous(
+    trans = "log",
+    labels = \(v) round(log(v) / log(2), 1),
     limits = chic_average_profile_limits,
+    breaks = chic_average_breaks,
+    minor_breaks = chic_average_minor_breaks,
     expand = c(0, 0)
   ) + coord_cartesian(expand=FALSE) + labs(
     x = "bp (from TSS)", y = "mean(mark/input)"
@@ -459,7 +463,7 @@ chic_quartile_gene_list_paneled_profiles <- function(
     values = quartile_colors,
     guide = guide_legend(title = legend_title, override.aes = list(fill = "transparent"))
   ) + scale_linewidth_manual(
-    values = c(0.5, 0.75, 1.5, 1.75),
+    values = c(1.75, 1.5, 0.75, 0.5),
     guide = guide_legend(title = legend_title)
   ) + coord_cartesian(
     c(0, tss_size + inter_size + tes_size),
@@ -467,9 +471,11 @@ chic_quartile_gene_list_paneled_profiles <- function(
     expand=FALSE
   ) + scale_y_continuous(
     trans = "log",
+    labels = \(v) round(log(v) / log(2), 1),
     limits = chic_average_profile_limits,
     breaks = chic_average_breaks,
-    minor_breaks = chic_average_minor_breaks
+    minor_breaks = chic_average_minor_breaks,
+    expand = c(0, 0)
   ) + theme(
     panel.background = element_rect(fill = NA),
     panel.ontop = TRUE
