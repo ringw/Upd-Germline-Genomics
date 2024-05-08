@@ -386,7 +386,10 @@ repli_targets <- tar_map(
                 rlang::syms() %>%
                 append("c", .) %>%
                 do.call(call, ., quote=T)
-            )
+            ) %>%
+              # later, build all bams and decide which ones to omit from coverage...
+              list("subset", ., quote(file.exists(source_file))) %>%
+              do.call(call, ., quote=T)
           )
       )
     ),
