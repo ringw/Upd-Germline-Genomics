@@ -33,7 +33,7 @@ quant_quartile_factor <- function(v, q1_threshold) {
 }
 
 # Analysis with TSS profile as x-axis, with ChIC tracks.
-chic_average_profile_limits <- c(0.37, 3.3)
+chic_average_profile_limits <- c(0.35, 3.3)
 chic_average_breaks <- c(1/2, 1, 2, 3)
 chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2), exp(0.5*(log(2) + log(3))))
 chic_average_profiles <- function(
@@ -108,7 +108,7 @@ chic_average_profiles <- function(
       )
     ),
     color = "darkred",
-    linewidth = 0.25
+    linewidth = 0.5
   ) + geom_line() + facet_wrap(
     vars(marks)
   ) + scale_color_manual(
@@ -125,7 +125,9 @@ chic_average_profiles <- function(
     minor_breaks = chic_average_minor_breaks,
     expand = c(0, 0)
   ) + coord_cartesian(expand=FALSE) + labs(
-    x = "bp (from TSS)", y = "mean(mark/input)"
+    x = "bp (from TSS)", y = "log2(mean(mark/input))"
+  ) + theme(
+    aspect.ratio = 1
   )
 }
 
@@ -179,7 +181,7 @@ chic_average_gene_list_profiles <- function(
   ) + geom_line(
     data = tribble(~pos, ~l2FC, -Inf, 1, Inf, 1),
     color = "darkred",
-    linewidth = 0.25
+    linewidth = 0.5
   ) + geom_line(
     # Implement the actual ChIC profile track.
     aes(group = group, color = group, linewidth = group)
@@ -490,15 +492,16 @@ chic_quartile_gene_list_paneled_profiles <- function(
       )
     ),
     color = "darkred",
-    linewidth = 0.25
+    linewidth = 0.5
   ) + geom_line() + labs(
-    x = "base pairs", y = "mean(mark/input)"
+    x = "base pairs", y = "log2(mean(mark/input))"
   ) + scale_x_continuous(
     breaks = label_data_show$x,
     labels = label_data_show$x_label,
     minor_breaks = minor_breaks_show$x
   ) + theme(
-    panel.margin = unit(25, "pt")
+    panel.margin = unit(25, "pt"),
+    aspect.ratio = 1
   )
 }
 
@@ -603,7 +606,7 @@ chic_custom_gene_list_paneled_profile <- function(
       )
     ),
     color = "darkred",
-    linewidth = 0.25
+    linewidth = 0.5
   ) + geom_line(
     # Implement the actual ChIC profile track.
     aes(group = group, color = group, linewidth = group)
