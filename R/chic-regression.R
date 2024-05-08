@@ -1,10 +1,32 @@
 chic_perform_regression <- function(df, formula = "fpkm ~ molecule + replicate", contrasts_replicate = contr.helmert) {
+  # Argument for applying weights: For counts, Poisson distribution is a useful
+  # simplification of the actual experiment (which is a mixture, having more
+  # variance than the Poisson distribution). Our values are actually KDE
+  # estimates, which are linear combinations of counts at each base pair. If the
+  # count at each base pair was Poisson-distributed (as a simplification), and
+  # the change in the library size affects all loci proportionally, then we
+  # suppose that the library size variance (Poisson: Var[X] = E[X]) affects each
+  # base pair's fragment end count with a proportional amount of variance. By
+  # linearity we pull this multiplier of the variance out of the density
+  # estimation. Then in our matrix of continuous tracks M, we suppose that:
+  #   Var[M_ij] propto Library_Size_i
+  # In regression, the reciprocal of standard error estimate for the observation
+  # may be used as a weight. Applying this weighting should produce a linear
+  # regression which has some of the benefits of regression on count data 
+  # (DESeq2, glmGamPoi).
+  df <- df %>%
+    rowwise %>%
+    mutate(
+      weights = 1/sqrt(attr(density, "est_library_size"))
+    ) %>%
+    ungroup %>%
+    mutate(weights = weights / max(weights))
   fpkm <- t(sapply(df$density, \(data) data$y))
   molecule <- df$molecule
   replicate <- df$rep
   if (!is.null(contrasts_replicate))
     contrasts(replicate) <- contrasts_replicate(length(levels(replicate)))
-  mymanova <- manova(as.formula(formula), data = df)
+  mymanova <- manova(as.formula(formula), data = df, weights = df$weights)
 }
 
 chic_regression_fold_change <- function(mn, df) {
