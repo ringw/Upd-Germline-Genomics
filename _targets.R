@@ -2083,7 +2083,7 @@ list(
       save_figures(
         paste0("figure/", name),
         ".pdf",
-        plots %>%
+        fpkm.chic.plots %>%
           filter(gene_list != "OffGenes") %>%
           rowwise %>%
           reframe(
