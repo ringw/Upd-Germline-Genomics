@@ -21,6 +21,17 @@ bed_flybase_quartile_factor <- function(bed_path, metafeatures_path, nquartiles=
   groups
 }
 
+quant_quartile_factor <- function(v, q1_threshold) {
+  chop_lower = (v < q1_threshold) %>% replace_na(TRUE) %>% which
+  vals <- v[-chop_lower]
+  thirds <- cut(vals, c(0, quantile(vals, c(1/3, 2/3)), Inf))
+  levels(thirds) <- c("Q2", "Q3", "Q4")
+  fct <- factor(rep("", length(v)), c("Q4", "Q3", "Q2", "Q1"))
+  fct[chop_lower] <- "Q1"
+  fct[-chop_lower] <- as.character(thirds)
+  setNames(fct, names(v))
+}
+
 # Analysis with TSS profile as x-axis, with ChIC tracks.
 chic_average_profile_limits <- c(0.37, 3.3)
 chic_average_breaks <- c(1/2, 1, 2, 3)
@@ -55,7 +66,8 @@ chic_average_profiles <- function(
         list(
           profile = mapply(
             \(genes, mark) flybase_big_matrix(
-              annotations %>% subset(group == genes & !is.na(chr) & !is.na(start) & !is.na(end)) %>% subset(!duplicated(flybase)),
+              annotations %>%
+                subset(group == genes & !is.na(chr) & !is.na(start) & !is.na(end) & chr %in% names(chr.lengths)) %>% subset(!duplicated(flybase)),
               paste0(chic_path, "/", chic_driver, "_", mark, ".new.FE.bw"),
               before = before,
               after = after

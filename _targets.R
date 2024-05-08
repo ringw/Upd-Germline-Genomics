@@ -1261,7 +1261,8 @@ list(
     ),
     tar_target(
       quartile.factor,
-      bed_flybase_quartile_factor(bed, assay.data.sc)
+      quant_quartile_factor(Upd_cpm[, tolower(name)], q1_threshold=7),
+      packages = tar_option_get("packages") %>% c("tidyr")
     )
   ),
 
