@@ -365,7 +365,8 @@ repli_targets <- tar_map(
       ) %>%
         list
     ) %>%
-      pull(output_path)
+      pull(output_path),
+    cue = tar_cue("never")
   )
 ) %>%
   list(
@@ -1895,7 +1896,7 @@ list(
     format='file'
   ),
   tar_target(name = repli.hmm, command = repli_fit_hmm(repli_.q20.near10.bedgraph_DeleteNearbyPositions)),
-  tar_target(repli.pct.bp, make_tj_bp_early_score('repli/bedgraph.in')),
+  tar_target(repli.pct.bp, make_tj_bp_early_score('repli/bedgraph.in'), cue=tar_cue("never")),
 
   tar_map(
     values = repli.coverage,
