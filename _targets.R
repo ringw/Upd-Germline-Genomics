@@ -513,15 +513,7 @@ list(
           "RNAseq-UMAP-Germline-Somatic",
           Upd_sc %>% Upd_sc_plot_idents %>% Upd_sc_plot_subset, 6, 3,
           "RNAseq-Quantification-Quarters-CPM",
-          fpkm_quarter_density(log(Upd_cpm) / log(10), ylim = c(-2.75, 4.5))
-          +
-          annotate(
-            "segment",
-            -Inf, log(7) / log(10),
-            xend = Inf, yend = log(7) / log(10),
-            color = "#bb2e0b",
-            linewidth = 0.75
-          )
+          fpkm_third_density(log(Upd_cpm) / log(10), ylim = c(-2.75, 4.5))
           + scale_y_continuous(
             breaks = seq(-2, 4)
           ),
