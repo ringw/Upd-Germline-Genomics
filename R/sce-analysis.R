@@ -576,17 +576,25 @@ fpkm_quarter_density <- function(
       density_data,
       density_cut %>% asplit(2),
       SIMPLIFY = F) %>%
-    bind_rows(.id = "cluster")
+    bind_rows(.id = "cluster") %>%
+    subset(between(x, -10, 10))
   density_melt$cluster <- density_melt$cluster %>% factor(sce.clusters$cluster)
   density_melt <- density_melt %>%
     left_join(density_melt %>% group_by(cluster) %>% summarise(max_density = max(y), res = diff(x)[1]), "cluster") %>%
     within(violinwidth <- y / max_density) %>%
     subset(cluster %in% clusters)
-  density_melt %>%
+  polygon_melt <- density_melt %>%
+    group_by(cluster, quartile) %>%
+    arrange(cluster, quartile, x) %>%
+    reframe(
+      x = c(x[1] - res[1], x, rev(x), x[1] - res[1]),
+      violinwidth = c(violinwidth[1], violinwidth, rev(-violinwidth), -violinwidth[1])
+    )
+  polygon_melt %>%
     within(quartile <- quartile %>% factor(rev(sort(unique(.))))) %>%
     ggplot(
-      aes(cluster, x, height=res, width=violinwidth * 0.95, fill=quartile)
-    ) + rasterise(geom_tile(), dpi=240) + scale_fill_manual(
+      aes(x = as.numeric(cluster) + violinwidth * 0.95 / 2, y = x, fill = quartile)
+    ) + geom_polygon(aes(group = interaction(cluster, quartile))) + scale_fill_manual(
       values = sc_quartile_colors %>% setNames(NULL) %>% rev
     ) + coord_cartesian(
       NULL, ylim
