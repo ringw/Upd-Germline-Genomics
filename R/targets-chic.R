@@ -1,3 +1,4 @@
+library(dplyr)
 chic.samples = read.csv('chic/chic_samples.csv') %>%
   subset(sample != "") %>%
   # Further subsetting due to a sample with small library count
