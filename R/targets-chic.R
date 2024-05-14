@@ -39,7 +39,42 @@ target_chic_load_raw_expr <- function(group, driver) {
   rlang::call2("tibble", rowname = samples$sample, molecule = samples$molecule, rep = call("factor", samples$rep), pileup = samples$pileup)
 }
 
+targets.chic.aligned <- tar_map(
+  bowtie.refs,
+  names = name,
+  tar_map(
+    chic.samples,
+    names = sample,
+    unlist = FALSE,
+    tar_file(
+      chic.bam,
+      with(
+        list(name=name, group=group, sample=sample) %>%
+          with(
+            list(output_path = str_glue("chic/{name}/{group}/{sample}.bam"), batch=batch, sample=sample)
+          ),
+        {
+          run(
+            "bash",
+            c(
+              "-i",
+              align_chic_lightfiltering,
+              flybase.bowtie %>% paste("chic_bowtie2", sep="/"),
+              paste0(batch, "/", sample, "_R1_001.fastq.gz"),
+              paste0(batch, "/", sample, "_R2_001.fastq.gz"),
+              output_path
+            )
+          )
+          output_path
+        }
+      ),
+      cue = tar_cue("never")
+    )
+  )
+)
+
 targets.chic <- list(
+  targets.chic.aligned,
   apply(
     chic.experiments %>%
       mutate(driver = driver %>% replace(. == "Nos", "nos")),

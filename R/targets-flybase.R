@@ -80,5 +80,48 @@ targets.flybase <- list(
       ) %>%
       pull(glob_result) %>%
       unlist
+  ),
+  tar_map(
+    tribble(
+      ~name, ~filename,
+      "flybase", "dmel-all-chromosome-r6.47.fasta.gz",
+      "masked", "RepeatMasker/dmel-r6.47-2L-histone-locus-all-te-masked.fasta.gz",
+      "histone_unit", "histone_unit.fa",
+      "transposon_sequence_set", "transposon_sequence_set.fa.gz"
+    ),
+    names = name,
+    tar_file(fasta, paste("references", filename, sep="/"))
+  ),
+  tar_map(
+    tribble(
+      ~name, ~refs,
+      "chr", rlang::syms("fasta_flybase"),
+      "masked",
+      rlang::syms(c("fasta_masked", "fasta_histone_unit", "fasta_transposon_sequence_set"))
+    ),
+    names = name,
+    tar_file(
+      bowtie,
+      tibble(
+        output_dir="references/bowtie2",
+        output_pattern=name,
+        bowtie2_arg=str_glue("{output_dir}/{output_pattern}/{output_pattern}"),
+        glob_arg=str_glue("{output_dir}/{output_pattern}/{output_pattern}*.bt2"),
+      ) %>%
+        mutate(
+          create_output_dir = dir.create(str_glue("{output_dir}/{output_pattern}"), rec=T, showW=FALSE),
+          delete_bowtie_files = file.remove(Sys.glob(glob_arg)) %>% list,
+          run_bowtie2 = processx::run(
+            "bowtie2-build",
+            c(
+              refs %>% append(list(sep=",")) %>% do.call(paste, .),
+              bowtie2_arg
+            )
+          ) %>% list,
+          glob_result = list(Sys.glob(glob_arg))
+        ) %>%
+        pull(glob_result) %>%
+        unlist
+    )
   )
 )
