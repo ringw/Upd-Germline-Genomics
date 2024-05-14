@@ -227,15 +227,6 @@ chic.experiments$chic_mod_files <- chic.experiments %>%
   ) %>%
   pull(chic_mod_files)
 
-repli.samples = read.csv('repli/repli_samples.csv')
-repli.samples$replication_value = repli.samples$replication_value %>% factor(unique(.))
-repli.samples$full = repli.samples$replication_value
-levels(repli.samples$full) <- c("Early", "Early-Mid", "Mid-Late", "Late")
-repli.samples$abbrev = repli.samples$replication_value
-levels(repli.samples$abbrev) <- c("E", "G", "J", "L")
-repli.samples <- repli.samples %>%
-  mutate(name = paste0(genotype, "_", abbrev, rep))
-
 sce_targets <- tar_map(
   unlist = FALSE,
   sce.data %>% mutate(obj = rlang::syms(batch)),
@@ -2273,9 +2264,11 @@ list(
   tar_file(run_fastqc_sh, "scripts/run_fastqc.sh"),
   repli_targets,
 
+  targets.bulk.samples,
   targets.chic,
   targets.flybase,
   targets.quantification,
+  targets.repli,
   targets.sce
 )
  
