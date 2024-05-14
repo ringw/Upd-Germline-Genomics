@@ -59,7 +59,7 @@ targets.chic.aligned <- tar_map(
             c(
               "-i",
               align_chic_lightfiltering,
-              flybase.bowtie %>% paste("chic_bowtie2", sep="/"),
+              str_replace(bowtie[1], "\\..*", ""),
               paste0(batch, "/", sample, "_R1_001.fastq.gz"),
               paste0(batch, "/", sample, "_R2_001.fastq.gz"),
               output_path
