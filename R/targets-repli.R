@@ -11,7 +11,7 @@ targets.repli <- tar_map(
   bowtie.refs,
   names = name,
   tar_map(
-    rename(repli.samples, name="repli_target"),
+    rename(repli.samples, repli_target="name"),
     names = repli_target,
     tar_file(
       repli.bam,
