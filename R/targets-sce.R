@@ -34,6 +34,28 @@ targets.sce <- list(
     sc_sort_genes_dendrogram(Upd_cpm, Upd_genes_dendrogram_raw),
     packages = tar_option_get("packages") %>% c("dendextend")
   ),
+  tar_target(
+    Upd_genes_dendrogram_cpm_raw,
+    Upd_cpm %>%
+      subset(rowAlls((. > 0) %>% replace_na(FALSE))) %>%
+      log %>%
+      `%*%`(
+        diag(
+          table(
+            read.csv(metadata, row.names=1)$ident
+          )[colnames(.)]
+        )
+      ) %>%
+      dist %>%
+      hclust(method = "average") %>%
+      as.dendrogram,
+    packages = tar_option_get("packages") %>% c("tidyr")
+  ),
+  tar_target(
+    Upd_genes_dendrogram_cpm,
+    sc_sort_genes_dendrogram(Upd_cpm, Upd_genes_dendrogram_cpm_raw),
+    packages = tar_option_get("packages") %>% c("dendextend")
+  ),
   tar_file(
     Upd_genes_heatmap,
     save_figures(
@@ -50,6 +72,26 @@ targets.sce <- list(
       )
     ),
     packages = tar_option_get("packages") %>% c("dendextend", "ggdendro")
+  ),
+  tar_file(
+    Upd_genes_logCPM_heatmap,
+    save_figures(
+      "figure/Integrated-scRNAseq",
+      ".pdf",
+      tibble(
+        "Heatmap-logCPM",
+        figure = list(
+          plot_logcpm_heatmap(
+            Upd_cpm, Upd_genes_dendrogram
+          )
+          + theme(aspect.ratio = 4/3)
+        ),
+        width=4.5,
+        height=6
+      )
+    ),
+    packages = tar_option_get("packages") %>%
+      c("dendextend", "ggdendro", "tidyr")
   ),
   tar_map(
     tibble(extension = c(".pdf", ".png")),

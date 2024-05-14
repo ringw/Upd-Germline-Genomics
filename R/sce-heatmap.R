@@ -124,3 +124,73 @@ plot_single_cell_heatmap <- function(seurat, genes, cells, cells_cut = 10, genes
     )
   )
 }
+
+plot_logcpm_heatmap <- function(Upd_cpm, genes, genes_cut = 130) {
+  CPM <- Upd_cpm %>% subset(rowAlls((. > 0) %>% replace_na(FALSE)))
+  logCPM <- log(CPM[labels(genes), ]) / log(10)
+
+  # Hang dendrogram - bring leaf tree nodes up. The leaves (0) may initially be
+  # very far from the parent node (which tracks the avg distance).
+  genes_plot <- labels(genes)
+  genes <- (genes %>% cut(h=genes_cut))$upper %>% hang.dendrogram
+
+  genes_data <- dendro_data(genes)$segments
+  dendrowidth <- 2
+  scal <- -dendrowidth / diff(range(c(genes_data$y, genes_data$yend)))
+  genes_data$y <- 0.5 + scal * (genes_data$y - min(genes_data$yend))
+  genes_data$yend <- 0.5 + scal * (genes_data$yend - min(genes_data$yend))
+  genes_data <- with(genes_data, data.frame(x=y, y=x, xend=yend, yend=xend))
+  dimnames(logCPM) <- list(
+    # genes
+    y=NULL,
+    # clusters
+    x=NULL
+  )
+  identbar <- c(GSC = 3.5, CySC = 3.5, germ = 1, soma = 1, muscle = 1) * 2
+  identbarheight <- nrow(logCPM) * 0.1
+  all_genes <- logCPM[, rep(seq(ncol(logCPM)), identbar)] %>%
+    melt(value.name="logCPM")
+  gg <- (
+    ggplot(
+      all_genes,
+      aes(x, y)
+    )
+    + rasterise(geom_raster(aes(fill=logCPM)))
+    + scale_fill_viridis_c(limits = c(-2, 4), oob=squish)
+
+    # Clusters bar:
+    + new_scale_fill()
+    + scale_fill_manual(values = setNames(cluster_colors[sce.clusters$cluster], NULL), guide=guide_none())
+    + geom_tile(
+      aes(fill = ident),
+      data.frame(
+        ident = factor(rep(letters[1:5], identbar)),
+        x = seq(sum(identbar)),
+        y = -identbarheight/2
+      ),
+      height = identbarheight
+    )
+    
+    # Genes dendro:
+    + geom_segment(
+      aes(xend=xend, yend=yend),
+      genes_data,
+      linewidth = 0.2
+    )
+
+    + scale_x_continuous(breaks = NULL, labels = NULL)
+    + scale_y_continuous(pos = "right")
+    + coord_cartesian(
+      c(0.5, NA),
+      c(length(genes_plot) + 0.5, 0.5),
+      expand = F, clip = "off"
+    )
+    + labs(
+      x = "Cells",
+      y = paste0("Genes")
+    )
+    + theme(
+      plot.margin = unit(c(1.5, 0.2, 0.2, 1.5), "cm")
+    )
+  )
+}
