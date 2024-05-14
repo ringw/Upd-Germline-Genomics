@@ -1,6 +1,6 @@
 #!/bin/bash
 
-set -e
+set -eo pipefail
 
 BOWTIE_REFERENCE=$1
 READS_1_PATH=$2
