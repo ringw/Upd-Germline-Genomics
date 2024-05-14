@@ -1,0 +1,17 @@
+genotype,replication_value,rep,filename
+nos,0.875,1,GSC_Early_Replicate_1_S12_L004_R1_001.fastq.gz
+nos,0.875,2,GSC_Early_Replicate_2_S10_L004_R1_001.fastq.gz
+nos,0.625,1,GSC_Early-Mid_Replicate_1_S6_L004_R1_001.fastq.gz
+nos,0.625,2,GSC_Early-Mid_Replicate_2_S13_L004_R1_001.fastq.gz
+nos,0.375,1,GSC_Late-Mid_Replicate_1_S2_L004_R1_001.fastq.gz
+nos,0.375,2,GSC_Late-Mid_Replicate_2_S1_L004_R1_001.fastq.gz
+nos,0.125,1,GSC_Late_Replicate_1_S5_L004_R1_001.fastq.gz
+nos,0.125,2,GSC_Late_Replicate_2_S14_L004_R1_001.fastq.gz
+tj,0.875,1,Tj_Early_Replicate_1_S4_L004_R1_001.fastq.gz
+tj,0.875,2,Tj_Early_Replicate_2_S3_L004_R1_001.fastq.gz
+tj,0.625,1,Tj_Early-Mid_Replicate_1_S11_L004_R1_001.fastq.gz
+tj,0.625,2,Tj_Early-Mid_Replicate_2_S7_L004_R1_001.fastq.gz
+tj,0.375,1,Tj_Late-Mid_Replicate_1_S16_L004_R1_001.fastq.gz
+tj,0.375,2,Tj_Late-Mid_Replicate_2_S9_L004_R1_001.fastq.gz
+tj,0.125,1,Tj_Late_Replicate_1_S8_L004_R1_001.fastq.gz
+tj,0.125,2,Tj_Late_Replicate_2_S15_L004_R1_001.fastq.gz
