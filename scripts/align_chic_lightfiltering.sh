@@ -23,7 +23,7 @@ mkfifo $OUTPUT_2
 
 TEMP_PATH=$(mktemp -p /tmp --dry-run $(echo $OUTPUT_PATH | tr '/' '.').XXXXXXXXXX)
 bowtie2 --threads "${BOWTIE_THREADS:-12}" -x "$BOWTIE_REFERENCE" \
-    -k 10 --no-discordant -1 $OUTPUT_1 -2 $OUTPUT_2 \
+    --no-discordant -1 $OUTPUT_1 -2 $OUTPUT_2 \
     2> >(tee ${OUTPUT_PATH%.bam}.log >&2) | \
     samtools view -b -f 0x02 | \
     samtools fixmate -m - - | \
