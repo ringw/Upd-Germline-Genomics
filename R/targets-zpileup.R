@@ -27,7 +27,9 @@ targets.bulk.samples <- tar_map(
     tar_target(
       bulk_reads,
       bam_to_df(bam.target, refseq),
-      format = "parquet"
+      format = "parquet",
+      cue = tar_cue("never"),
+      packages = c("GenomicRanges", "Rsamtools", "stringr", "tibble")
     )
   )
 )

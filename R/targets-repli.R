@@ -34,6 +34,7 @@ targets.repli <- tar_map(
           output_path
         }
       ),
+      cue = tar_cue("never"),
       packages = c(
         "dplyr",
         "processx",

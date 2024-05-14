@@ -23,7 +23,7 @@ bam_to_df <- function(bam_file, rname, ...) {
     with(
       bam_obj$tag,
       tibble(
-        qname,
+        qname = factor(qname, unique(qname)),
         flag,
         rname,
         strand,
@@ -32,7 +32,8 @@ bam_to_df <- function(bam_file, rname, ...) {
         mapq,
         cigar,
         dc
-      )
+      ) %>%
+        arrange(qname)
     )
   )
 }

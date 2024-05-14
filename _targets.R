@@ -1006,6 +1006,7 @@ list(
 
   # ChIC paired-end alignment targets.
   tar_file(align_chic_lightfiltering, "scripts/align_chic_lightfiltering.sh"),
+  tar_file(align_repli_lightfiltering, "scripts/align_repli_lightfiltering.sh"),
   tar_file(
     align_chic_chromatin_specific_filtering,
     "scripts/align_chic_chromatin_specific_filtering.sh"
