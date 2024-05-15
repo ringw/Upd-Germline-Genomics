@@ -31,5 +31,33 @@ targets.bulk.samples <- tar_map(
       cue = tar_cue("never"),
       packages = c("GenomicRanges", "Rsamtools", "stringr", "tibble")
     )
+  ),
+  tar_target(
+    bulk_reads_idxstats,
+    run(
+      "samtools",
+      c(
+        "idxstats",
+        bam.target
+      )
+    )$stdout %>%
+      textConnection %>%
+      read.table(sep="\t", col.names=c("rname", "rlength", "mapped_unique_reads", "unmapped_unique_reads")) %>%
+      as_tibble,
+    format = "parquet",
+    cue = tar_cue("never"),
+    packages = c("magrittr", "processx", "tibble")
+  ),
+  tar_target(
+    bulk_reads_misc,
+    sapply(
+      setdiff(bulk_reads_idxstats$rname, names(masked.lengths)),
+      \(n) bam_to_df(bam.target, n),
+      simplify=FALSE
+    ) %>%
+      bind_rows,
+    format = "parquet",
+    cue = tar_cue("never"),
+    packages = c("dplyr", "GenomicRanges", "Rsamtools", "stringr", "tibble")
   )
 )
