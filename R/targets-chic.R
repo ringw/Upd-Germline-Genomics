@@ -75,6 +75,42 @@ targets.chic.aligned <- tar_map(
         "processx",
         "stringr"
       )
+    ),
+    tar_target(
+      chic.readcount,
+      as.integer(
+        c(
+          run(
+            "bash",
+            c(
+              "-c",
+              paste0(
+                "rclone cat sharepoint:'Bio Data'/",
+                batch,
+                "/",
+                sample,
+                "_R1_001.fastq.gz",
+                " | gunzip -c | wc -l"
+              )
+            )
+          )$stdout,
+          run(
+            "bash",
+            c(
+              "-c",
+              paste0(
+                "rclone cat sharepoint:'Bio Data'/",
+                batch,
+                "/",
+                sample,
+                "_R2_001.fastq.gz",
+                " | gunzip -c | wc -l"
+              )
+            )
+          )$stdout
+        )
+      ),
+      packages = "processx"
     )
   )
 )
