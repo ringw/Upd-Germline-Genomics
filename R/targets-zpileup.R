@@ -51,7 +51,7 @@ targets.bulk.samples <- tar_map(
   tar_target(
     bulk_reads_misc,
     sapply(
-      setdiff(bulk_reads_idxstats$rname, names(masked.lengths)),
+      setdiff(bulk_reads_idxstats$rname, c(names(masked.lengths), "*")),
       \(n) bam_to_df(bam.target, n),
       simplify=FALSE
     ) %>%
