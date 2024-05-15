@@ -26,7 +26,10 @@ targets.bulk.samples <- tar_map(
     tibble(refseq = names(masked.lengths)),
     tar_target(
       bulk_reads,
-      bam_to_df(bam.target, refseq),
+      if (reference == "chr" & refseq == "2L_Histone_Repeat_Unit")
+        bam_to_df_empty
+      else
+        bam_to_df(bam.target, refseq),
       format = "parquet",
       cue = tar_cue("never"),
       packages = c("GenomicRanges", "Rsamtools", "stringr", "tibble")

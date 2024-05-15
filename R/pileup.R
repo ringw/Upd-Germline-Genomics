@@ -37,3 +37,15 @@ bam_to_df <- function(bam_file, rname, ...) {
     )
   )
 }
+
+bam_to_df_empty <- tibble(
+  qname = factor(),
+  flag = integer(0),
+  rname = character(0),
+  strand = factor(),
+  pos = integer(0),
+  qwidth = integer(0),
+  mapq = integer(0),
+  cigar = character(0),
+  dc = integer(0)
+)
