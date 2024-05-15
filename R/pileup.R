@@ -38,6 +38,48 @@ bam_to_df <- function(bam_file, rname, ...) {
   )
 }
 
+bam_reference_coords <- function(df) {
+  df %>%
+    mutate(
+      cigar = factor(cigar),
+      width = cigar %>%
+        fct_relabel(\(v) as.character(cigar_ref_length(v))) %>%
+        as.numeric,
+      pos_crick = pos + width - 1
+    )
+}
+
+bam_cover_read_bp <- function(df, min_mapq, markdup=FALSE) {
+  stopifnot(all(df$rname %in% names(masked.lengths)))
+  df <- df %>%
+    bam_reference_coords %>%
+    filter(between(mapq, min_mapq, 254)) %>%
+    reframe(
+      rname,
+      pos = pos + round((pos_crick - pos) / 2), dc = if (markdup) 1 else dc
+    ) %>%
+    group_by(rname, pos) %>%
+    summarise(nreads = sum(dc), .groups="drop") %>%
+    arrange(rname, pos)
+  df$rname <- factor(df$rname)
+  mapply(
+    \(rname, i, x) sparseVector(x, i, length = masked.lengths[rname]),
+    levels(df$rname),
+    split(df$pos, df$rname),
+    split(df$nreads, df$rname),
+    SIMPLIFY=FALSE
+  )
+}
+
+count_overlaps_sparse_vectors <- function(sparse_vectors, tile_width) {
+  tiles <- mapply(
+    \(n, v) str_glue("{n}:1-{length(v)}"),
+    names(sparse_vectors),
+    sparse_vectors
+  ) %>%
+    GRanges %>%
+    tileWindows(width = as.integer(tile_width), step = as.integer(tile_width))
+}
 bam_to_df_empty <- tibble(
   qname = factor(),
   flag = integer(0),
