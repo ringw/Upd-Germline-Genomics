@@ -56,12 +56,15 @@ bam_cover_read_bp <- function(df, min_mapq, markdup=FALSE) {
     filter(between(mapq, min_mapq, 254)) %>%
     reframe(
       rname,
-      pos = pos + round((pos_crick - pos) / 2), dc = if (markdup) 1 else dc
+      pos = pos + round((pos_crick - pos) / 2),
+      # TODO: Fix bug where bam_to_df with no reads might have NULL for the
+      # dc column.
+      dc = if (markdup || !("dc" %in% colnames(df))) 1 else dc
     ) %>%
     group_by(rname, pos) %>%
     summarise(nreads = sum(dc), .groups="drop") %>%
     arrange(rname, pos)
-  df$rname <- factor(df$rname)
+  if (!is.factor(df$rname)) df$rname <- factor(df$rname)
   mapply(
     \(rname, i, x) sparseVector(x, i, length = masked.lengths[rname]),
     levels(df$rname),
@@ -78,16 +81,16 @@ count_overlaps_sparse_vectors <- function(sparse_vectors, tile_width) {
     sparse_vectors
   ) %>%
     GRanges %>%
-    tileWindows(width = as.integer(tile_width), step = as.integer(tile_width))
+    slidingWindows(width = as.integer(tile_width), step = as.integer(tile_width)) %>%
+    unlist
+  counts <- mapply(
+    \(n, v) GRanges(seqnames = if (length(v@i)) n, ranges = if (length(v@i)) IRanges(v@i, width = 1) else IRanges(), score = v@x),
+    names(sparse_vectors),
+    sparse_vectors,
+    SIMPLIFY=FALSE
+  ) %>%
+    GRangesList %>%
+    unlist
+  hits = findOverlaps(tiles, counts) %>% as("List")
+  GRanges(tiles, score = sum(extractList(counts$score, hits)))
 }
-bam_to_df_empty <- tibble(
-  qname = factor(),
-  flag = integer(0),
-  rname = character(0),
-  strand = factor(),
-  pos = integer(0),
-  qwidth = integer(0),
-  mapq = integer(0),
-  cigar = character(0),
-  dc = integer(0)
-)
