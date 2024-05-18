@@ -4,3 +4,9 @@ chr.lengths = c(
 )
 
 masked.lengths = c(chr.lengths, `2L_Histone_Repeat_Unit`=5061)
+
+experiment.driver <- tribble(
+  ~driver, ~celltype,
+  "nos", "Germline",
+  "tj", "Somatic"
+)
