@@ -19,6 +19,18 @@ bulk.bam <- cross_join(
     bam.target = rlang::syms(str_glue("{bam}_{symbol}_{reference}"))
   )
 
+bam_to_df_empty <- tibble(
+  qname = factor(),
+  flag = integer(0),
+  rname = character(0),
+  strand = factor(),
+  pos = integer(0),
+  qwidth = integer(0),
+  mapq = integer(0),
+  cigar = character(0),
+  dc = integer(0)
+)
+
 targets.bulk.samples <- tar_map(
   bulk.bam,
   names = any_of(c("bam", "symbol", "reference")),
