@@ -1,5 +1,4 @@
 pileup_scan_bam_param <- function(...) ScanBamParam(
-  mapqFilter=20,
   what=c(
     "qname",
     "flag",
@@ -92,5 +91,5 @@ count_overlaps_sparse_vectors <- function(sparse_vectors, tile_width) {
     GRangesList %>%
     unlist
   hits = findOverlaps(tiles, counts) %>% as("List")
-  GRanges(tiles, score = sum(extractList(counts$score, hits)))
+  GRanges(tiles, score = sum(extractList(counts$score, hits)), seqlengths=sapply(sparse_vectors, length))
 }
