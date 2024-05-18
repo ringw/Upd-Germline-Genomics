@@ -37,6 +37,33 @@ bam_to_df <- function(bam_file, rname, ...) {
   )
 }
 
+bam_to_df_multi_rname <- function(bam_file, rnames, ...) {
+  granges <- GRanges(str_glue("{rnames}:1-{max(chr.lengths)}"))
+  scan_bam_param <- pileup_scan_bam_param(which=granges, ...)
+  bam_objs <- scanBam(bam_file, param=scan_bam_param)
+  bam_tibble <- do.call(
+    rbind,
+    sapply(
+      bam_objs,
+      \(lst) as_tibble(replace(lst, match("tag", names(lst)), list(lst$tag$dc) %>% replace(sapply(., is.null), list(integer(0))))),
+      simplify=F
+    )
+  )
+  reframe(
+    bam_tibble,
+    qname = factor(qname, unique(qname)),
+    flag,
+    rname,
+    strand,
+    pos,
+    qwidth,
+    mapq,
+    cigar,
+    dc = tag
+  ) %>%
+    arrange(qname)
+}
+
 bam_reference_coords <- function(df) {
   df %>%
     mutate(
