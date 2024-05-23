@@ -40,16 +40,50 @@ targets.quantification <- list(
     names = batch,
     tar_target(
       count.exons,
-      Read10XBamExons(
-        bam_path,
-        transcript.ids,
-        cells_to_use = read.csv(metadata, row.names=1) %>%
-          rename(batch = "batch.") %>%
-          subset(batch. == batch) %>%
-          rownames %>%
-          str_replace(paste0(batch, "_"), "")
-      ),
-      packages = tar_option_get("packages") %>% c("Rsamtools")
+      tibble(
+        coords_file = tempfile(),
+        do_run_coords = run(
+          "sh",
+          c(
+            "-c",
+            paste0(
+              "rclone cat sharepoint:Documents/Upd-Germline/",
+              bam_path,
+              " | ",
+              "samtools view -@ 4 -D CB:",
+              cell.barcodes.txt,
+              " | perl ",
+              cell_ranger_bam_feature_matrix_coords,
+              " ",
+              cell.barcodes.txt,
+              " ",
+              gene.ids.flybase.txt,
+              " TX > ",
+              coords_file
+            )
+          )
+        ) %>%
+          list,
+        my_dimnames = list(
+          list(
+            read.table(gene.ids.flybase.txt, header=F) %>% pull(1),
+            read.table(cell.barcodes.txt, header=F) %>% pull(1)
+          )
+        ),
+        mm_file = coords_to_matrix_market(
+          coords_file,
+          my_dimnames[[1]],
+          nrow(read.table(coords_file, header=F)),
+          tempfile(fileext = ".mtx")
+        ),
+        mymatrix = list(readMM(mm_file))
+      ) %>%
+        with(
+          {
+            dimnames(mymatrix[[1]]) <- my_dimnames[[1]]
+            mymatrix[[1]]
+          }
+        )
     ),
     tar_target(
       count.exons.genes,

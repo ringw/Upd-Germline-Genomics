@@ -2092,6 +2092,49 @@ list(
       )
     )
   ),
+  tar_map(
+    mutate(
+      chic.fpkm.data,
+      sc_chr_factor = rlang::syms(str_glue("sc_chr_factor_{name}")),
+      tss_sc_chr_quartile_data = rlang::syms(str_glue("tss_sc_chr_quartile_data_{name}")),
+      tss_sc_chr_data = rlang::syms(str_glue("tss_sc_chr_data_{name}"))
+    ),
+    names = name,
+    tar_file(
+      fig.fpkm.chic.new,
+      save_figures(
+        paste0("figure/", name),
+        ".pdf",
+        tibble(
+          c("CHIC-TSS-Chr-AllMarks-RNAseq-Quartile", "CHIC-TSS-Chr-AllMarks-RNAseq"),
+          figure = list(
+            mutate(
+              tss_sc_chr_quartile_data,
+              facet = factor(str_extract(genes, "[^.]+"), levels(sc_chr_factor$chr), ordered=TRUE),
+              genes = factor(str_extract(genes, "[.](\\S+)", group=1), levels(sc_chr_factor$quant), ordered=TRUE)
+            ) %>%
+              chic_plot_average_profiles_facet_grid(
+                "CPM Quartile",
+                setNames(sc_quartile_colors, NULL)
+              ),
+            mutate(
+              tss_sc_chr_data,
+              facet = factor(str_extract(genes, "\\S+"), levels(sc_chr_factor$chr), ordered=TRUE),
+              genes = factor("genelist")
+            ) %>%
+              chic_plot_average_profiles_facet_grid(
+                "CPM Quartile",
+                "#bf311b",
+                linewidth = 0.75
+              )
+            + guides(linewidth = guide_none(), color = guide_none())
+          ),
+          width = 9,
+          height = 15
+        )
+      )
+    )
+  ),
 
   tar_map(
     data.frame(extension = c(".pdf", ".png")),
