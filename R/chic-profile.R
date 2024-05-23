@@ -33,9 +33,9 @@ quant_quartile_factor <- function(v, q1_threshold) {
 }
 
 # Analysis with TSS profile as x-axis, with ChIC tracks.
-chic_average_profile_limits <- c(0.35, 3.3)
+chic_average_profile_limits <- c(0.25, 3.75)
 chic_average_breaks <- c(1/2, 1, 2, 3)
-chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2), exp(0.5*(log(2) + log(3))))
+chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2))
 chic_average_profiles <- function(
   chic_factor,
   chic_path,
@@ -61,27 +61,20 @@ chic_average_profiles <- function(
   before <- 500
   after <- 1500
   facets <- facets %>%
-    cbind(
-      as_tibble(
-        list(
-          profile = mapply(
-            \(genes, mark) flybase_big_matrix(
+    rowwise %>%
+    mutate(
+      profile = flybase_big_matrix(
               annotations %>%
                 subset(group == genes & !is.na(chr) & !is.na(start) & !is.na(end) & chr %in% names(chr.lengths)) %>% subset(!duplicated(flybase)),
-              paste0(chic_path, "/", chic_driver, "_", mark, ".new.FE.bw"),
+              str_glue("{chic_path}/{chic_driver}_{marks}.new.FE.bw"),
               before = before,
               after = after
             ) %>%
               subset(rowAlls(. > 0.001)) %>%
               # log %>%
               # `/`(log(2)) %>%
-              colMeans,
-            facets$genes,
-            facets$marks,
-            SIMPLIFY = F
-          )
-        )
-      )
+              colMeans %>%
+              list
     )
   facets_easy = dcast(facets, genes ~ marks, value.var='profile') %>% column_to_rownames('genes')
   facet_data <- pull(facets, profile) %>%
@@ -108,14 +101,56 @@ chic_average_profiles <- function(
       )
     ),
     color = "darkred",
-    linewidth = 0.5
+    linewidth = 0.33
   ) + geom_line() + facet_wrap(
     vars(marks)
   ) + scale_color_manual(
     values = quartile_colors,
     guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_linewidth_manual(
-    values = c(0.5, 0.75, 1.5, 1.75),
+    values = c(0.33, 0.6, 0.7, 0.8),
+    guide = guide_legend(title = legend_title, reverse = TRUE)
+  ) + scale_y_continuous(
+    trans = "log",
+    labels = \(v) round(log(v) / log(2), 1),
+    limits = chic_average_profile_limits,
+    breaks = chic_average_breaks,
+    minor_breaks = chic_average_minor_breaks,
+    expand = c(0, 0)
+  ) + coord_cartesian(expand=FALSE) + labs(
+    x = "bp (from TSS)", y = "log2(mean(mark/input))"
+  ) + theme(
+    aspect.ratio = 1
+  )
+}
+
+chic_plot_average_profiles_facet_grid <- function(
+  facet_data, legend_title, quartile_colors, linewidth=0.33
+) {
+  facet_data %>% ggplot(
+    aes(x=pos, y=l2FC, color=genes, linewidth=genes, group=genes)
+  ) + geom_line(
+    data = tribble(~pos, ~l2FC, -Inf, 1, Inf, 1) %>%
+      cross_join(
+        tibble(
+          genes = NA,
+          marks = factor(chic.mark.data$mark, chic.mark.data$mark, ordered=TRUE)
+        )
+      ) %>%
+      cross_join(
+        tibble(
+          facet = factor(levels(facet_data$facet), levels(facet_data$facet), ordered=TRUE)
+        )
+      ),
+    color = "darkred",
+    linewidth = 0.25
+  ) + geom_line() + facet_grid(
+    rows = vars(facet), cols = vars(marks)
+  ) + scale_color_manual(
+    values = quartile_colors,
+    guide = guide_legend(title = legend_title, reverse = TRUE)
+  ) + scale_linewidth_manual(
+    values = c(0.33, 0.6, 0.75, 1) + (linewidth - 0.33),
     guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_y_continuous(
     trans = "log",

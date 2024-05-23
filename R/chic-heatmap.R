@@ -61,8 +61,10 @@ flybase_big_matrix <- function(
     SIMPLIFY=F
   )
   chr_data <- chr_data %>% do.call(rbind, .)
+  if (is.null(chr_data))
+    return(matrix(nrow = 0, ncol = length(mat_colnames), dimnames = list(NULL, mat_colnames)))
   colnames(chr_data) <- mat_colnames
-  chr_data[features$flybase, ]
+  chr_data[features$flybase,, drop=F]
 }
 
 smooth_image_columns <- function(
@@ -87,9 +89,10 @@ smooth_image_columns <- function(
     head(orig_height)
 }
 
-create_direction_invert_tss_tile_matrix_gradient <- function() scale_fill_gradientn(
+create_direction_invert_tss_tile_matrix_gradient <- function(...) scale_fill_gradientn(
   colors = c("white", viridis(7, option = "magma", end = 0.9, direction = -1)),
-  values = c(0, 1, 1.5, 2, 2.5, 3, 3.5, 4) %>% rescale
+  values = c(0, 1, 1.5, 2, 2.5, 3, 3.5, 4) %>% rescale,
+  ...
 )
 
 display_tss_tile_matrix <- function(
