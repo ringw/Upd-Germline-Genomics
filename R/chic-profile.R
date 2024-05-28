@@ -108,7 +108,7 @@ chic_average_profiles <- function(
     values = quartile_colors,
     guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_linewidth_manual(
-    values = c(0.33, 0.6, 0.7, 0.8),
+    values = c(0.25, 0.5, 0.7, 1),
     guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_y_continuous(
     trans = "log",
@@ -125,7 +125,7 @@ chic_average_profiles <- function(
 }
 
 chic_plot_average_profiles_facet_grid <- function(
-  facet_data, legend_title, quartile_colors, linewidth=0.33
+  facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1)
 ) {
   facet_data %>% ggplot(
     aes(x=pos, y=l2FC, color=genes, linewidth=genes, group=genes)
@@ -150,7 +150,7 @@ chic_plot_average_profiles_facet_grid <- function(
     values = quartile_colors,
     guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_linewidth_manual(
-    values = c(0.33, 0.6, 0.75, 1) + (linewidth - 0.33),
+    values = linewidth,
     guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_y_continuous(
     trans = "log",
@@ -226,6 +226,118 @@ chic_average_gene_list_profiles <- function(
     values = c(track_color, muted(track_color))
   ) + scale_linewidth_manual(
     values = c(1, 0.25)
+  ) + scale_y_continuous(
+    trans = "log",
+    labels = \(v) round(log(v) / log(2), 1),
+    limits = chic_average_profile_limits,
+    breaks = chic_average_breaks,
+    minor_breaks = chic_average_minor_breaks,
+    expand = c(0, 0)
+  ) + coord_cartesian(expand = FALSE) + labs(
+    x = "bp (from TSS)", y = "log2(mean(mark/input))"
+  ) + theme(
+    aspect.ratio = 1
+  )
+}
+
+chic_average_gene_list_profiles_2 <- function(
+  gene_list,
+  bg_gene_list,
+  chic_path,
+  metafeatures_path,
+  chic_driver,
+  track_color = "goldenrod"
+) {
+  metafeatures <- read.csv(metafeatures_path, row.names = 1)
+  metafeatures_on <- metafeatures[gene_list, ] %>%
+    subset(chr %in% names(chr.lengths))
+  metafeatures_off <- metafeatures[bg_gene_list, ] %>%
+    subset(chr %in% names(chr.lengths))
+
+  before <- 500
+  after <- 1500
+  facet_data <- sapply(
+    list(on=metafeatures_on, off=metafeatures_off),
+    \(metafeatures) {
+      mark_tracks <- sapply(
+        chic.mark.data$mark,
+        \(mark) flybase_big_matrix(
+          metafeatures %>% subset(!is.na(chr) & !is.na(start) & !is.na(end)) %>% subset(!duplicated(flybase)),
+          paste0(chic_path, "/", chic_driver, "_", mark, ".CN.bw"),
+          before = before,
+          after = after
+        ) %>%
+          # subset(rowAlls(. > 0.001)) %>%
+          pmax(0.001) %>%
+          # log %>%
+          # `/`(log(2)) %>%
+          colMeans,
+        simplify=FALSE
+      )
+      facet_data <- mark_tracks %>%
+        sapply(
+          \(v) data.frame(pos=seq(-before, after-1), l2FC=v),
+          simplify=F) %>%
+        bind_rows(.id = "marks") %>%
+        mutate(marks = marks %>% factor(chic.mark.data$mark))
+    },
+    simplify=FALSE
+  ) %>%
+    bind_rows(.id = "group")
+  facet_data$group <- facet_data$group %>% factor(c("on", "off"))
+ 
+  facet_data %>% ggplot(
+    aes(x=pos, y=l2FC)
+  ) + geom_line(
+    data = tribble(~pos, ~l2FC, -Inf, 1, Inf, 1),
+    color = "darkred",
+    linewidth = 0.5
+  ) + geom_line(
+    # Implement the actual ChIC profile track.
+    aes(group = group, color = group, linewidth = group)
+  ) + facet_wrap(
+    vars(marks)
+  ) + scale_color_manual(
+    values = c(track_color, muted(track_color))
+  ) + scale_linewidth_manual(
+    values = c(1, 0.25)
+  ) + scale_y_continuous(
+    trans = "log",
+    labels = \(v) round(log(v) / log(2), 1),
+    limits = chic_average_profile_limits,
+    breaks = chic_average_breaks,
+    minor_breaks = chic_average_minor_breaks,
+    expand = c(0, 0)
+  ) + coord_cartesian(expand = FALSE) + labs(
+    x = "bp (from TSS)", y = "log2(mean(mark/input))"
+  ) + theme(
+    aspect.ratio = 1
+  )
+}
+
+chic_multi_genes_tss_profile <- function(
+  facet_data,
+  color,
+  linewidth
+) {
+  before <- 500
+  after <- 1500
+ 
+  facet_data %>% ggplot(
+    aes(x=pos, y=l2FC)
+  ) + geom_line(
+    data = tribble(~pos, ~l2FC, -Inf, 1, Inf, 1),
+    color = "darkred",
+    linewidth = 0.5
+  ) + geom_line(
+    # Implement the actual ChIC profile track.
+    aes(group = genes, color = genes, linewidth = genes)
+  ) + facet_wrap(
+    vars(marks)
+  ) + scale_color_manual(
+    values = color
+  ) + scale_linewidth_manual(
+    values = linewidth
   ) + scale_y_continuous(
     trans = "log",
     labels = \(v) round(log(v) / log(2), 1),
@@ -500,7 +612,7 @@ chic_quartile_gene_list_paneled_profiles <- function(
     values = quartile_colors,
     guide = guide_legend(title = legend_title, reverse = TRUE, override.aes = list(fill = "transparent"))
   ) + scale_linewidth_manual(
-    values = c(0.5, 0.75, 1.5, 1.75),
+    values = c(0.25, 0.5, 0.7, 1),
     guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + coord_cartesian(
     c(0, tss_size + inter_size + tes_size),
@@ -520,14 +632,14 @@ chic_quartile_gene_list_paneled_profiles <- function(
   custom_plot + geom_line(
     # Dark red line at the origin (enrichment of 1)
     data = cross_join(
-      tribble(~x, ~y, -Inf, 1, Inf, 1),
+      tribble(~x, ~y, -Inf, 1.01, Inf, 1.01),
       tibble(
         group = NA,
         chic_mark = factor(chic.mark.data$mark, chic.mark.data$mark, ordered=TRUE)
       )
     ),
     color = "darkred",
-    linewidth = 0.5
+    linewidth = 0.33
   ) + geom_line() + labs(
     x = "base pairs", y = "log2(mean(mark/input))"
   ) + scale_x_continuous(
@@ -646,15 +758,130 @@ chic_custom_gene_list_paneled_profile <- function(
     # Implement the actual ChIC profile track.
     aes(group = group, color = group, linewidth = group)
   ) + labs(
-    x = "base pairs", y = "mean(mark/input)"
+    x = "base pairs", y = "log2(mean(mark/input))"
   ) + scale_x_continuous(
     breaks = label_data_show$x,
     labels = label_data_show$x_label,
     minor_breaks = minor_breaks_show$x
+  ) + scale_y_continuous(
+    trans = "log",
+    labels = \(v) round(log(v) / log(2), 1),
+    limits = chic_average_profile_limits,
+    breaks = chic_average_breaks,
+    minor_breaks = chic_average_minor_breaks,
+    expand = c(0, 0)
   ) + scale_color_manual(
-    values = c(track_color, muted(track_color))
+    values = c(track_color, muted(track_color, l=70))
   ) + scale_linewidth_manual(
     values = c(1, 0.25)
+  ) + theme(
+    panel.margin = unit(25, "pt"),
+    aspect.ratio = 1
+  )
+}
+
+# Draws any lines grouped by "genes", along K4/K27/K9 facet wrap and yellow
+# TSS/TES tiles.
+chic_multi_genes_paneled_profile <- function(
+  custom_data,
+  color,
+  linewidth,
+  heatmap_before_after = 500,
+  # 1 kb - before and after
+  tss_size = 1,
+  # 2 kb long - by convention
+  inter_size = 2,
+  tes_size = 1
+) {
+  label_data <- custom_data %>%
+    subset(
+      as.numeric(chic_mark) == 1 & as.numeric(genes) == 1,
+      select = c(x, x_label)
+    )
+  label_data_show <- label_data %>%
+    subset(
+      x_label %in% c(
+        paste0("-", heatmap_before_after),
+        paste0("+", heatmap_before_after - 1),
+        "50%",
+        "TSS",
+        "TES"
+      )
+    )
+  minor_breaks_show <- label_data %>% subset(x_label %in% c("25%", "75%"))
+
+  custom_plot <- custom_data %>% ggplot(
+    aes(x, y)
+  ) + geom_tile(
+    # Colored tile (TSS and TES)
+    data = tribble(
+      ~x, ~y, ~width,
+      # Full-size background color
+      1,
+      1,
+      Inf,
+      tss_size / 2,
+      1,
+      tss_size,
+      tss_size + inter_size + (tes_size / 2),
+      1,
+      tes_size
+    ) %>%
+      cross_join(
+        tibble(
+          height = Inf
+        )
+      ),
+    aes(width=width, height=height),
+    color = "transparent",
+    fill = rep(
+      # Use cream color from magma scale
+      c("#eeeeee", viridis(2, option = "magma", end = 0.99)[2])[
+        c(1, 2, 2)
+      ],
+      length(chic.mark.data$mark)
+    )
+  ) + facet_wrap(
+    vars(chic_mark)
+  ) + coord_cartesian(
+    c(0, tss_size + inter_size + tes_size),
+    chic_average_profile_limits,
+    expand=FALSE
+  ) + theme(
+    panel.background = element_rect(fill = NA),
+    panel.ontop = TRUE
+  )
+  custom_plot + geom_line(
+    # Dark red line at the origin (enrichment of 1)
+    data = cross_join(
+      tribble(~x, ~y, -Inf, 1, Inf, 1),
+      tibble(
+        genes = NA,
+        chic_mark = factor(chic.mark.data$mark, chic.mark.data$mark, ordered=TRUE)
+      )
+    ),
+    color = "darkred",
+    linewidth = 0.5
+  ) + geom_line(
+    # Implement the actual ChIC profile track.
+    aes(group = genes, color = genes, linewidth = genes)
+  ) + labs(
+    x = "base pairs", y = "log2(mean(mark/input))"
+  ) + scale_x_continuous(
+    breaks = label_data_show$x,
+    labels = label_data_show$x_label,
+    minor_breaks = minor_breaks_show$x
+  ) + scale_y_continuous(
+    trans = "log",
+    labels = \(v) round(log(v) / log(2), 1),
+    limits = chic_average_profile_limits,
+    breaks = chic_average_breaks,
+    minor_breaks = chic_average_minor_breaks,
+    expand = c(0, 0)
+  ) + scale_color_manual(
+    values = color
+  ) + scale_linewidth_manual(
+    values = linewidth
   ) + theme(
     panel.margin = unit(25, "pt"),
     aspect.ratio = 1

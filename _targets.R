@@ -2013,6 +2013,7 @@ list(
           AllSomaticGenes = somatic,
           ExclusiveGermlineGenes = setdiff(germline, somatic),
           ExclusiveSomaticGenes = setdiff(somatic, germline),
+          NonExclusiveGermlineAndSomaticGenes = intersect(germline, somatic),
           AllGermlineOrSomaticGenes = union(germline, somatic),
           OffGenes = rownames(read.csv(assay.data.sc, row.names=1)) %>% setdiff(germline) %>% setdiff(somatic)
         )
@@ -2046,10 +2047,7 @@ list(
               dirname,
               assay.data.sc,
               driver,
-              track_color = if (grepl("Germline", names(gene_obj)))
-                chic_line_track_colors$germline
-              else if (grepl("Somatic", names(gene_obj)))
-                chic_line_track_colors$somatic
+              track_color = chic_line_track_colors[[tolower(name)]]
             ) %>%
               list,
             paneled_plot = chic_custom_gene_list_paneled_profile(
@@ -2058,10 +2056,7 @@ list(
               dirname,
               assay.data.sc,
               driver,
-              track_color = if (grepl("Germline", names(gene_obj)))
-                chic_line_track_colors$germline
-              else if (grepl("Somatic", names(gene_obj)))
-                chic_line_track_colors$somatic
+              track_color = chic_line_track_colors[[tolower(name)]]
             ) %>%
               list
           )
@@ -2097,6 +2092,7 @@ list(
       chic.fpkm.data,
       sc_chr_factor = rlang::syms(str_glue("sc_chr_factor_{name}")),
       tss_sc_chr_quartile_data = rlang::syms(str_glue("tss_sc_chr_quartile_data_{name}")),
+      tss_sc_chr_active_data = rlang::syms(str_glue("tss_sc_chr_active_data_{name}")),
       tss_sc_chr_data = rlang::syms(str_glue("tss_sc_chr_data_{name}"))
     ),
     names = name,
@@ -2105,34 +2101,122 @@ list(
       save_figures(
         paste0("figure/", name),
         ".pdf",
-        tibble(
-          c("CHIC-TSS-Chr-AllMarks-RNAseq-Quartile", "CHIC-TSS-Chr-AllMarks-RNAseq"),
-          figure = list(
-            mutate(
-              tss_sc_chr_quartile_data,
-              facet = factor(str_extract(genes, "[^.]+"), levels(sc_chr_factor$chr), ordered=TRUE),
-              genes = factor(str_extract(genes, "[.](\\S+)", group=1), levels(sc_chr_factor$quant), ordered=TRUE)
-            ) %>%
-              chic_plot_average_profiles_facet_grid(
-                "CPM Quartile",
-                setNames(sc_quartile_colors, NULL)
-              ),
-            mutate(
-              tss_sc_chr_data,
-              facet = factor(str_extract(genes, "\\S+"), levels(sc_chr_factor$chr), ordered=TRUE),
-              genes = factor("genelist")
-            ) %>%
-              chic_plot_average_profiles_facet_grid(
-                "CPM Quartile",
-                "#bf311b",
-                linewidth = 0.75
-              )
-            + guides(linewidth = guide_none(), color = guide_none())
-          ),
-          width = 9,
-          height = 15
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          "CHIC-TSS-Chr-AllMarks-RNAseq-Quartile", 
+          mutate(
+            tss_sc_chr_quartile_data,
+            facet = factor(str_extract(genes, "[^.]+"), setdiff(levels(sc_chr_factor$chr), "Y"), ordered=TRUE),
+            genes = factor(str_extract(genes, "[.](\\S+)", group=1), levels(sc_chr_factor$quant), ordered=TRUE)
+          ) %>%
+            subset(!is.na(facet)) %>%
+            chic_plot_average_profiles_facet_grid(
+              "CPM Quartile",
+              setNames(sc_quartile_colors, NULL)
+            ),
+          9,
+          12,
+          "CHIC-TSS-Chr-AllMarks-RNAseq",
+          mutate(
+            tss_sc_chr_active_data,
+            facet = factor(str_extract(genes, "[^.]+"), setdiff(levels(sc_chr_factor$chr), "Y"), ordered=TRUE),
+            genes = factor(str_extract(genes, "[.](\\S+)", group=1), c("off", "active"), ordered=TRUE)
+          ) %>%
+            subset(!is.na(facet)) %>%
+            chic_plot_average_profiles_facet_grid(
+              "CPM Quartile",
+              rep(chic_line_track_colors[[tolower(name)]], 2)
+            )
+          + guides(linewidth = guide_none(), color = guide_none()),
+          8,
+          10
         )
       )
+    )
+  ),
+
+  tar_target(
+    germline_somatic_line_plot_legend,
+    (
+      ggplot(tibble(name=c("Germline", "Somatic"), x=0, y=0, xend=1, yend=0), aes(x, y))
+      +
+      geom_segment(aes(xend=xend, yend=yend, color=name), linewidth=0.66)
+      +
+      scale_color_manual(values = chic_line_track_colors %>% unlist %>% setNames(NULL))
+    ) %>%
+      get_legend
+  ),
+  tar_file(
+    fig.fpkm.chic.both,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "CHIC-TSS-Chr-AllMarks-RNAseq",
+        list(Germline=tss_sc_chr_active_data_Germline, Somatic=tss_sc_chr_active_data_Somatic) %>%
+          bind_rows(.id = "name") %>%
+          arrange(desc(row_number())) %>%
+          mutate(
+            facet = factor(str_extract(genes, "[^.]+"), setdiff(levels(sc_chr_factor_Germline$chr), "Y"), ordered=TRUE),
+            genes = interaction(
+              factor(str_extract(genes, "[.](\\S+)", group=1), c("off", "active"), ordered=TRUE),
+              ordered(name)
+            )
+          ) %>%
+          subset(!is.na(facet)) %>%
+          chic_plot_average_profiles_facet_grid(
+            "CPM Quartile",
+            c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
+            linewidth = c(0.33, 0.66, 0.33, 0.66)
+          ) %>%
+          replace_legend(germline_somatic_line_plot_legend),
+        9,
+        12
+      )
+    )
+  ),
+  tar_file(
+    fig.fpkm.chic.both.genelists,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        fpkm.chic.plots_CPM_Germline %>% rename_with(\(n) paste0(n, "_Germline")),
+        fpkm.chic.plots_CPM_Somatic %>% rename_with(\(n) paste0(n, "_Somatic"))
+      ) %>%
+        rowwise %>%
+        reframe(
+          gene_list = gene_list_Germline,
+          tss_plot_data = bind_rows(list(Germline=tss_plot_Germline$data, Somatic=tss_plot_Somatic$data), .id="name") %>%
+            mutate(genes = interaction(group, name) %>% factor(c("off.Germline", "on.Germline", "off.Somatic", "on.Somatic"), ordered=T)) %>%
+            arrange(name == "Germline") %>%
+            list,
+          paneled_plot_data = bind_rows(list(Germline=paneled_plot_Germline$data, Somatic=paneled_plot_Somatic$data), .id="name") %>%
+            mutate(genes = interaction(group, name) %>% factor(c("off.Germline", "on.Germline", "off.Somatic", "on.Somatic"), ordered=T)) %>%
+            arrange(name == "Germline") %>%
+            list
+        ) %>%
+        rowwise %>%
+        reframe(
+          rowname = str_glue("CHIC-{c('TSS-','')}AllMarks-RNAseq-CPM-{gene_list}") %>% as.character,
+          figure = list(
+            chic_multi_genes_tss_profile(
+              tss_plot_data,
+              c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
+              linewidth = c(0.33, 0.66, 0.33, 0.66)
+            ) %>%
+              replace_legend(germline_somatic_line_plot_legend),
+            chic_multi_genes_paneled_profile(
+              paneled_plot_data,
+              c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
+              linewidth = c(0.33, 0.66, 0.33, 0.66)
+            ) %>%
+              replace_legend(germline_somatic_line_plot_legend)
+          ),
+          width = c(9, 15),
+          height = 4
+        )
     )
   ),
 

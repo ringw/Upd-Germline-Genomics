@@ -73,18 +73,41 @@ targets.sce <- list(
     ),
     packages = tar_option_get("packages") %>% c("dendextend", "ggdendro")
   ),
+  tar_target(
+    Upd_genes_newcut, cut(Upd_genes_dendrogram, 158)
+  ),
+  tar_target(
+    Upd_genes_newcut_minor_breaks,
+    c(1, cumsum(sapply(Upd_genes_newcut$lower, \(dd) length(labels(dd)))))
+  ),
+  tar_target(
+    Upd_genes_newcut_breaks,
+    (
+      Upd_genes_newcut_minor_breaks[-length(Upd_genes_newcut_minor_breaks)]
+      + Upd_genes_newcut_minor_breaks[-1]
+    ) / 2
+  ),
   tar_file(
     Upd_genes_logCPM_heatmap,
     save_figures(
       "figure/Integrated-scRNAseq",
       ".pdf",
       tibble(
-        "Heatmap-logCPM",
+        c("Heatmap-logCPM", "Heatmap-logCPM-Annotated"),
         figure = list(
           plot_logcpm_heatmap(
             Upd_cpm, Upd_genes_dendrogram
           )
+          + theme(aspect.ratio = 4/3),
+          plot_logcpm_heatmap(
+            Upd_cpm, Upd_genes_dendrogram, genes_cut=158
+          )
           + theme(aspect.ratio = 4/3)
+          + scale_y_continuous(
+            pos = "right",
+            breaks = sort(c(Upd_genes_newcut_minor_breaks, Upd_genes_newcut_breaks)),
+            labels = as.character(rbind("", head(LETTERS, length(Upd_genes_newcut_breaks))) %>% c(""))
+          )
         ),
         width=4.5,
         height=6
@@ -92,6 +115,14 @@ targets.sce <- list(
     ),
     packages = tar_option_get("packages") %>%
       c("dendextend", "ggdendro", "tidyr")
+  ),
+  tar_file(
+    Upd_genes_heatmap_excel,
+    publish_heatmap_named_cuts(
+      Upd_genes_newcut$lower %>% setNames(head(LETTERS, length(.))),
+      assay.data.sc,
+      "scRNA-seq-Regression/Dendrogram-Gene-Names.xlsx"
+    )
   ),
   tar_map(
     tibble(extension = c(".pdf", ".png")),

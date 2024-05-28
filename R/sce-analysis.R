@@ -82,8 +82,7 @@ Upd_sc_feature_plot <- function(Upd_sc, gene, cells, assay = "RNA") {
   gene.data = FetchData(Upd_sc, c("umap_1", "umap_2", gene, "ident")) %>%
     rename(all_of(dplyr_rename_lookup_gene))
   gene.data <- gene.data[cells, ]
-  gene.max.intensity = gene.data %>% group_by(ident) %>% summarise(quantile(LogNormalize, 0.95)) %>% pull(2) %>% max
-  gene.max.intensity = c(Mst87F=5, Act57B=4, soti=3, sunz=2, `Amy-d`=2, `scpr-B`=3, ey=1.5)[gene] %>% replace(is.na(.), gene.max.intensity)
+  gene.max.intensity <- NA
   gene.data %>% ggplot(
     aes(umap_1, umap_2, color=LogNormalize)
   ) + rasterize(geom_point(

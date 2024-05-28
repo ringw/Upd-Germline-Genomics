@@ -300,3 +300,33 @@ write_excel_tables_list_percentages <- function(lst, output_path) {
   }
   saveWorkbook(wb, output_path, overwrite = TRUE)
 }
+
+publish_heatmap_named_cuts <- function(named_dendros, assay_data_sc, target_path) {
+  wb = createWorkbook()
+  sheet <- "Sheet1"
+  addWorksheet(wb, sheet)
+  assay_data_sc <- assay_data_sc %>% read.csv(row.names = 1) %>% rownames_to_column
+
+  startCol <- 1
+  for (n in names(named_dendros)) {
+    writeData(wb, sheet, matrix(str_glue("Group {n}")), startCol, 1, colNames=F)
+    writeDataTable(
+      wb,
+      sheet,
+      left_join(
+        tibble(rowname = labels(named_dendros[[n]])),
+        assay_data_sc,
+        "rowname"
+      ) %>%
+        reframe(`gene name` = rowname, flybase),
+      startCol,
+      2
+    )
+
+    startCol <- startCol + 3
+  }
+
+  dir.create(dirname(target_path), showW=F, rec=T)
+  saveWorkbook(wb, target_path, overwrite=T)
+  target_path
+}

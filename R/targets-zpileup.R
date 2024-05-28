@@ -19,18 +19,6 @@ bulk.bam <- cross_join(
     bam.target = rlang::syms(str_glue("{bam}_{symbol}_{reference}"))
   )
 
-bam_to_df_empty <- tibble(
-  qname = factor(),
-  flag = integer(0),
-  rname = character(0),
-  strand = factor(),
-  pos = integer(0),
-  qwidth = integer(0),
-  mapq = integer(0),
-  cigar = character(0),
-  dc = integer(0)
-)
-
 targets.bulk.samples <- tar_map(
   bulk.bam,
   names = any_of(c("bam", "symbol", "reference")),
@@ -65,10 +53,12 @@ targets.bulk.samples <- tar_map(
   ),
   tar_target(
     bulk_reads_misc,
-    bam_to_df_multi_rname(
-      bam.target,
-      setdiff(bulk_reads_idxstats$rname, c(names(masked.lengths), "*"))
-    ),
+    sapply(
+      setdiff(bulk_reads_idxstats$rname, c(names(masked.lengths), "*")),
+      \(n) bam_to_df(bam.target, n),
+      simplify=FALSE
+    ) %>%
+      bind_rows,
     format = "parquet",
     cue = tar_cue("never"),
     packages = c("dplyr", "GenomicRanges", "Rsamtools", "stringr", "tibble")

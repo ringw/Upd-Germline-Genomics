@@ -37,39 +37,13 @@ bam_to_df <- function(bam_file, rname, ...) {
   )
 }
 
-bam_to_df_multi_rname <- function(bam_file, rnames, ...) {
-  granges <- GRanges(str_glue("{rnames}:1-{max(chr.lengths)}"))
-  scan_bam_param <- pileup_scan_bam_param(which=granges, ...)
-  bam_objs <- scanBam(bam_file, param=scan_bam_param)
-  bam_tibble <- do.call(
-    rbind,
-    sapply(
-      bam_objs,
-      \(lst) as_tibble(replace(lst, match("tag", names(lst)), list(lst$tag$dc) %>% replace(sapply(., is.null), list(integer(0))))),
-      simplify=F
-    )
-  )
-  reframe(
-    bam_tibble,
-    qname = factor(qname, unique(qname)),
-    flag,
-    rname,
-    strand,
-    pos,
-    qwidth,
-    mapq,
-    cigar,
-    dc = tag
-  ) %>%
-    arrange(qname)
-}
-
 bam_reference_coords <- function(df) {
   df %>%
     mutate(
       cigar = factor(cigar),
       width = cigar %>%
         fct_relabel(\(v) as.character(cigar_ref_length(v))) %>%
+        as.character %>%
         as.numeric,
       pos_crick = pos + width - 1
     )
@@ -92,7 +66,46 @@ bam_cover_read_bp <- function(df, min_mapq, markdup=FALSE) {
     arrange(rname, pos)
   if (!is.factor(df$rname)) df$rname <- factor(df$rname)
   mapply(
-    \(rname, i, x) sparseVector(x, i, length = masked.lengths[rname]),
+    \(rname, i, x) sparseVector(x, i, length = masked.lengths[as.character(rname)]),
+    levels(df$rname),
+    split(df$pos, df$rname),
+    split(df$nreads, df$rname),
+    SIMPLIFY=FALSE
+  )
+}
+
+paired_end_reads_to_fragment_lengths <- function(df) {
+  stopifnot(all(df$strand[seq(2, nrow(df), by=2)] == "-"))
+  df$fragment_end_crick <- rep(
+    bam_reference_coords(df[seq(2, nrow(df), by=2),, drop=F])$pos_crick,
+    each=2
+  )
+  df <- df[seq(1, nrow(df), by=2),, drop=F]
+  df$length <- df$fragment_end_crick - df$pos + 1
+  df
+}
+
+bam_cover_paired_end_fragments_bp <- function(df, min_mapq, min_fl, max_fl, markdup=FALSE) {
+  stopifnot(all(df$rname %in% names(masked.lengths)))
+  df$rname <- df$rname %>% droplevels()
+
+  df <- df %>% paired_end_reads_to_fragment_lengths
+  df <- df %>%
+    bam_reference_coords %>%
+    filter(between(length, min_fl, max_fl), between(mapq, min_mapq, 254)) %>%
+    reframe(
+      rname,
+      pos = pos + round((fragment_end_crick - pos) / 2),
+      # TODO: Fix bug where bam_to_df with no reads might have NULL for the
+      # dc column.
+      dc = if (markdup || !("dc" %in% colnames(df))) 1 else dc
+    ) %>%
+    group_by(rname, pos) %>%
+    summarise(nreads = sum(dc), .groups="drop") %>%
+    arrange(rname, pos)
+  if (!is.factor(df$rname)) df$rname <- factor(df$rname)
+  mapply(
+    \(rname, i, x) sparseVector(x, i, length = masked.lengths[as.character(rname)]),
     levels(df$rname),
     split(df$pos, df$rname),
     split(df$nreads, df$rname),

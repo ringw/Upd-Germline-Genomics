@@ -118,6 +118,46 @@ targets.chic.aligned <- tar_map(
 targets.chic <- list(
   targets.chic.aligned,
 
+  tar_map(
+    mutate(
+      bowtie.refs,
+      idxstats = rlang::syms(str_glue("bulk_reads_idxstats_chic.bam_GC3772016_S1_L002_{name}"))
+    ),
+    names = name,
+    tar_target(
+      chic.tile_chr_granges_list,
+      GRanges(idxstats$rname %>% setdiff("*") %>% factor(., .), IRanges(1, width = idxstats$rlength[idxstats$rname != "*"])) %>%
+        split(seqnames(.))
+    ),
+    tar_target(
+      chic.tile_all_chr_diameter_50_granges_list,
+      slidingWindows(
+        unlist(chic.tile_chr_granges_list), w=50L, s=20L
+      )
+    ),
+    tar_target(
+      chic.tile.diameter_50,
+      sapply(
+        levels(seqnames(chic.tile_chr_granges_list[[1]])),
+        \(n) if (n %in% names(masked.lengths))
+          chic.tile_all_chr_diameter_50_granges_list[[n]]
+        else
+          chic.tile_chr_granges_list[[n]],
+        USE.NAMES = FALSE
+      ) %>%
+        GRangesList %>%
+        unlist %>%
+        GRanges(
+          seqlengths = idxstats %>%
+            subset(
+              rname != "*",
+              select = c(rname, rlength)
+            ) %>%
+            deframe
+        )
+    )
+  ),
+
   # ChIC loaded BAM files to KDE and the bandwidth-equivalent rectangular windows.
   tar_map(
     cross_join(
@@ -141,9 +181,41 @@ targets.chic <- list(
           name,
           str_glue("chic.bam_{sample}_{name}"),
           SIMPLIFY=F
-        )
+        ),
+        chic.tile.diameter_50 = rlang::syms(str_glue("chic.tile.diameter_50_{name}"))
       ),
     names = suffix,
+
+    tar_target(
+      chic.granges.diameter_50,
+      do.call(
+        rbind,
+        append(bulk_reads_split, list(bulk_reads_misc))
+      ) %>%
+        paired_end_reads_to_fragment_lengths %>%
+        filter(
+          between(length, 120, 220),
+          between(mapq, 20, 254)
+        ) %>%
+        with(
+          {
+            gr <- GRanges(
+                rname,
+                IRanges(pos + round((fragment_end_crick - pos) / 2), width=1)
+              ) %>%
+              countOverlaps(
+                chic.tile.diameter_50, .
+              ) %>%
+              GRanges(
+                chic.tile.diameter_50,
+                score = .
+              )
+            metadata(gr)$est_library_size <- length(pos)
+            gr
+          }
+        )
+    ),
+
     tar_target(
       chic.sparseVector,
       append(
@@ -197,7 +269,7 @@ targets.chic <- list(
                 chic.chr.fpkm[[rname]],
                 obs_vector = v,
                 bw = 25,
-                sample_rate = 10
+                sample_rate = 20
               ),
               names(.),
               .
@@ -216,10 +288,13 @@ targets.chic <- list(
         chic_sample_names = subset(
           chic.samples$sample,
           (chic.samples$driver %>% replace(. == "Nos", "nos")) == driver &
-          (chic.samples$molecule == "H3" | chic.samples$group == mark)
+          # (chic.samples$molecule == "H3" | chic.samples$group == mark)
+          chic.samples$group == mark
         ) %>%
           list,
         chic.granges.fpkm = rlang::syms(str_glue("chic.granges.fpkm_{chic_sample_names}_{reference}")) %>%
+          list,
+        chic.granges.diameter_50 = rlang::syms(str_glue("chic.granges.diameter_50_{chic_sample_names}_{reference}")) %>%
           list,
         experimental_group = (
           chic.samples$group[match(chic_sample_names, chic.samples$sample)]
@@ -239,7 +314,7 @@ targets.chic <- list(
       chic.experiment.sample.names, chic_sample_names
     ),
     tar_target(
-      chic.experiment.granges,
+      chic.experiment.granges.fpkm,
       unlist(chic.granges.fpkm[[1]]) %>%
         attributes %>%
         with(
@@ -263,6 +338,81 @@ targets.chic <- list(
         )
     ),
     tar_target(
+      chic.experiment.granges.diameter_50,
+      chic.granges.diameter_50[[1]] %>%
+        attributes %>%
+        append(list(molecule=molecule, rep=rep)) %>%
+        with(
+          GRanges(
+            seqnames,
+            ranges,
+            seqlengths = seqlengths(chic.granges.diameter_50[[1]]),
+            score = sapply(chic.granges.diameter_50, \(gr) gr$score) %>%
+              matrix(
+                nrow = nrow(.),
+                dimnames = list(NULL, str_glue("{molecule}_Rep{rep}"))
+              )
+          ) %>%
+            `metadata<-`(
+              value = list(
+                est_library_size = sapply(
+                  chic.granges.diameter_50,
+                  \(gr) gr@metadata$est_library_size
+                ) %>%
+                  setNames(str_glue("{molecule}_Rep{rep}"))
+              )
+            )
+        )
+    ),
+    tar_target(
+      chic.experiment.granges.offset_diameter_50,
+      with(
+        list(ones = matrix(1, nrow = nrow(chic.experiment.granges.diameter_50@elementMetadata), ncol = ncol(chic.experiment.granges.diameter_50@elementMetadata))),
+        GRanges(
+          seqnames(chic.experiment.granges.diameter_50),
+          ranges(chic.experiment.granges.diameter_50),
+          offset = as.matrix(
+            Diagonal(x = log(ranges(chic.experiment.granges.diameter_50)@width))
+            %*% ones
+            + ones %*%
+            Diagonal(x = log(chic.experiment.granges.diameter_50@metadata$est_library_size))
+          ) - 3 * log(1000)
+        )
+      )
+    ),
+    tar_target(
+      chic.experiment.quantify,
+      tibble(
+        rep = rep %>%
+          factor %>%
+          `contrasts<-`(value = contr.helmert(length(levels(.)))),
+        model = list(
+          glm_gp(
+            as.matrix(chic.experiment.granges.diameter_50@elementMetadata),
+            ~ 0 + molecule + rep,
+            size_factors = 1,
+            offset = as.matrix(
+              elementMetadata(chic.experiment.granges.offset_diameter_50)
+            ),
+            overdispersion = "global",
+            overdispersion_shrinkage = FALSE,
+            verbose = TRUE
+          )
+        )
+      ) %>%
+        with(
+          GRanges(
+            seqnames(chic.experiment.granges.diameter_50),
+            ranges(chic.experiment.granges.diameter_50),
+            score = as.data.frame(exp(model[[1]]$Beta)),
+            seqlengths = seqlengths(chic.experiment.granges.diameter_50)
+          ) %>%
+            `metadata<-`(
+              value = model[[1]]["overdispersions"]
+            )
+        )
+    ),
+    tar_target(
       chic.experiment.model.data,
       tibble(
         molecule = factor(molecule),
@@ -271,11 +421,11 @@ targets.chic <- list(
         rep = factor(as.character(rep)) %>%
           `contrasts<-`(value = contr.helmert(length(levels(.)))),
         # Let's use one window in the exon of "tj" as the example locus for fitting an lm.
-        score = chic.experiment.granges@elementMetadata[
-          which.max(chic.experiment.granges@seqnames == "2L" & chic.experiment.granges@ranges@start == 19465001),
+        score = chic.experiment.granges.fpkm@elementMetadata[
+          which.max(chic.experiment.granges.fpkm@seqnames == "2L" & chic.experiment.granges.fpkm@ranges@start == 19465001),
         ] %>%
           unlist,
-        est_library_size = chic.experiment.granges@metadata$est_library_size
+        est_library_size = chic.experiment.granges.fpkm@metadata$est_library_size
       ) %>%
         as.list %>%
         with(
@@ -299,6 +449,33 @@ targets.chic <- list(
           weights = 1 / sqrt(chic.experiment.model.data$est_library_size),
           subset = chic.experiment.model.data$experimental_group == marks
         )
+      )
+    ),
+    tar_target(
+      chic.experiment.enrich,
+      with(
+        manova(
+          score ~ 0 + molecule + experimental_group_rep,
+          chic.experiment.model.data %>%
+            replace(
+              names(.) == "score",
+              list(t(as.matrix(chic.experiment.granges.fpkm@elementMetadata)))
+            ),
+          weights = 1 / sqrt(chic.experiment.model.data$est_library_size)
+        ),
+        {
+          score <- replace(
+            coefficients[2, ] / coefficients[1, ],
+            coefficients[1, ] < 0.5,
+            NA
+          )
+          GRanges(
+            chic.experiment.granges.fpkm@seqnames,
+            chic.experiment.granges.fpkm@ranges,
+            seqlengths = seqlengths(chic.experiment.granges.fpkm),
+            score = score
+          )
+        }
       )
     )
   ),
@@ -378,7 +555,10 @@ targets.chic <- list(
           factor(c("2", "3", "4", "X", "Y")),
         quant = quartile.factor %>%
           fct_recode(off="Q1", low="Q2", med="Q3", high="Q4"),
-        fct = interaction(chr, quant)
+        activity = quartile.factor %>%
+          fct_recode(off="Q1", active="Q2", active="Q3", active="Q4"),
+        fct = interaction(chr, quant),
+        fct_activity = interaction(chr, activity)
       )
     ),
     tar_target(
@@ -420,6 +600,60 @@ targets.chic <- list(
         sprintf("#%06d", 10 * seq_along(levels(sc_chr_factor$chr)))
       )$data,
       format = "parquet"
+    ),
+    tar_target(
+      tss_sc_chr_active_data,
+      chic_average_profiles(
+        pull(sc_chr_factor, fct_activity, rowname),
+        dirname(
+          c(
+            chic.bw_H3K4_Germline,
+            chic.bw_H3K27_Germline,
+            chic.bw_H3K9_Germline
+          )[1]
+        ),
+        assay.data.sc,
+        driver,
+        # "CPM Quartile",
+        "",
+        # fake colors
+        sprintf("#%06d", 10 * seq_along(levels(sc_chr_factor$chr)))
+      )$data,
+      format = "parquet"
     )
-  )
+  ),
+
+  # Temp targets for loading chic.bw.2 and producing repli graphics
+  tar_target(
+    chic.track_chr,
+    tibble(
+      filename = chic.bw.2_H3K4_Germline,
+      track = list(import(BigWigFile(filename)))
+    ) %>%
+      with(
+        GRanges(
+          track[[1]]@seqnames[!grepl("GAL80|FBte", track[[1]]@seqnames)] %>% droplevels,
+          track[[1]]@ranges[!grepl("GAL80|FBte", track[[1]]@seqnames)],
+          seqlengths=subset(seqlengths(track[[1]]), !grepl("GAL80|FBte", names(seqlengths(track[[1]]))))
+        )
+      )
+  ),
+  tar_target(
+    chic.track_masked,
+    tibble(
+      filename = chic.bw.2_H3K4_Germline,
+      track = list(import(BigWigFile(filename)))
+    ) %>%
+      with(
+        GRanges(
+          track[[1]]@seqnames[!grepl("GAL80", track[[1]]@seqnames)] %>% droplevels,
+          track[[1]]@ranges[!grepl("GAL80", track[[1]]@seqnames)],
+          seqlengths=subset(seqlengths(track[[1]]), !grepl("GAL80", names(seqlengths(track[[1]]))))
+        )
+      )
+  ),
+  tar_target(chic.results_nos_chr, list(H3K4=chic.bw.2_H3K4_Germline, H3K27=chic.bw.2_H3K27_Germline, H3K9=chic.bw.2_H3K9_Germline)),
+  tar_target(chic.results_tj_chr, list(H3K4=chic.bw.2_H3K4_Somatic, H3K27=chic.bw.2_H3K27_Somatic, H3K9=chic.bw.2_H3K9_Somatic)),
+  tar_target(chic.results_nos_masked, chic.results_nos_chr),
+  tar_target(chic.results_tj_masked, chic.results_tj_chr)
 )
