@@ -198,21 +198,18 @@ targets.chic <- list(
           between(mapq, 20, 254)
         ) %>%
         with(
-          {
-            gr <- GRanges(
-                rname,
-                IRanges(pos + round((fragment_end_crick - pos) / 2), width=1)
-              ) %>%
-              countOverlaps(
-                chic.tile.diameter_50, .
-              ) %>%
-              GRanges(
-                chic.tile.diameter_50,
-                score = .
-              )
-            metadata(gr)$est_library_size <- length(pos)
-            gr
-          }
+          GRanges(
+              rname,
+              IRanges(pos + round((fragment_end_crick - pos) / 2), width=1)
+            ) %>%
+            countOverlaps(
+              chic.tile.diameter_50, .
+            ) %>%
+            GRanges(
+              chic.tile.diameter_50,
+              score = .
+            ) %>%
+            `metadata<-`(value = list(est_library_size = length(pos)))
         )
     ),
 
