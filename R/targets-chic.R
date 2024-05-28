@@ -194,7 +194,7 @@ targets.chic <- list(
       ) %>%
         paired_end_reads_to_fragment_lengths %>%
         filter(
-          between(length, 120, 220),
+          between(length, 150, 200),
           between(mapq, 20, 254)
         ) %>%
         with(
@@ -222,7 +222,7 @@ targets.chic <- list(
         sapply(
           bulk_reads_split,
           \(df) bam_cover_paired_end_fragments_bp(
-            df, min_mapq = 20, min_fl = 120, max_fl = 220, markdup = TRUE
+            df, min_mapq = 20, min_fl = 150, max_fl = 200, markdup = TRUE
           )[[1]],
           simplify=FALSE
         ),
@@ -231,7 +231,7 @@ targets.chic <- list(
             bulk_reads_misc %>%
               paired_end_reads_to_fragment_lengths %>%
               # mutate(rname = rname %>% factor(setdiff(levels(.), names(if (name == "masked") masked.lengths else chr.lengths)))) %>%
-              filter(between(mapq, 20, 254), between(length, 120, 220)) %>%
+              filter(between(mapq, 20, 254), between(length, 150, 200)) %>%
               split(.$rname) %>%
               sapply(\(df) nrow(df))
           )[setdiff(levels(bulk_reads_misc$rname), names(if (name == "masked") masked.lengths else chr.lengths))] %>%
@@ -382,33 +382,33 @@ targets.chic <- list(
     ),
     tar_target(
       chic.experiment.quantify,
-      tibble(
-        rep = rep %>%
-          factor %>%
-          `contrasts<-`(value = contr.helmert(length(levels(.)))),
-        model = list(
-          glm_gp(
-            as.matrix(chic.experiment.granges.diameter_50@elementMetadata),
-            ~ 0 + molecule + rep,
-            size_factors = 1,
-            offset = as.matrix(
-              elementMetadata(chic.experiment.granges.offset_diameter_50)
-            ),
-            overdispersion = "global",
-            overdispersion_shrinkage = FALSE,
-            verbose = TRUE
-          )
-        )
+      glm_gp(
+        as.matrix(chic.experiment.granges.diameter_50@elementMetadata),
+        # We put "molecule" and "rep" in our tar_map, so create new names.
+        ~ 0 + mol + R,
+        tibble(
+          mol = molecule,
+          R = rep %>%
+            factor %>%
+            `contrasts<-`(value = contr.helmert(length(levels(.))))
+        ),
+        size_factors = 1,
+        offset = as.matrix(
+          elementMetadata(chic.experiment.granges.offset_diameter_50)
+        ),
+        overdispersion = "global",
+        overdispersion_shrinkage = FALSE,
+        verbose = TRUE
       ) %>%
         with(
           GRanges(
             seqnames(chic.experiment.granges.diameter_50),
             ranges(chic.experiment.granges.diameter_50),
-            score = as.data.frame(exp(model[[1]]$Beta)),
+            score = as.data.frame(exp(Beta)),
             seqlengths = seqlengths(chic.experiment.granges.diameter_50)
           ) %>%
             `metadata<-`(
-              value = model[[1]]["overdispersions"]
+              value = list(overdispersions=overdispersions)
             )
         )
     ),
