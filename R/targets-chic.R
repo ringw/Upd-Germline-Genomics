@@ -162,9 +162,16 @@ targets.chic <- list(
       bowtie.refs,
       chic.samples
     ) %>%
+      cross_join(
+        tribble(
+          ~bp_suffix, ~pos_fixer_callable,
+          "CN", rlang::sym("paired_end_pos_to_midpoint"),
+          "FE", rlang::sym("paired_end_pos_to_5_prime")
+        )
+      ) %>%
       rowwise %>%
       mutate(
-        suffix = str_glue("{sample}_{name}"),
+        suffix = str_glue("{sample}_{bp_suffix}_{name}"),
         bulk_reads_misc = rlang::syms(str_glue("bulk_reads_misc_chic.bam_{sample}_{name}")),
         bulk_reads_idxstats = rlang::syms(str_glue("bulk_reads_idxstats_chic.bam_{sample}_{name}")),
         bulk_reads_split = mapply(
@@ -190,24 +197,14 @@ targets.chic <- list(
         rbind,
         append(bulk_reads_split, list(bulk_reads_misc))
       ) %>%
-        paired_end_reads_to_fragment_lengths %>%
+        pos_fixer_callable %>%
         filter(
           between(length, 150, 200),
           between(mapq, 20, 254)
         ) %>%
         with(
-          GRanges(
-              rname,
-              IRanges(pos + round((fragment_end_crick - pos) / 2), width=1)
-            ) %>%
-            countOverlaps(
-              chic.tile.diameter_50, .
-            ) %>%
-            GRanges(
-              chic.tile.diameter_50,
-              score = .
-            ) %>%
-            `metadata<-`(value = list(est_library_size = length(pos)))
+          count_overlaps_bases(chic.tile.diameter_50, .) %>%
+          `metadata<-`(value = list(est_library_size = length(pos)))
         )
     ),
 

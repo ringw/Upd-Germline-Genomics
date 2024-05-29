@@ -85,6 +85,20 @@ paired_end_reads_to_fragment_lengths <- function(df) {
   df
 }
 
+paired_end_pos_to_5_prime <- function(df) {
+  df %>%
+    bam_reference_coords %>%
+    mutate(
+      pos = ifelse(strand == "+", pos, pos_crick)
+    )
+}
+
+paired_end_pos_to_midpoint <- function(df) {
+  df %>%
+    paired_end_reads_to_fragment_lengths %>%
+    mutate(pos = pos + round((fragment_end_crick - pos) / 2))
+}
+
 bam_cover_paired_end_fragments_bp <- function(df, min_mapq, min_fl, max_fl, markdup=FALSE) {
   stopifnot(all(df$rname %in% names(masked.lengths)))
   df$rname <- df$rname %>% droplevels()
@@ -132,4 +146,11 @@ count_overlaps_sparse_vectors <- function(sparse_vectors, tile_width) {
     unlist
   hits = findOverlaps(tiles, counts) %>% as("List")
   GRanges(tiles, score = sum(extractList(counts$score, hits)), seqlengths=sapply(sparse_vectors, length))
+}
+
+count_overlaps_bases <- function(windows, bases_df) {
+  bases_df <- bases_df %>% group_by(rname, pos) %>% summarise(count = length(pos), .groups="drop")
+  gcts <- bases_df %>% with(GRanges(rname, IRanges(pos, width = 1), score = count))
+  hits <- findOverlaps(windows, gcts)
+  GRanges(windows, score = sum(extractList(gcts$score, hits)))
 }
