@@ -274,6 +274,7 @@ targets.chic <- list(
   tar_map(
     chic.experiments %>%
       cross_join(dplyr::rename(bowtie.refs, reference="name")) %>%
+      cross_join(tibble(bp_suffix = c("CN", "FE"))) %>%
       mutate(driver = driver %>% replace(. == "Nos", "nos")) %>%
       rowwise %>%
       mutate(
@@ -284,9 +285,9 @@ targets.chic <- list(
           chic.samples$group == mark
         ) %>%
           list,
-        chic.granges.fpkm = rlang::syms(str_glue("chic.granges.fpkm_{chic_sample_names}_{reference}")) %>%
+        chic.granges.fpkm = rlang::syms(str_glue("chic.granges.fpkm_{chic_sample_names}_{bp_suffix}_{reference}")) %>%
           list,
-        chic.granges.diameter_50 = rlang::syms(str_glue("chic.granges.diameter_50_{chic_sample_names}_{reference}")) %>%
+        chic.granges.diameter_50 = rlang::syms(str_glue("chic.granges.diameter_50_{chic_sample_names}_{bp_suffix}_{reference}")) %>%
           list,
         experimental_group = (
           chic.samples$group[match(chic_sample_names, chic.samples$sample)]
@@ -301,7 +302,7 @@ targets.chic <- list(
         ) %>%
           list
       ),
-    names = mark | name | reference,
+    names = mark | name | bp_suffix | reference,
     tar_target(
       chic.experiment.sample.names, chic_sample_names
     ),
@@ -374,35 +375,45 @@ targets.chic <- list(
     ),
     tar_target(
       chic.experiment.quantify,
-      glm_gp(
-        as.matrix(chic.experiment.granges.diameter_50@elementMetadata),
-        # We put "molecule" and "rep" in our tar_map, so create new names.
-        ~ 0 + mol + R,
-        tibble(
-          mol = molecule,
-          R = rep %>%
-            factor %>%
-            `contrasts<-`(value = contr.helmert(length(levels(.))))
-        ),
-        size_factors = 1,
-        offset = as.matrix(
-          elementMetadata(chic.experiment.granges.offset_diameter_50)
-        ),
-        overdispersion = "global",
-        overdispersion_shrinkage = FALSE,
-        verbose = TRUE
-      ) %>%
-        with(
-          GRanges(
-            seqnames(chic.experiment.granges.diameter_50),
-            ranges(chic.experiment.granges.diameter_50),
-            score = as.data.frame(exp(Beta)),
-            seqlengths = seqlengths(chic.experiment.granges.diameter_50)
-          ) %>%
-            `metadata<-`(
-              value = list(overdispersions=overdispersions)
-            )
-        )
+      if (length(unique(rep)) > 1)
+        glm_gp(
+          as.matrix(chic.experiment.granges.diameter_50@elementMetadata),
+          # We put "molecule" and "rep" in our tar_map, so create new names.
+          ~ 0 + mol + R,
+          tibble(
+            mol = molecule,
+            R = rep %>%
+              factor %>%
+              `contrasts<-`(value = contr.helmert(length(levels(.))))
+          ),
+          size_factors = 1,
+          offset = as.matrix(
+            elementMetadata(chic.experiment.granges.offset_diameter_50)
+          ),
+          overdispersion = "global",
+          overdispersion_shrinkage = FALSE,
+          verbose = TRUE
+        ) %>%
+          with(
+            GRanges(
+              seqnames(chic.experiment.granges.diameter_50),
+              ranges(chic.experiment.granges.diameter_50),
+              score = as.data.frame(exp(Beta)),
+              seqlengths = seqlengths(chic.experiment.granges.diameter_50)
+            ) %>%
+              `metadata<-`(
+                value = list(overdispersions=overdispersions)
+              )
+          )
+      else GRanges(
+        seqnames(chic.experiment.granges.diameter_50),
+        ranges(chic.experiment.granges.diameter_50),
+        score = (
+          as.matrix(elementMetadata(chic.experiment.granges.diameter_50))
+          / exp(as.matrix(elementMetadata(chic.experiment.granges.offset_diameter_50)))
+        ) %>%
+          as.data.frame
+      )
     ),
     tar_target(
       chic.experiment.model.data,

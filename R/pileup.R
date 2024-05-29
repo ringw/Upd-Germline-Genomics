@@ -86,8 +86,17 @@ paired_end_reads_to_fragment_lengths <- function(df) {
 }
 
 paired_end_pos_to_5_prime <- function(df) {
+  stopifnot(all(df$strand[seq(2, nrow(df), by=2)] == "-"))
+  df <- df %>% bam_reference_coords
+  df$fragment_end_crick <- rep(
+    df$pos_crick[seq(2, nrow(df), by=2)],
+    each=2
+  )
+  df$length <- df$fragment_end_crick - rep(
+    df$pos[seq(1, nrow(df), by=2)],
+    each=2
+  ) + 1
   df %>%
-    bam_reference_coords %>%
     mutate(
       pos = ifelse(strand == "+", pos, pos_crick)
     )
