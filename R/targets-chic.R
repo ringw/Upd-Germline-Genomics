@@ -1,8 +1,6 @@
 library(dplyr)
 chic.samples = read.csv('chic/chic_samples.csv') %>%
-  subset(sample != "") %>%
-  # Further subsetting due to a sample with small library count
-  subset(sample != "GC3768013_S13_L001")
+  subset(sample != "" & !sapply(rejected, isTRUE))
 
 chic.fpkm.data <- tribble(
   ~name, ~contrast, ~driver,
