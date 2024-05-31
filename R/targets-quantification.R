@@ -41,32 +41,13 @@ targets.quantification <- list(
     tar_target(
       count.exons,
       tibble(
-        coords_file = tempfile(),
-        do_run_coords = run(
-          "sh",
-          c(
-            "-c",
-            paste0(
-              "rclone cat sharepoint:Documents/Upd-Germline/",
-              bam_path,
-              " | ",
-              "samtools view -@ 4 -D CB:",
-              cell.barcodes.txt,
-              " | perl ",
-              cell_ranger_bam_feature_matrix_coords,
-              " ",
-              cell.barcodes.txt,
-              " ",
-              gene.ids.flybase.txt,
-              " TX > ",
-              coords_file
-            )
-          )
-        ) %>%
-          list,
+        coords_file = cell_ranger_bam_feature_exonic_umi(
+          bam_path, cell.barcodes.txt, cell_ranger_bam_feature_matrix_coords,
+          transcript.isoforms.txt, "TX", tempfile()
+        ),
         my_dimnames = list(
           list(
-            read.table(gene.ids.flybase.txt, header=F) %>% pull(1),
+            read.table(transcript.isoforms.txt, header=F) %>% pull(1),
             read.table(cell.barcodes.txt, header=F) %>% pull(1)
           )
         ),
@@ -88,29 +69,10 @@ targets.quantification <- list(
     tar_target(
       count.exons.genes,
       tibble(
-        coords_file = tempfile(),
-        do_run_coords = run(
-          "sh",
-          c(
-            "-c",
-            paste0(
-              "rclone cat sharepoint:Documents/Upd-Germline/",
-              bam_path,
-              " | ",
-              "samtools view -@ 4 -D CB:",
-              cell.barcodes.txt,
-              " | perl ",
-              cell_ranger_bam_feature_matrix_coords,
-              " ",
-              cell.barcodes.txt,
-              " ",
-              gene.ids.flybase.txt,
-              " GX > ",
-              coords_file
-            )
-          )
-        ) %>%
-          list,
+        coords_file = cell_ranger_bam_feature_exonic_umi(
+          bam_path, cell.barcodes.txt, cell_ranger_bam_feature_matrix_coords,
+          gene.ids.flybase.txt, "GX", tempfile()
+        ),
         my_dimnames = list(
           list(
             read.table(gene.ids.flybase.txt, header=F) %>% pull(1),

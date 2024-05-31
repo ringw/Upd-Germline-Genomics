@@ -1,17 +1,4 @@
-Read10XBamExons <- function(bam, transcript_df, cells_to_use) {
-  coords_tmp <- tempfile(fileext = ".coord.txt")
-  mm_tmp <- tempfile(fileext = ".mtx")
-  mydimnames <- list(transcript_df$tx, cells_to_use)
-  granges <- bam %>%
-    read_tenx_barcoded_bam_exons
-  mat <- granges %>%
-    match_umis_bam(transcript_df, cells_to_use, coords_tmp) %>%
-    coords_to_matrix_market(mydimnames, length(granges[[1]]$tag$CB), mm_tmp) %>%
-    readMM
-  dimnames(mat) <- mydimnames
-  mat
-}
-
+# Scan the 10X Genomics BAM file - to verify the faster perl-based workflow.
 read_tenx_barcoded_bam_exons <- function(bam) {
   scanBam(
     BamFile(bam),
@@ -21,6 +8,7 @@ read_tenx_barcoded_bam_exons <- function(bam) {
   )
 }
 
+# Produce list of FBtr transcripts, for looking up Matrix Market row index in Perl.
 read_transcript_ids <- function(assay_data, gtf_path) {
   assay_data <- assay_data %>% read.csv(row.names = 1)
   # Use exons so that we can count length.
@@ -30,7 +18,7 @@ read_transcript_ids <- function(assay_data, gtf_path) {
     col.names = c('chr', 'source', 'type', 'start', 'end', 'sc', 'strand', 'fr', 'annotation'),
     header = F,
     quote = ''
-  ) %>% subset(grepl('exon', type))
+  ) %>% subset(grepl('exon|miRNA', type))
   gtf$flybase <- gtf$annotation %>% str_extract(
     'gene_id "([^"]+)"',
     group = 1
@@ -49,62 +37,29 @@ read_transcript_ids <- function(assay_data, gtf_path) {
   )
 }
 
-match_umis_bam_do_not_use <- function(bam, transcript_df, cells) {
-  stopifnot(typeof(bam) == "list" && length(bam) == 1)
-  
-  all_transcripts_str <- bam[[1]]$tag$TX
-  cell_column <- match(bam[[1]]$tag$CB, cells)
-  all_transcripts_str <- all_transcripts_str[!is.na(cell_column)]
-  cell_column <- cell_column[!is.na(cell_column)]
-  reframe(
-    tibble(transcripts = all_transcripts_str, column = cell_column) %>%
-      rowwise,
-    row = strsplit(
-      strsplit(transcripts, ";")[[1]],
-      ","
-    ) %>%
-      sapply(\(v) v[1]),
-    column
-  )
-}
-
-match_umis_bam <- function(bam, transcript_df, cells, output_coords) {
-  stopifnot(typeof(bam) == "list" && length(bam) == 1)
-  
-  all_transcripts_str <- bam[[1]]$tag$TX
-  cell_column <- match(bam[[1]]$tag$CB, cells)
-  all_transcripts_str <- all_transcripts_str[!is.na(cell_column)]
-  cell_column <- cell_column[!is.na(cell_column)]
-
-  write.table(
-    data.frame(comment = character(0)),
-    output_coords,
-    row.names=F,
-    col.names=F,
-    quote=F
-  )
-  for (i in seq_along(cell_column)) {
-    data <- data.frame(
-      row = strsplit(
-        strsplit(all_transcripts_str[i], ";")[[1]],
-        ","
-      ) %>%
-        sapply(\(v) v[1]) %>%
-        match(transcript_df$tx) %>%
-        subset(!is.na(.))
+# Calls BAM to feature matrix coords Perl script for exonic fragments -> UMI
+# count matrix.
+cell_ranger_bam_feature_exonic_umi <- function(
+  bam_path, cell.barcodes.txt, cell_ranger_bam_feature_matrix_coords,
+  feature_ids_path, feature_tag_name = c("GX", "TX"), output_path
+) {
+  feature_tag_name <- match.arg(feature_tag_name)
+  run(
+    "sh",
+    c(
+      "-c",
+      str_glue(
+        "rclone cat 'sharepoint:Chen Lab Backups/Upd_sc/'",
+        str_replace(bam_path, "scRNA-seq/", ""),
+        " | ",
+        "samtools view -@ 4 -D CB:{cell.barcodes.txt} | ",
+        "perl {cell_ranger_bam_feature_matrix_coords} ",
+        "{cell.barcodes.txt} {feature_ids_path} {feature_tag_name}",
+        " > {output_path}"
+      )
     )
-    if (length(data$row))
-      data$column <- cell_column[i]
-    write.table(
-      data,
-      output_coords,
-      row.names=F,
-      col.names=F,
-      quote=F,
-      append=T
-    )
-  }
-  return(output_coords)
+  )
+  output_path
 }
 
 coords_to_matrix_market <- function(coords_file, dimnames, n_counts, mm_output) {
