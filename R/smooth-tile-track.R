@@ -7,23 +7,35 @@ ceil_discrete_log <- function(n) {
 
 ksmooth_sliding_windows <- function(granges, bw = 25) {
   stopifnot(length(granges@seqnames@values) == 1)
+
+  # No smoothing case.
+  if (length(granges) == 1) return(granges)
+
   granges_widths <- as(granges@ranges@width, "Rle")
-  stopifnot(length(granges_widths@lengths) == 2)
-  stopifnot(granges_widths@lengths[2] == 1)
-  granges_bw <- bw / granges_widths@values[1]
-  weights <- as(granges$score, "sparseVector")
-  seqlength <- seqlengths(granges)[as.character(granges@seqnames[1])] / granges_widths@values[1]
-  dens <- suppressWarnings(
-    density(
-      weights@i,
-      weights = weights@x,
-      bw = granges_bw,
-      from = 1,
-      to = 2^ceil_discrete_log(seqlength),
-      n = 2^ceil_discrete_log(seqlength)
-    )
+  stopifnot(length(granges_widths@lengths) <= 2)
+  stopifnot(length(granges_widths@lengths) == 1 || granges_widths@lengths[2] == 1)
+  granges_bw <- bw / (granges@ranges@start[2] - granges@ranges@start[1])
+  fftlength <- 2^ceil_discrete_log(length(granges))
+  smooth_result <- apply(
+    elementMetadata(granges),
+    2,
+    \(score) {
+      weights <- as(score, "sparseVector")
+      dens <- suppressWarnings(
+        density(
+          weights@i,
+          weights = weights@x,
+          bw = granges_bw,
+          from = 1,
+          to = fftlength,
+          n = fftlength
+        )
+      )
+      head(dens$y, length(granges))
+    }
   )
-  GRanges(granges, score = head(dens$y, length(granges)))
+  elementMetadata(granges) <- as.data.frame(smooth_result)
+  granges
 }
 
 density_est_granges_exact <- function(granges, obs_vector, bw, sample_rate) {
