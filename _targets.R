@@ -81,7 +81,7 @@ sce.data = tibble(
   capitalized=c('Nos','Nos','tj','tj'),
   batch_num=c('1','2','1','2'),
   dir_name=str_glue("scRNA-seq/{capitalized}-Upd_H3-GFP_Rep{batch_num}"),
-  tenx_path=str_glue("{dir_name}/outs/filtered_feature_bc_matrix"),
+  tenx_path=str_replace(str_glue("{dir_name}/outs/filtered_feature_bc_matrix"), "tj", "Tj"),
   bam_path=str_glue("{dir_name}/outs/possorted_genome_bam.bam")
 )
 
