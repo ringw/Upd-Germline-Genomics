@@ -7,6 +7,8 @@ import sys
 chic_samples = pd.read_csv("chic/chic_samples.csv")
 chic_samples = chic_samples.loc[(chic_samples.rejected != True).fillna(True)]
 
+celltype = dict(nos="Germline", tj="Somatic")
+
 for unused_index, chic_sample in chic_samples.iterrows():
   if chic_sample["molecule"] != "H3":
     continue
@@ -25,10 +27,11 @@ for unused_index, chic_sample in chic_samples.iterrows():
     chic_sample["group"], chic_sample["sample"]
   )
   print(
-    "bigwigCompare -b1 {} -b2 {} -o chic/deepTools_masked/{}/L2FC_{}_Rep{}.bw".format(
+    "bigwigCompare -bs 20 -b1 {} -b2 {} -o chic/deepTools_masked/{}/L2FC_{}_{}_Rep{}.bw".format(
       f1, f2,
+      celltype[chic_sample["driver"]],
       chic_sample["group"],
-      dict(nos="Germline", tj="Somatic")[chic_sample["driver"]],
+      celltype[chic_sample["driver"]],
       chic_sample["rep"]
     )
   )

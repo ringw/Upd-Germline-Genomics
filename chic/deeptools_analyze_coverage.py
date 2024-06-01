@@ -7,6 +7,8 @@ import sys
 chic_samples = pd.read_csv("chic/chic_samples.csv")
 chic_samples = chic_samples.loc[(chic_samples.rejected != True).fillna(True)]
 
+celltype = dict(nos="Germline", tj="Somatic")
+
 for unused_index, chic_sample in chic_samples.iterrows():
   if "ChIP" in chic_sample["group"]:
     sys.stdout.write(
@@ -20,5 +22,5 @@ for unused_index, chic_sample in chic_samples.iterrows():
     " -b chic/masked/{}/{}.bam".format(chic_sample["group"], chic_sample["sample"])
   )
   sys.stdout.write(
-    " -o chic/deepTools_masked/{}/{}.bw\n".format(chic_sample["group"], chic_sample["sample"])
+    " -o chic/deepTools_masked/{}/{}.bw\n".format(celltype[chic_sample["driver"]], chic_sample["sample"])
   )
