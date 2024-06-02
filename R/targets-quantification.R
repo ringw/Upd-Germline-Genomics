@@ -114,7 +114,9 @@ targets.quantification <- list(
         filename = paste0("scRNA-seq/cells_picked_", batch, ".txt"),
         write.table = write.table(
           data.frame(
-            cell = read.csv(metadata, row.names=1) %>%
+            # must not depend on Metadata.csv internally when building the
+            # single-cell assays targets.
+            cell = FetchData(Upd_sc, "batch") %>%
               rename(batch = "batch.") %>%
               subset(batch. == batch) %>%
               rownames %>%
@@ -130,17 +132,24 @@ targets.quantification <- list(
     )
   ),
   tar_target(
-    Upd_decontX_exons,
-    create_decontx_assay_fbgn_objects(
-      list(count.exons.genes.decont.result_nos.1, count.exons.genes.decont.result_nos.2,
-      count.exons.genes.decont.result_tj.1, count.exons.genes.decont.result_tj.2),
-      metadata,
-      assay.data.sc
+    Upd_decontX,
+    Upd_sc %>% seurat_decontx_using_batches,
+    packages = tar_option_get("packages") %>% c("decontX")
+  ),
+  tar_target(
+    Upd_exons,
+    seurat_assay_isoforms(
+      Upd_sc,
+      assay.data.sc,
+      Upd_cpm_transcript_to_use,
+      list(nos.1=count.exons_nos.1, nos.2=count.exons_nos.2, tj.1=count.exons_tj.1, tj.2=count.exons_tj.2)
     )
   ),
   tar_target(
-    Upd_decontX,
-    Upd_sc %>% seurat_decontx_using_batches,
+    Upd_exons_decontX,
+    Upd_sc %>%
+      `[[<-`("EXONICRNA", value = Upd_exons) %>%
+      seurat_decontx_using_batches(assay = "EXONICRNA"),
     packages = tar_option_get("packages") %>% c("decontX")
   ),
   tar_target(
@@ -148,7 +157,27 @@ targets.quantification <- list(
     cbind_pseudobulk_decontaminated(
       list(nos.1=count.exons_nos.1, nos.2=count.exons_nos.2, tj.1=count.exons_tj.1, tj.2=count.exons_tj.2),
       list(nos.1=count.exons.decont.result_nos.1[["decontXcounts"]], nos.2=count.exons.decont.result_nos.2[["decontXcounts"]], tj.1=count.exons.decont.result_tj.1[["decontXcounts"]], tj.2=count.exons.decont.result_tj.2[["decontXcounts"]]),
-      metadata
+      Upd_sc = Upd_sc
+    )
+  ),
+  tar_target(
+    Upd_decontX_contamination,
+    with(
+      list(rownames = rownames(read.csv(metadata, row.names=1))),
+      cbind(
+        nos.1 = count.exons.decont.result_nos.1[["contamination"]][match(rownames, colnames(count.exons.decont.result_nos.1[["decontXcounts"]]))],
+        nos.2 = count.exons.decont.result_nos.2[["contamination"]][match(rownames, colnames(count.exons.decont.result_nos.2[["decontXcounts"]]))],
+        tj.1 = count.exons.decont.result_tj.1[["contamination"]][match(rownames, colnames(count.exons.decont.result_tj.1[["decontXcounts"]]))],
+        tj.2 = count.exons.decont.result_tj.2[["contamination"]][match(rownames, colnames(count.exons.decont.result_tj.2[["decontXcounts"]]))]
+      ) %>%
+        replace(is.na(.), 0)
+    )
+  ),
+  tar_target(
+    Upd_sc_pseudobulk_bygene,
+    sce_select_transcript_to_use(
+      Upd_sc, assay.data.sc,
+      Upd_sc_pseudobulk_transcripts, Upd_cpm_transcript_to_use
     )
   ),
   tar_target(
@@ -156,14 +185,31 @@ targets.quantification <- list(
     fit_glm_decontX(Upd_sc_pseudobulk_transcripts, ~ 0 + ident)
   ),
   tar_target(
+    Upd_lm_transcripts,
+    lmFit(
+      log(assay(Upd_sc_pseudobulk_transcripts, "decontXcounts"))
+      + log(1000) * 2
+      -
+      matrix(
+        log(colSums(assay(Upd_sc_pseudobulk_transcripts, "decontXcounts"))),
+        nrow = nrow(Upd_sc_pseudobulk_transcripts),
+        ncol = ncol(Upd_sc_pseudobulk_transcripts),
+        byrow = TRUE
+      ),
+      model.matrix(~ 0 + ident, colData(Upd_sc_pseudobulk_transcripts))
+    ),
+    packages = c("limma", "SingleCellExperiment")
+  ),
+  tar_target(
     Upd_count_transcripts,
     right_join(
       transcript.ids,
-      Upd_glm_transcripts$Beta[
+      Upd_lm_transcripts$coefficients[
         ,
         paste0("ident", sce.clusters$cluster)
       ] %>%
         exp %>%
+        replace(is.na(.), 0) %>%
         as.data.frame %>%
         rownames_to_column("tx"),
       "tx"

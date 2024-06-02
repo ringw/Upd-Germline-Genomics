@@ -7,8 +7,7 @@ excel_tables = list(
 )
 
 publish_excel_results <- function(
-  Upd_regression_somatic, Upd_regression_tid,
-  Upd_regression_sompre, Upd_regression_mscl,
+  Upd_regression_somatic,
   Upd_cpm_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
   Upd_isoform_exonic_length,
   sctransform_quantile, supplemental_bulk_pct_expressed, metafeatures, gtf_path,
@@ -35,13 +34,13 @@ publish_excel_results <- function(
   )
 
   baseMeanCPM <- exp(Upd_regression_somatic$map[, "(Intercept)"]) %>% `*`(
-    1000 * 1000 / sum(.)
+    1000 * 1000 / sum(., na.rm=T)
   ) %>% signif(digits=2)
-  flybase = metafeatures$flybase[match(rownames(Upd_regression_somatic$map), rownames(metafeatures))]
+  flybase <- metafeatures %>%
+    rownames_to_column %>%
+    subset(pass.min.cells) %>%
+    pull(flybase, rowname)
   write_regression_table(wb, 'GSC&CySC Regression', 'log(CySC/GSC)', baseMeanCPM, Upd_regression_somatic, 2, flybase, excel_tables$cyan)
-  write_regression_table(wb, 'S-Cyte&Tid-Like Regression', 'log(cyte&tid/GSC)', baseMeanCPM, Upd_regression_tid, 3, flybase, excel_tables$orange)
-  write_regression_table(wb, 'Somatic Precursor Regression', 'log(SomPre/CySC)', baseMeanCPM, Upd_regression_sompre, 4, flybase, 'TableStyleMedium13')
-  write_regression_table(wb, 'Muscle Regression', 'log(mscl/CySC)', baseMeanCPM, Upd_regression_mscl, 5, flybase, excel_tables$red)
 
   write_batch_idents(wb, "Cluster&Batch Statistics", batch_data)
 
@@ -228,17 +227,17 @@ write_regression_table <- function(
             ),
             colNames = F,
             startCol = 3, startRow = 1)
-  data = data.frame(
-    symbol = rownames(apeglm$map),
+  data = tibble(
+    symbol = names(flybase),
     flybase = flybase,
     baseMeanCPM = baseMeanCPM,
     p95minus = apeglm$map[,coef] - qnorm(0.975) * apeglm$sd[,coef],
     map = apeglm$map[,coef],
     p95plus = apeglm$map[,coef] + qnorm(0.975) * apeglm$sd[,coef],
     fsr = apeglm$fsr[,1] %>% signif(digits=2),
-    padj = if('mle.test' %in% names(apeglm)) apeglm$mle.test$adj_pval[match(rownames(apeglm$map), apeglm$mle.test$name)] %>% signif(digits=2) else 0.01
+    padj = if('mle.test' %in% names(apeglm)) apeglm$mle.test$adj_pval[match(names(flybase), apeglm$mle.test$name)] %>% signif(digits=2) else 0.01
   )
-  data[, 4:6] = round(data[, 4:6] / log(2), digits=2)
+  data[, 4:6] = round(as.matrix(data[, 4:6]) / log(2), digits=2)
   data = data %>% arrange(
     desc(pmax(p95minus, 0)),
     desc(pmin(p95plus, 0)),

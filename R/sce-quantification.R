@@ -96,9 +96,11 @@ coords_to_matrix_market <- function(coords_file, dimnames, n_counts, mm_output) 
 }
 
 cbind_pseudobulk_decontaminated <- function(
-  named_counts, named_decontx_counts, metadata
+  named_counts, named_decontx_counts, Upd_sc
 ) {
-  metadata <- metadata %>% read.csv(row.names = 1)
+  # must not depend on Metadata.csv internally when building the
+  # single-cell assays targets. Use single-cell Seurat object instead.
+  metadata <- FetchData(Upd_sc, c("ident", "batch", "nCount_RNA", "nFeature_RNA", "pct.mito", "pct.ribo", "somatic.score"))
   metadata$ident <- metadata$ident %>% factor(sce.clusters$cluster)
   # Use nos.2 as the reference level for batch. It has the greatest number of
   # cells in the rare clusters.
@@ -134,8 +136,8 @@ cbind_pseudobulk_decontaminated <- function(
       nFeature_RNA = sum(nFeature_RNA),
       pct.mito = mean(pct.mito),
       pct.ribo = mean(pct.ribo),
-      somatic.score = mean(somatic.score),
-      size_factors = sum(size_factors)
+      somatic.score = mean(somatic.score) # ,
+      # size_factors = sum(size_factors)
     )
 }
 
@@ -158,7 +160,7 @@ create_decontx_assay_fbgn_objects <- function(decontx_objects, Upd_sc_metadata, 
     )
   )[, rownames(Upd_sc_metadata)]
   rownames(counts) <- genes_df$rowname
-  assay_obj <- CreateAssayObject(
+  assay_obj <- CreateAssay5Object(
     counts = counts,
     min.cells = 5,
     key = "decontx_"
@@ -171,12 +173,62 @@ create_decontx_assay_fbgn_objects <- function(decontx_objects, Upd_sc_metadata, 
   assay_obj %>% NormalizeData
 }
 
-seurat_decontx_using_batches <- function(Upd_sc) {
-  dcx <- decontX(GetAssayData(Upd_sc, assay="RNA", layer="counts"), batch=Upd_sc$batch)
-  Upd_sc[["DECONTX"]] <- CreateAssayObject(
+seurat_decontx_using_batches <- function(Upd_sc, assay="RNA") {
+  dcx <- decontX(GetAssayData(Upd_sc, assay=assay, layer="counts"), batch=Upd_sc$batch)
+  Upd_sc[["DECONTX"]] <- CreateAssay5Object(
     counts = dcx$decontXcounts,
     key = "decontx_"
   )
+  Upd_sc[["DECONTX"]]@meta.data <- Upd_sc[["RNA"]]@meta.data
   Upd_sc[["DECONTX"]]@misc$decontX <- dcx[-match("decontXcounts", names(dcx))]
   Upd_sc[["DECONTX"]] %>% NormalizeData
+}
+
+seurat_assay_isoforms <- function(Upd_sc, assay.data.sc, Upd_cpm_transcript_to_use, isoforms_named_list) {
+  counts <- GetAssayData(Upd_sc, "RNA", "counts")
+  meta.data <- FetchData(Upd_sc, c("ident", "batch"))
+  assay.data.sc <- assay.data.sc %>% read.csv(row.names = 1)
+  for (n in names(isoforms_named_list)) {
+    colnames(isoforms_named_list[[n]]) <- colnames(isoforms_named_list[[n]]) %>% paste(n, ., sep="_")
+  }
+
+  batch_data <- sapply(
+    isoforms_named_list,
+    \(data) {
+      data <- as.matrix(data)
+      r1 <- assay.data.sc[rownames(counts), "flybase"] %>% replace(!(. %in% rownames(Upd_cpm_transcript_to_use)), NA)
+      c1 <- as.character(meta.data[colnames(data), "ident"])
+      read_isoforms <- Upd_cpm_transcript_to_use[
+        cbind(
+          rep(
+            assay.data.sc[rownames(counts), "flybase"] %>% replace(!(. %in% rownames(Upd_cpm_transcript_to_use)), NA),
+            ncol(data)
+          ),
+          rep(as.character(meta.data[colnames(data), "ident"]), each=nrow(counts))
+        )
+      ]
+      repl_numeric <- data[
+        cbind(
+          read_isoforms,
+          rep(colnames(data), each=nrow(counts))
+        )
+      ]
+      matrix(
+        repl_numeric,
+        nrow = nrow(counts),
+        dimnames = list(rownames(counts), colnames(data))
+      ) %>%
+        as("sparseMatrix")
+    }
+  )
+  repl_rows <- names(which(rowAnys(as.matrix(is.na(batch_data[[1]])))))
+  for (n in names(isoforms_named_list)) {
+    batch_data[[n]][repl_rows, ] <- counts[repl_rows, colnames(batch_data[[n]])]
+  }
+  exon_counts <- do.call(cbind, setNames(batch_data, NULL))
+  stopifnot(isTRUE(all.equal(dimnames(counts), dimnames(exon_counts))))
+
+  assay <- CreateAssay5Object(counts = exon_counts, key = "exon_")
+  assay@meta.data <- Upd_sc[["RNA"]]@meta.data
+  assay
 }

@@ -255,7 +255,8 @@ sce_targets <- tar_map(
       tenx_file, batch, sce.features, assay.data.sc,
       return.only.var.genes = FALSE, run_pca = FALSE
     ) %>%
-      quantify_quantiles(metadata)
+      quantify_quantiles(metadata),
+    cue = tar_cue("never")
   ),
   tar_target(
     lognormalize_quantile,
@@ -489,7 +490,7 @@ list(
     )
   ),
   tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
-  tar_target(Upd_model_matrix, build_model_matrix(FetchData(Upd_sc, c("ident", "batch")))),
+  tar_target(Upd_model_matrix, build_model_matrix(FetchData(Upd_sc, c("ident", "batch")), Upd_decontX_contamination)),
   tar_target(
     shuffle_feature_plot,
     sample(Cells(Upd_sc))
@@ -667,7 +668,9 @@ list(
   ),
   tar_target(
     Upd_sc_size_factors,
-    Upd_sc %>% pooled_size_factors_seurat_ident_autosome
+    Upd_sc %>%
+      `[[<-`("EXONICRNA", value = Upd_exons) %>%
+      pooled_size_factors_seurat_ident_autosome(assay = "EXONICRNA")
   ),
   tar_target(
     metadata,
@@ -686,23 +689,39 @@ list(
   ),
   tar_target(
     Upd_glm,
-    fit_glm(Upd_sc, Upd_model_matrix, metadata),
+    fit_glm(Upd_exons, Upd_model_matrix, metadata),
+  ),
+  tar_target(
+    Upd_cpm_new,
+    with(
+      Upd_regression_somatic,
+      cbind(germline = map[,1] - 0.5*map[,2], somatic = map[,1] + 0.5*map[,2]) %>%
+        exp %>%
+        table_to_tpm
+    ) %>% as.data.frame %>% rownames_to_column %>% as_tibble
   ),
   tar_target(
     Upd_regression_somatic,
-    apeglm_coef_table(Upd_glm)
+    # prior_var was determined by fitting Upd_glm with ident + batch and without
+    # the decontX terms (which grow the coef of interest when there is a trend
+    # in the data where contamination is negatively correlated with the fitted
+    # values based on ident). Then apeglm:::priorVar was applied. We want to
+    # shrink LFC estimates based on a prior from a highly interpretable model
+    # (ident + batch), not weaken the regularization because we purposefully
+    # added additional complexity to the model.
+    apeglm_coef_table_sample(Upd_glm, shrinkage_cutoff = 0, prior_var = 0.8935249)
   ),
   tar_target(
     Upd_regression_tid,
-    apeglm_coef_table(Upd_glm, coef = 3)
+    apeglm_coef_table_sample(Upd_glm, coef = 3, shrinkage_cutoff = 0, prior_var = 0.8935249)
   ),
   tar_target(
     Upd_regression_sompre,
-    apeglm_coef_table(Upd_glm, coef = 4)
+    apeglm_coef_table_sample(Upd_glm, coef = 4, shrinkage_cutoff = 0, prior_var = 0.8935249)
   ),
   tar_target(
     Upd_regression_mscl,
-    apeglm_coef_table(Upd_glm, coef = 5)
+    apeglm_coef_table_sample(Upd_glm, coef = 5, shrinkage_cutoff = 0, prior_var = 0.8935249)
   ),
   sce_targets,
   tar_combine(
@@ -851,7 +870,7 @@ list(
     apply(
       Upd_cpm[, c("germline", "somatic")],
       2,
-      \(v) (v >= 7) %>% which %>% names,
+      \(v) (v >= 5) %>% which %>% names,
       simplify=FALSE
     )
   ),
@@ -924,15 +943,21 @@ list(
   tar_target(
     Upd_isoform_exonic_length,
     lookup_mat_transcripts_exon_length(
-      Upd_cpm_transcripts, Upd_cpm_transcript_to_use, assay.data.sc
+      Upd_count_transcripts, Upd_cpm_transcript_to_use, assay.data.sc
     )
   ),
   # TPM values based on exon length correction, then scale to sum to 1MM.
   tar_target(
     Upd_tpm_do_not_use_for_quantification,
     join_cpm_data(
-      assay.data.sc, Upd_cpm_transcripts,
-      Upd_cpm_transcript_to_use, Upd_fpkm_regression) %>%
+      assay.data.sc,
+      Upd_count_transcripts %>%
+        subset(select=c(germline, somatic, spermatocyte, somaticprecursor, muscle)) %>%
+        table_to_tpm %>%
+        as.data.frame %>%
+        cbind(exon_length = Upd_count_transcripts$exon_length, .),
+      Upd_cpm_transcript_to_use,
+      Upd_fpkm_regression %>% table_to_tpm) %>%
       table_to_tpm
   ),
   # CPM values based on dominant isoform (by max FPKM or TPM value for the
@@ -947,15 +972,14 @@ list(
         subset(select=c(germline, somatic, spermatocyte, somaticprecursor, muscle)) %>%
         table_to_tpm,
       Upd_cpm_transcript_to_use,
-      Upd_cpm_regression,
+      Upd_cpm_regression %>% table_to_tpm,
       corr=F) %>%
       table_to_tpm
   ),
   tar_target(
     sc_excel,
     publish_excel_results(
-      Upd_regression_somatic, Upd_regression_tid,
-      Upd_regression_sompre, Upd_regression_mscl,
+      Upd_regression_somatic,
       Upd_count_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
       Upd_isoform_exonic_length,
       sctransform_quantile, supplemental_bulk_cpm, assay.data.sc, flybase.gtf,
@@ -1251,7 +1275,7 @@ list(
     ),
     tar_target(
       quartile.factor,
-      quant_quartile_factor(Upd_cpm[, tolower(name)], q1_threshold=7),
+      quant_quartile_factor(Upd_cpm[, tolower(name)], q1_threshold=5),
       packages = tar_option_get("packages") %>% c("tidyr")
     )
   ),
