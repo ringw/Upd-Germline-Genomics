@@ -479,3 +479,22 @@ run_umap_on_batch <- function(seurat, metadata) {
   )
   FetchData(seurat, cols_to_fetch)
 }
+
+unintegrated_report_cluster_expression <- function(
+  seurat_obj, doublet_names, gene_list
+) {
+  DefaultAssay(seurat_obj) <- "RNA"
+  seurat_obj <- seurat_obj %>% NormalizeData(verb=F)
+  cluster_data <- seurat_obj %>%
+    FetchData(gene_list) %>%
+    split(seurat_obj$seurat_clusters) %>%
+    sapply(\(m) colMeans(m != 0)) %>%
+    t
+  cluster_data <- cbind(
+    data.frame(
+      is_doublet = levels(seurat_obj$seurat_clusters) %in% doublet_names,
+      n = as.data.frame(table(seurat_obj$seurat_clusters))$Freq
+    ),
+    cluster_data
+  )
+}

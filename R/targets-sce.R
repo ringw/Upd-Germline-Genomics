@@ -191,5 +191,40 @@ targets.sce <- list(
         fmt_number(decimals = 2)
     ),
     packages = c(tar_option_get("packages"), "gt")
+  ),
+
+  # Unintegrated clusters - SD02. Which clusters (from sce.R RenameIdents) are
+  # removed as doublets? This is justified based on expressing all of the GSC &
+  # CySC markers including H3-GFP.
+  tar_target(
+    unintegrated_marker_genes,
+    c("nos", "vas", "tj", "Egfr", "lncRNA:roX2", "Mst77F", "wb", "Act57B")
+  ),
+  tar_target(
+    unintegrated_clusters_doublets,
+    tribble(
+      ~ obj, ~ cluster, ~ label,
+      "nos.1", "3", "doublet",
+      "nos.2", "8", "doublet",
+      "nos.2", "9", "doublet",
+      "tj.1", "2", "doublet",
+      "tj.2", "1", "doublet"
+    )
+  ),
+  tar_target(
+    unintegrated_clusters_report,
+    mapply(
+      unintegrated_report_cluster_expression,
+      list(
+        seurat_qc_nos.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F),
+        seurat_qc_nos.2 %>% FindNeighbors(dims=1:9, verb=F) %>% FindClusters(res = 0.5, verb=F),
+        seurat_qc_tj.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.15, verb=F),
+        seurat_qc_tj.2 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F)
+      ),
+      unintegrated_clusters_doublets$cluster %>%
+        split(factor(unintegrated_clusters_doublets$obj, c("nos.1", "nos.2", "tj.1", "tj.2"))),
+      list(unintegrated_marker_genes),
+      SIMPLIFY=FALSE
+    )
   )
 )
