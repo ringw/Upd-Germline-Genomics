@@ -65,12 +65,10 @@ targets.bulk.samples <- tar_map(
   ),
   tar_target(
     bulk_reads_misc,
-    sapply(
-      setdiff(bulk_reads_idxstats$rname, c(names(masked.lengths), "*")),
-      \(n) bam_to_df(bam.target, n),
-      simplify=FALSE
-    ) %>%
-      bind_rows,
+    bam_to_df_multi_ref(
+      bam.target,
+      setdiff(bulk_reads_idxstats$rname, c(names(masked.lengths), "*"))
+    ),
     format = "parquet",
     cue = tar_cue("never"),
     packages = c("dplyr", "GenomicRanges", "Rsamtools", "stringr", "tibble")
