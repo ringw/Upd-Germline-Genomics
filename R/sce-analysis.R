@@ -80,7 +80,7 @@ Upd_sc_feature_plot <- function(Upd_sc, gene, cells, assay = "RNA") {
   DefaultAssay(Upd_sc) <- assay
   dplyr_rename_lookup_gene = setNames("LogNormalize", gene)
   gene.data = FetchData(Upd_sc, c("umap_1", "umap_2", gene, "ident")) %>%
-    rename(all_of(dplyr_rename_lookup_gene))
+    plyr::rename(all_of(dplyr_rename_lookup_gene))
   gene.data <- gene.data[cells, ]
   gene.max.intensity <- NA
   gene.data %>% ggplot(
@@ -107,7 +107,7 @@ Upd_sc_feature_plot <- function(Upd_sc, gene, cells, assay = "RNA") {
 Upd_sc_group_plot <- function(Upd_sc, group.by, cells) {
   dplyr_rename_lookup_gene = setNames("group", group.by)
   gene.data = FetchData(Upd_sc, c("umap_1", "umap_2", group.by, "ident")) %>%
-    rename(all_of(dplyr_rename_lookup_gene))
+    plyr::rename(all_of(dplyr_rename_lookup_gene))
   gene.data <- gene.data[cells, ]
   gene.data %>% ggplot(
     aes(umap_1, umap_2, color=group)
