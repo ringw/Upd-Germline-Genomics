@@ -134,6 +134,12 @@ targets.chic <- list(
       )
     ),
     tar_target(
+      chic.tile_all_chr_diameter_1000_granges_list,
+      slidingWindows(
+        unlist(chic.tile_chr_granges_list), w=1000L, s=1000L
+      )
+    ),
+    tar_target(
       chic.tile_all_chr_diameter_40_granges_list,
       # Windows should be centered on the diameter-20 windows:
       # First 1-40, then 11-50, 31-70, ...
@@ -199,6 +205,47 @@ targets.chic <- list(
             ) %>%
             deframe
         )
+    ),
+    tar_target(
+      chic.tile.diameter_1000,
+      sapply(
+        levels(seqnames(chic.tile_chr_granges_list[[1]])),
+        \(n) if (n %in% names(masked.lengths))
+          chic.tile_all_chr_diameter_1000_granges_list[[n]]
+        else
+          chic.tile_chr_granges_list[[n]],
+        USE.NAMES = FALSE
+      ) %>%
+        GRangesList %>%
+        unlist %>%
+        GRanges(
+          seqlengths = idxstats %>%
+            subset(
+              rname != "*",
+              select = c(rname, rlength)
+            ) %>%
+            deframe
+        )
+    ),
+    tar_target(
+      chic.tile.diameter_1000_lookup,
+      tibble(
+        rname = as.factor(seqnames(chic.tile.diameter_40)),
+        ind = seq_along(chic.tile.diameter_40),
+        loc = chic.tile.diameter_40@ranges@start + 1/2 * chic.tile.diameter_40@ranges@width
+      ) %>%
+        group_by(rname) %>%
+        reframe(
+          dest = list(chic.tile.diameter_1000[as.logical(seqnames(chic.tile.diameter_1000) == rname[1])]),
+          lookup = ind[
+            findInterval(
+              dest[[1]]@ranges@start + 1/2 * dest[[1]]@ranges@width,
+              loc
+            ) %>%
+              pmin(length(loc))
+          ]
+        ) %>%
+        pull(lookup)
     )
   ),
 
@@ -568,6 +615,25 @@ targets.chic <- list(
         ) %>%
         pull(filename),
       packages = tar_option_get("packages") %>% c("tidyr")
+    ),
+    tar_file(
+      chic.bw.track.wide,
+      GRanges(
+        chic.tile.diameter_1000,
+        score = (
+          elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
+          / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
+        )[chic.tile.diameter_1000_lookup] %>%
+          replace(is.na(.), 1)
+      ) %>%
+        export(
+          with(
+            list(mark=mark, name=name, bp_suffix=bp_suffix, reference=reference),
+            str_glue("chic/{reference}/{name}_{mark}_{bp_suffix}_Wide_Enrich.bw")
+          ) %>%
+            BigWigFile
+        ) %>%
+        as.character
     ),
 
     tar_target(
