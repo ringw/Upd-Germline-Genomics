@@ -407,7 +407,7 @@ targets.chic <- list(
     tar_target(
       chic.experiment.granges.offset_diameter_40,
       with(
-        list(ones = matrix(1, nrow = nrow(chic.experiment.granges.diameter_40@elementMetadata), ncol = ncol(chic.experiment.granges.diameter_50@elementMetadata))),
+        list(ones = matrix(1, nrow = nrow(chic.experiment.granges.diameter_40@elementMetadata), ncol = ncol(chic.experiment.granges.diameter_40@elementMetadata))),
         GRanges(
           seqnames(chic.experiment.granges.diameter_40),
           ranges(chic.experiment.granges.diameter_40),
@@ -511,9 +511,9 @@ targets.chic <- list(
           ),
           dir.create = dir.create(dirname(filename), rec=T, showW=F),
           gr = GRanges(
-            seqnames(chic.tile.diameter_50_score),
-            ranges(chic.tile.diameter_50_score),
-            seqlengths = seqlengths(chic.tile.diameter_50_score),
+            seqnames(chic.tile.diameter_40_score),
+            ranges(chic.tile.diameter_40_score),
+            seqlengths = seqlengths(chic.tile.diameter_40_score),
             score = score[[1]] %>%
               replace(
                 elementMetadata(chic.experiment.quantify.smooth_bw50)[, 1] < 1,
