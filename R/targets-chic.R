@@ -543,7 +543,7 @@ targets.chic <- list(
               if (grepl("FSeq|Imputed", filename))
                 score[[1]] %>%
                   replace(
-                    elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1,
+                    which(elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1),
                     score_smooth[[1]][
                       elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1
                     ]
