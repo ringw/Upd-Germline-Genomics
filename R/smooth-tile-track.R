@@ -11,10 +11,11 @@ ksmooth_sliding_windows <- function(granges, bw = 25) {
   # No smoothing case.
   if (length(granges) == 1) return(granges)
 
-  granges_widths <- as(granges@ranges@width, "Rle")
-  stopifnot(length(granges_widths@lengths) <= 2)
-  stopifnot(length(granges_widths@lengths) == 1 || granges_widths@lengths[2] == 1)
-  granges_bw <- bw / (granges@ranges@start[2] - granges@ranges@start[1])
+  # Step size should be uniform. We have added a custom 5' and 3' end window
+  # because we later need to create a bigwig track where the intervals partition
+  # the entire sequence.
+  stopifnot(granges@ranges@start[3] - granges@ranges@start[2] == granges@ranges@start[4] - granges@ranges@start[3])
+  granges_bw <- bw / (granges@ranges@start[3] - granges@ranges@start[2])
   fftlength <- 2^ceil_discrete_log(length(granges))
   smooth_result <- apply(
     elementMetadata(granges),
