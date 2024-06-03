@@ -383,8 +383,8 @@ targets.chic <- list(
           list,
         chic.granges.diameter_40 = rlang::syms(str_glue("chic.granges.diameter_40_{chic_sample_names}_{bp_suffix}_{reference}")) %>%
           list,
-        chic.tile.diameter_1000 = rlang::syms(str_glue("chic.tile.diameter_1000_{name}")),
-        chic.tile.diameter_1000_lookup = rlang::syms(str_glue("chic.tile.diameter_1000_lookup_{name}")),
+        chic.tile.diameter_1000 = rlang::syms(str_glue("chic.tile.diameter_1000_{reference}")),
+        chic.tile.diameter_1000_lookup = rlang::syms(str_glue("chic.tile.diameter_1000_lookup_{reference}")),
         experimental_group = (
           chic.samples$group[match(chic_sample_names, chic.samples$sample)]
         ) %>%
