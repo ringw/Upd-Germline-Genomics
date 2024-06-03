@@ -516,9 +516,9 @@ targets.chic <- list(
             seqlengths = seqlengths(chic.tile.diameter_40_score),
             score = score[[1]] %>%
               replace(
-                elementMetadata(chic.experiment.quantify.smooth_bw50)[, 1] < 1,
+                elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1,
                 score_smooth[[1]][
-                  elementMetadata(chic.experiment.quantify.smooth_bw50)[, 1] < 1
+                  elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1
                 ]
               )
           ) %>%
