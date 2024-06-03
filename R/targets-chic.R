@@ -280,7 +280,9 @@ targets.chic <- list(
           str_glue("chic.bam_{sample}_{name}"),
           SIMPLIFY=F
         ),
-        chic.tile.diameter_40 = rlang::syms(str_glue("chic.tile.diameter_40_{name}"))
+        chic.tile.diameter_40 = rlang::syms(str_glue("chic.tile.diameter_40_{name}")),
+        chic.tile.diameter_1000 = rlang::syms(str_glue("chic.tile.diameter_1000_{name}")),
+        chic.tile.diameter_1000_lookup = rlang::syms(str_glue("chic.tile.diameter_1000_lookup_{name}"))
       ),
     names = suffix,
 
