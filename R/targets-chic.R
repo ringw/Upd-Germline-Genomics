@@ -493,6 +493,12 @@ targets.chic <- list(
         list(elementMetadata(chic.experiment.quantify)[, 2]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
         0,
+        "Rough_Enrich",
+        list(elementMetadata(chic.experiment.quantify)[, 2]
+        / elementMetadata(chic.experiment.quantify)[, 1]),
+        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
+        / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
+        1,
         "FSeq_Input",
         list(elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
@@ -519,13 +525,17 @@ targets.chic <- list(
             seqnames(chic.tile.diameter_40_score),
             ranges(chic.tile.diameter_40_score),
             seqlengths = seqlengths(chic.tile.diameter_40_score),
-            score = score[[1]] %>%
-              replace(
-                elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1,
-                score_smooth[[1]][
-                  elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1
-                ]
-              ) %>%
+            score = (
+              if (grepl("Enrich", filename))
+                score[[1]] %>%
+                  replace(
+                    elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1,
+                    score_smooth[[1]][
+                      elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1
+                    ]
+                  )
+              else score[[1]]
+            ) %>%
               # Now replace actual holes (e.g. in an FBte sequence) with 1 (no enrichment).
               replace(is.na(.), na.value)
           ) %>%
