@@ -494,8 +494,13 @@ targets.chic <- list(
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
         0,
         "Rough_Enrich",
-        list(elementMetadata(chic.experiment.quantify)[, 2]
-        / elementMetadata(chic.experiment.quantify)[, 1]),
+        list(
+          pmin(
+            elementMetadata(chic.experiment.quantify)[, 2]
+            / elementMetadata(chic.experiment.quantify)[, 1],
+            100
+          )
+        ),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
         / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
         1,
@@ -508,8 +513,13 @@ targets.chic <- list(
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
         0,
         "Imputed_Enrich",
-        list(elementMetadata(chic.experiment.quantify)[, 2]
-        / elementMetadata(chic.experiment.quantify)[, 1]),
+        list(
+          pmin(
+            elementMetadata(chic.experiment.quantify)[, 2]
+            / elementMetadata(chic.experiment.quantify)[, 1],
+            100
+          )
+        ),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
         / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
         1,
