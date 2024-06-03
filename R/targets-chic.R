@@ -550,7 +550,7 @@ targets.chic <- list(
             ranges(chic.tile.diameter_40_score),
             seqlengths = seqlengths(chic.tile.diameter_40_score),
             score = (
-              if (grepl("FSeq|Imputed", filename))
+              if (grepl("FSeq_[^I]|Imputed", filename))
                 score[[1]] %>%
                   replace(
                     which(elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1),
