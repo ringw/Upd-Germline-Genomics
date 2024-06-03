@@ -526,7 +526,7 @@ targets.chic <- list(
             ranges(chic.tile.diameter_40_score),
             seqlengths = seqlengths(chic.tile.diameter_40_score),
             score = (
-              if (grepl("Enrich", filename))
+              if (grepl("FSeq", filename))
                 score[[1]] %>%
                   replace(
                     elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1,
