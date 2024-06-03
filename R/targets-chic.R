@@ -499,6 +499,20 @@ targets.chic <- list(
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
         / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
         1,
+        "Imputed_Input",
+        list(elementMetadata(chic.experiment.quantify)[, 1]),
+        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
+        0,
+        "Imputed_Mark",
+        list(elementMetadata(chic.experiment.quantify)[, 2]),
+        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
+        0,
+        "Imputed_Enrich",
+        list(elementMetadata(chic.experiment.quantify)[, 2]
+        / elementMetadata(chic.experiment.quantify)[, 1]),
+        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
+        / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
+        1,
         "FSeq_Input",
         list(elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
@@ -526,7 +540,7 @@ targets.chic <- list(
             ranges(chic.tile.diameter_40_score),
             seqlengths = seqlengths(chic.tile.diameter_40_score),
             score = (
-              if (grepl("FSeq", filename))
+              if (grepl("FSeq|Imputed", filename))
                 score[[1]] %>%
                   replace(
                     elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1,
