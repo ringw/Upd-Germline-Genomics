@@ -199,22 +199,6 @@ targets.chic <- list(
             ) %>%
             deframe
         )
-    ),
-    tar_target(
-      chic.tile.diameter_40_score_lookup,
-      mapply(
-        \(tile_gr, score_gr, lookup_vec) if (length(lookup_vec) > 1)
-          c(
-            lookup_vec,
-            if (length(score_gr) > length(tile_gr)) max(lookup_vec) else NULL
-          )
-        else lookup_vec,
-        chic.tile.diameter_40 %>% split(seqnames(.)),
-        chic.tile.diameter_40_score %>% split(seqnames(.)),
-        seq(length(chic.tile.diameter_40)) %>% split(seqnames(chic.tile.diameter_40)),
-        SIMPLIFY=FALSE
-      ) %>%
-        do.call(c, .)
     )
   ),
 
@@ -341,7 +325,6 @@ targets.chic <- list(
       rowwise %>%
       mutate(
         chic.tile.diameter_40_score = rlang::syms(str_glue("chic.tile.diameter_40_score_{reference}")),
-        chic.tile.diameter_40_score_lookup = rlang::syms(str_glue("chic.tile.diameter_40_score_lookup_{reference}")),
         chic_sample_names = subset(
           chic.samples$sample,
           (chic.samples$driver %>% replace(. == "Nos", "nos")) == driver &
@@ -537,9 +520,7 @@ targets.chic <- list(
                 score_smooth[[1]][
                   elementMetadata(chic.experiment.quantify.smooth_bw50)[, 1] < 1
                 ]
-              ) %>%
-              `[`(chic.tile.diameter_50_score_lookup) %>%
-              replace_na(0)
+              )
           ) %>%
             list,
           filename = export(gr, BigWigFile(filename)) %>% as.character
