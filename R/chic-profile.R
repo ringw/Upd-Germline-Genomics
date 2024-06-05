@@ -3,24 +3,6 @@ chic_line_track_colors <- list(
   somatic = "#de31e4"
 )
 
-# Sorted BED to quartiles. For deepTools, we had sorted the BED from high-to-low
-# and now will construct a feature which is in reverse order.
-bed_flybase_quartile_factor <- function(bed_path, metafeatures_path, nquartiles=4) {
-  bed <- load_flybase_bed(bed_path)
-  bed$rank <- rev(seq(nrow(bed)))
-  metafeatures <- read.csv(metafeatures_path, row.names = 1) %>%
-    subset(!is.na(flybase) & !duplicated(flybase)) %>%
-    rownames_to_column
-  features <- inner_join(metafeatures, bed, by = "flybase")
-  groups <- cut(
-    features$rank,
-    round(seq(0, length(features$flybase), length.out=1+nquartiles))
-  ) %>%
-    setNames(features$rowname)
-  levels(groups) <- paste0('Q', seq(nquartiles))
-  groups
-}
-
 quant_quartile_factor <- function(v, q1_threshold) {
   chop_lower = (v < q1_threshold) %>% replace_na(TRUE) %>% which
   vals <- v[-chop_lower]
@@ -32,8 +14,22 @@ quant_quartile_factor <- function(v, q1_threshold) {
   setNames(fct, names(v))
 }
 
+chic_heatmap_facet_genes <- function(
+  enrichment_mat,
+  facet_genes
+) {
+  facet_genes %>%
+    group_by(subset(facet_genes, select=-gene)) %>%
+    reframe(
+      enrichment_mat[gene,, drop=F] %>%
+        colMeans(na.rm=T) %>%
+        enframe("pos")
+    ) %>%
+    mutate(pos = factor(pos, unique(pos)))
+}
+
 # Analysis with TSS profile as x-axis, with ChIC tracks.
-chic_average_profile_limits <- c(0.25, 3.75)
+chic_average_profile_limits <- c(0.25, 4.4)
 chic_average_breaks <- c(1/2, 1, 2, 3)
 chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2))
 chic_average_profiles <- function(
@@ -127,6 +123,11 @@ chic_average_profiles <- function(
 chic_plot_average_profiles_facet_grid <- function(
   facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1)
 ) {
+  break_labels <- tibble(
+    pos = seq(head(levels(facet_data$pos), 1), tail(levels(facet_data$pos), 1)),
+    label = levels(facet_data$pos)
+  )
+  facet_data$pos <- break_labels$pos[match(facet_data$pos, break_labels$label)]
   facet_data %>% ggplot(
     aes(x=pos, y=l2FC, color=genes, linewidth=genes, group=genes)
   ) + geom_line(
@@ -134,7 +135,7 @@ chic_plot_average_profiles_facet_grid <- function(
       cross_join(
         tibble(
           genes = NA,
-          marks = factor(chic.mark.data$mark, chic.mark.data$mark, ordered=TRUE)
+          mark = factor(chic.mark.data$mark, chic.mark.data$mark, ordered=TRUE)
         )
       ) %>%
       cross_join(
@@ -145,13 +146,15 @@ chic_plot_average_profiles_facet_grid <- function(
     color = "darkred",
     linewidth = 0.25
   ) + geom_line() + facet_grid(
-    rows = vars(facet), cols = vars(marks)
+    rows = vars(facet), cols = vars(mark)
   ) + scale_color_manual(
     values = quartile_colors,
     guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_linewidth_manual(
     values = linewidth,
     guide = guide_legend(title = legend_title, reverse = TRUE)
+  ) + scale_x_continuous(
+    labels = \(n) break_labels$label[match(n, break_labels$pos)]
   ) + scale_y_continuous(
     trans = "log",
     labels = \(v) round(log(v) / log(2), 1),
@@ -194,81 +197,6 @@ chic_average_gene_list_profiles <- function(
           after = after
         ) %>%
           subset(rowAlls(. > 0.001)) %>%
-          # log %>%
-          # `/`(log(2)) %>%
-          colMeans,
-        simplify=FALSE
-      )
-      facet_data <- mark_tracks %>%
-        sapply(
-          \(v) data.frame(pos=seq(-before, after-1), l2FC=v),
-          simplify=F) %>%
-        bind_rows(.id = "marks") %>%
-        mutate(marks = marks %>% factor(chic.mark.data$mark))
-    },
-    simplify=FALSE
-  ) %>%
-    bind_rows(.id = "group")
-  facet_data$group <- facet_data$group %>% factor(c("on", "off"))
- 
-  facet_data %>% ggplot(
-    aes(x=pos, y=l2FC)
-  ) + geom_line(
-    data = tribble(~pos, ~l2FC, -Inf, 1, Inf, 1),
-    color = "darkred",
-    linewidth = 0.5
-  ) + geom_line(
-    # Implement the actual ChIC profile track.
-    aes(group = group, color = group, linewidth = group)
-  ) + facet_wrap(
-    vars(marks)
-  ) + scale_color_manual(
-    values = c(track_color, muted(track_color))
-  ) + scale_linewidth_manual(
-    values = c(1, 0.25)
-  ) + scale_y_continuous(
-    trans = "log",
-    labels = \(v) round(log(v) / log(2), 1),
-    limits = chic_average_profile_limits,
-    breaks = chic_average_breaks,
-    minor_breaks = chic_average_minor_breaks,
-    expand = c(0, 0)
-  ) + coord_cartesian(expand = FALSE) + labs(
-    x = "bp (from TSS)", y = "log2(mean(mark/input))"
-  ) + theme(
-    aspect.ratio = 1
-  )
-}
-
-chic_average_gene_list_profiles_2 <- function(
-  gene_list,
-  bg_gene_list,
-  chic_path,
-  metafeatures_path,
-  chic_driver,
-  track_color = "goldenrod"
-) {
-  metafeatures <- read.csv(metafeatures_path, row.names = 1)
-  metafeatures_on <- metafeatures[gene_list, ] %>%
-    subset(chr %in% names(chr.lengths))
-  metafeatures_off <- metafeatures[bg_gene_list, ] %>%
-    subset(chr %in% names(chr.lengths))
-
-  before <- 500
-  after <- 1500
-  facet_data <- sapply(
-    list(on=metafeatures_on, off=metafeatures_off),
-    \(metafeatures) {
-      mark_tracks <- sapply(
-        chic.mark.data$mark,
-        \(mark) flybase_big_matrix(
-          metafeatures %>% subset(!is.na(chr) & !is.na(start) & !is.na(end)) %>% subset(!duplicated(flybase)),
-          paste0(chic_path, "/", chic_driver, "_", mark, ".CN.bw"),
-          before = before,
-          after = after
-        ) %>%
-          # subset(rowAlls(. > 0.001)) %>%
-          pmax(0.001) %>%
           # log %>%
           # `/`(log(2)) %>%
           colMeans,

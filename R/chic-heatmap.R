@@ -1,70 +1,142 @@
-# Stack feature TSS (as in bed format with flybase id) from BigWig. The required
-# features columns are:
-#     flybase, chr (as in load_flybase_bed), strand, start, end.
-flybase_big_matrix <- function(
-  features, bw_path,
+track_to_heatmap <- function(
+  track,
+  assay.data.sc,
+  mask_track = NULL,
+  mask_threshold = 1,
   genomic_feature = "TSS",
-  before = 500, after = 1500
+  before = 500,
+  after = 1500
 ) {
-  coverage <- import(bw_path, "bigwig") %>% coverage(weight="score")
-  mat_colnames <- seq(before+after) %>%
-                      replace(. == before+1, "TSS")
-  chr_data <- split(features, features$chr)
-  chr_data <- mapply(
-    \(chr_bed, chr_coverage, chr_length) {
-      if (type_sum(rownames(chr_bed)) != "chr")
-        rownames(chr_bed) <- as.character(seq(nrow(chr_bed)))
-      data_rows <- expand.grid(
-        flybase = chr_bed$flybase,
-        relative_pos = seq(-before, after-1)
-      ) %>%
-        left_join(
-          with(
-            chr_bed,
-            data.frame(
-              flybase = flybase,
-              start = chr_bed[
-                cbind(
-                  rownames(chr_bed),
-                  list(
-                    TSS = c(`+`="start", `-`="end"),
-                    TES = c(`+`="end", `-`="start")
-                  )[[genomic_feature]][strand]
-                )
-              ] %>%
-                as.numeric,
-              sign = ifelse(strand == "+", 1, -1)
-            )
-          ),
-          "flybase"
-        )
-      data_rows <- data_rows %>%
-        within(
-          {
-            pos <- start + sign * relative_pos
-            is_finite <- between(pos, 1, chr_length)
-            pos <- pos %>% replace(!is_finite, 1)
-          }
-        )
-      chr_data <- matrix(
-        as.numeric(chr_coverage[data_rows$pos]) %>%
-          replace(!data_rows$is_finite, NA),
-        nrow = nrow(chr_bed),
-        ncol = before + after,
-        dimnames = list(chr_bed$flybase, mat_colnames)
+  if (!is.null(mask_track))
+    elementMetadata(track)[, 1] <- elementMetadata(track)[, 1] %>%
+      replace(which(!sapply(elementMetadata(mask_track)[, 1] < mask_threshold, isFALSE)), NA)
+  assay.data.sc.orig <- assay.data.sc
+  assay.data.sc$chr <- assay.data.sc$chr %>% factor(names(masked.lengths)) %>% droplevels
+  assay.data.sc <- assay.data.sc %>% subset(!is.na(chr))
+  track <- track[seqnames(track) %in% levels(assay.data.sc$chr)]
+  seqlevels(track) <- levels(assay.data.sc$chr)
+
+  assay.data.sc <- assay.data.sc %>%
+    rowwise %>%
+    mutate(
+      origin = list(
+        TSS = c(`+`=start, `-`=end), TES = c(`+`=end, `-`=start)
+      )[[genomic_feature]][strand],
+      sgn = c(`+`=1, `-`=-1)[strand]
+    )
+
+  heatmap_matrix <- mapply(
+    \(chr, granges, assay.data.sc) {
+      bptrack <- approx(
+        granges@ranges@start + 1/2*granges@ranges@width,
+        elementMetadata(granges)[,1],
+        xout = seq(seqlengths(granges)[chr]),
+        na.rm=F
+      )$y
+      ones <- matrix(1, nrow = nrow(assay.data.sc), ncol = before + after)
+      pos <- as.matrix(
+        Diagonal(
+          x = assay.data.sc$origin
+        ) %*% ones
+        + Diagonal(
+          x = assay.data.sc$sgn
+        ) %*% ones %*% Diagonal(x = seq(-before, after - 1))
       )
-      chr_data
+
+      m <- bptrack[pos] %>%
+        matrix(
+          nrow = nrow(assay.data.sc),
+          dimnames = list(
+            assay.data.sc[, 1, drop=T],
+            as.character(seq(-before, after - 1)) %>%
+              replace(before + 1, genomic_feature)
+          )
+        )
     },
-    chr_data,
-    coverage[names(chr_data)],
-    chr.lengths[names(chr_data)],
-    SIMPLIFY=F
-  )
-  chr_data <- chr_data %>% do.call(rbind, .)
-  if (is.null(chr_data))
-    return(matrix(nrow = 0, ncol = length(mat_colnames), dimnames = list(NULL, mat_colnames)))
-  colnames(chr_data) <- mat_colnames
-  chr_data[features$flybase,, drop=F]
+    levels(assay.data.sc$chr),
+    split(track, seqnames(track)),
+    split(assay.data.sc, assay.data.sc$chr),
+    SIMPLIFY=FALSE,
+    USE.NAMES=F
+  ) %>%
+    do.call(rbind, .)
+  # This indexing replaces out-of-bounds subscripts with NA rows in the result.
+  heatmap_matrix <- heatmap_matrix[
+    match(assay.data.sc.orig[, 1, drop=T], rownames(heatmap_matrix)),
+  ] %>%
+    matrix(
+      nrow = nrow(assay.data.sc.orig),
+      dimnames = list(
+        assay.data.sc.orig[, 1, drop=T],
+        colnames(.)
+      )
+    )
+}
+
+inter_track_to_heatmap <- function(
+  track,
+  assay.data.sc,
+  mask_track = NULL,
+  mask_threshold = 1,
+  bp_before,
+  bp_after,
+  n_sample = 99
+) {
+  if (!is.null(mask_track))
+    elementMetadata(track)[, 1] <- elementMetadata(track)[, 1] %>%
+      replace(which(!sapply(elementMetadata(mask_track)[, 1] < mask_threshold, isFALSE)), NA)
+  assay.data.sc$chr <- assay.data.sc$chr %>% factor(names(masked.lengths)) %>% droplevels
+  assay.data.sc <- assay.data.sc %>% subset(!is.na(chr))
+  track <- track[seqnames(track) %in% levels(assay.data.sc$chr)]
+  seqlevels(track) <- levels(assay.data.sc$chr)
+
+  assay.data.sc <- assay.data.sc %>%
+    rowwise %>%
+    mutate(
+      origin = c(`+`=start, `-`=end)[strand],
+      termin = c(`+`=end, `-`=start)[strand],
+      sgn = c(`+`=1, `-`=-1)[strand]
+    )
+
+  heatmap_matrix <- mapply(
+    \(chr, granges, assay.data.sc) {
+      bptrack <- approx(
+        granges@ranges@start + 1/2*granges@ranges@width,
+        elementMetadata(granges)[,1],
+        xout = seq(seqlengths(granges)[chr]),
+        na.rm=F
+      )$y
+      ones <- matrix(1, nrow = nrow(assay.data.sc), ncol = before + after)
+      pos <- t(
+        apply(
+          apply.data.sc[c("origin", "termin", "sgn")],
+          1,
+          \(v) with(
+            as.list(v),
+            seq(origin, termin, length.out=n_sample+2)[
+              -c(1, n_sample+2)
+            ]
+          )
+        )
+      )
+
+      m <- bptrack[pos] %>%
+        matrix(
+          nrow = nrow(assay.data.sc),
+          dimnames = list(
+            assay.data.sc[, 1, drop=T],
+            str_glue(seq(1, 99, length.out=num_inter), "%")
+          )
+        )
+    },
+    levels(assay.data.sc$chr),
+    split(track, seqnames(track)),
+    split(assay.data.sc, assay.data.sc$chr),
+    SIMPLIFY=FALSE,
+    USE.NAMES=F
+  ) %>%
+    do.call(rbind, .)
+  heatmap_matrix <- heatmap_matrix[assay.data.sc[, 1, drop=T], ]
 }
 
 smooth_image_columns <- function(

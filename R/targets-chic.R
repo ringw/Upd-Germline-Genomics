@@ -565,7 +565,7 @@ targets.chic <- list(
         list(
           pmin(
             elementMetadata(chic.experiment.quantify)[, 2]
-            / elementMetadata(chic.experiment.quantify)[, 1],
+            / elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1],
             100
           )
         ),
@@ -636,6 +636,14 @@ targets.chic <- list(
             BigWigFile
         ) %>%
         as.character
+    ),
+    tar_target(
+      chic.heatmap.tss,
+      track_to_heatmap(
+        grep("Imputed_Enrich", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+        as_tibble(read.csv(assay.data.sc)),
+        grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
+      )
     ),
 
     tar_target(
@@ -770,81 +778,59 @@ targets.chic <- list(
 
   # Profiles of ChIC faceted by quantification
   tar_map(
-    experiment.driver %>% mutate(quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}"))),
+    experiment.driver %>%
+      mutate(
+        named_tss_data = sapply(
+          celltype,
+          \(celltype) call(
+            "setNames",
+            rlang::syms(str_glue("chic.heatmap.tss_{chic.mark.data$mark}_{celltype}_CN_chr")),
+            chic.mark.data$mark
+          ),
+          simplify=F
+        ),
+        quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}"))
+      ),
     names = celltype,
     tar_target(
-      sc_chr_factor,
-      tibble(
-        rowname = names(quartile.factor),
-        chr = read.csv(assay.data.sc)$chr %>%
-          fct_recode(`2`="2L", `2`="2R", `3`="3L", `3`="3R") %>%
-          factor(c("2", "3", "4", "X", "Y")),
-        quant = quartile.factor %>%
-          fct_recode(off="Q1", low="Q2", med="Q3", high="Q4"),
-        activity = quartile.factor %>%
-          fct_recode(off="Q1", active="Q2", active="Q3", active="Q4"),
-        fct = interaction(chr, quant),
-        fct_activity = interaction(chr, activity)
+      facet_genes,
+      with(
+        read.csv(assay.data.sc),
+        tibble(
+          facet = chr %>%
+            fct_recode(`2`="2L", `2`="2R", `3`="3L", `3`="3R") %>%
+            factor(c("2", "3", "4", "X")),
+          quant = quartile.factor %>%
+            fct_recode(off="Q1", low="Q2", med="Q3", high="Q4"),
+          activity = quartile.factor %>%
+            fct_recode(off="Q1", active="Q2", active="Q3", active="Q4"),
+          gene = X
+        ) %>%
+          subset(!is.na(facet))
       )
     ),
     tar_target(
       tss_sc_chr_quartile_data,
-      chic_average_profiles(
-        pull(sc_chr_factor, fct, rowname),
-        dirname(
-          c(
-            chic.bw_H3K4_Germline,
-            chic.bw_H3K27_Germline,
-            chic.bw_H3K9_Germline
-          )[1]
-        ),
-        assay.data.sc,
-        driver,
-        # "CPM Quartile",
-        "",
-        # fake colors
-        sprintf("#%06d", 10 * seq_along(levels(sc_chr_factor$fct)))
-      )$data,
-      format = "parquet"
-    ),
-    tar_target(
-      tss_sc_chr_data,
-      chic_average_profiles(
-        pull(sc_chr_factor, chr, rowname),
-        dirname(
-          c(
-            chic.bw_H3K4_Germline,
-            chic.bw_H3K27_Germline,
-            chic.bw_H3K9_Germline
-          )[1]
-        ),
-        assay.data.sc,
-        driver,
-        # "CPM Quartile",
-        "",
-        # fake colors
-        sprintf("#%06d", 10 * seq_along(levels(sc_chr_factor$chr)))
-      )$data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        list(subset(facet_genes, select=c(facet, quant, gene))),
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, chic.mark.data$mark)),
       format = "parquet"
     ),
     tar_target(
       tss_sc_chr_active_data,
-      chic_average_profiles(
-        pull(sc_chr_factor, fct_activity, rowname),
-        dirname(
-          c(
-            chic.bw_H3K4_Germline,
-            chic.bw_H3K27_Germline,
-            chic.bw_H3K9_Germline
-          )[1]
-        ),
-        assay.data.sc,
-        driver,
-        # "CPM Quartile",
-        "",
-        # fake colors
-        sprintf("#%06d", 10 * seq_along(levels(sc_chr_factor$chr)))
-      )$data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        list(subset(facet_genes, select=c(facet, activity, gene))),
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, chic.mark.data$mark)),
       format = "parquet"
     )
   ),

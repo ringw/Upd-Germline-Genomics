@@ -2114,43 +2114,31 @@ list(
   tar_map(
     mutate(
       chic.fpkm.data,
-      sc_chr_factor = rlang::syms(str_glue("sc_chr_factor_{name}")),
       tss_sc_chr_quartile_data = rlang::syms(str_glue("tss_sc_chr_quartile_data_{name}")),
-      tss_sc_chr_active_data = rlang::syms(str_glue("tss_sc_chr_active_data_{name}")),
-      tss_sc_chr_data = rlang::syms(str_glue("tss_sc_chr_data_{name}"))
+      tss_sc_chr_active_data = rlang::syms(str_glue("tss_sc_chr_active_data_{name}"))
     ),
     names = name,
     tar_file(
-      fig.fpkm.chic.new,
+      fig.fpkm.chic.facet,
       save_figures(
         paste0("figure/", name),
         ".pdf",
         tribble(
           ~rowname, ~figure, ~width, ~height,
           "CHIC-TSS-Chr-AllMarks-RNAseq-Quartile", 
-          mutate(
-            tss_sc_chr_quartile_data,
-            facet = factor(str_extract(genes, "[^.]+"), setdiff(levels(sc_chr_factor$chr), "Y"), ordered=TRUE),
-            genes = factor(str_extract(genes, "[.](\\S+)", group=1), levels(sc_chr_factor$quant), ordered=TRUE)
-          ) %>%
-            subset(!is.na(facet)) %>%
-            chic_plot_average_profiles_facet_grid(
-              "CPM Quartile",
-              setNames(sc_quartile_colors, NULL)
-            ),
+          chic_plot_average_profiles_facet_grid(
+            dplyr::rename(tss_sc_chr_quartile_data, genes=quant, l2FC=value),
+            "CPM Quartile",
+            setNames(sc_quartile_colors, NULL)
+          ),
           9,
           12,
           "CHIC-TSS-Chr-AllMarks-RNAseq",
-          mutate(
-            tss_sc_chr_active_data,
-            facet = factor(str_extract(genes, "[^.]+"), setdiff(levels(sc_chr_factor$chr), "Y"), ordered=TRUE),
-            genes = factor(str_extract(genes, "[.](\\S+)", group=1), c("off", "active"), ordered=TRUE)
-          ) %>%
-            subset(!is.na(facet)) %>%
-            chic_plot_average_profiles_facet_grid(
-              "CPM Quartile",
-              rep(chic_line_track_colors[[tolower(name)]], 2)
-            )
+          chic_plot_average_profiles_facet_grid(
+            dplyr::rename(tss_sc_chr_active_data, genes=activity, l2FC=value),
+            "CPM Quartile",
+            rep(chic_line_track_colors[[tolower(name)]], 2)
+          )
           + guides(linewidth = guide_none(), color = guide_none()),
           8,
           10
