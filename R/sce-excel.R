@@ -329,3 +329,42 @@ publish_heatmap_named_cuts <- function(named_dendros, assay_data_sc, target_path
   saveWorkbook(wb, target_path, overwrite=T)
   target_path
 }
+
+publish_sd02 <- function(
+  unintegrated_clusters_report,
+  target_path
+) {
+  wb = createWorkbook()
+
+  # Sheet 1 - cluster-level info pre-QC.
+  title <- "Initial Clustering QC"
+  addWorksheet(wb, title)
+  clustersRow <- 1
+  for (n in names(unintegrated_clusters_report)) {
+    data <- unintegrated_clusters_report[[n]]
+    writeData(wb, title, matrix(n), 1, clustersRow, colNames=F)
+    writeDataTable(
+      wb, title, data, startCol = 1, startRow = clustersRow + 1, tableStyle = excel_tables$cyan)
+    addStyle(
+      wb, title, createStyle(numFmt = "0%"),
+      rows = clustersRow+1+seq(nrow(data)), cols = 7:13,
+      gridExpand=TRUE)
+    conditionalFormatting(
+      wb, title,
+      rows = clustersRow+1+seq(nrow(data)), cols = 3:5,
+      rule = "<>FALSE",
+      style = createStyle(fontColour = "white", bgFill = "#750415")
+    )
+    conditionalFormatting(
+      wb, title,
+      rows = clustersRow+1+seq(nrow(data)), cols = 7:13,
+      rule = ">=0.4",
+      style = createStyle(bgFill = "#fce46a")
+    )
+    clustersRow <- clustersRow + 1 + 1 + nrow(data) + 1
+  }
+
+  dir.create(dirname(target_path), showW=F, rec=T)
+  saveWorkbook(wb, target_path, overwrite=T)
+  target_path <- target_path
+}

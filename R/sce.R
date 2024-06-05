@@ -481,20 +481,75 @@ run_umap_on_batch <- function(seurat, metadata) {
 }
 
 unintegrated_report_cluster_expression <- function(
-  seurat_obj, doublet_names, gene_list
+  seurat_obj, doublet_names, gene_list, Upd_metadata
 ) {
+  idents <- Upd_metadata[Cells(seurat_obj), "ident"] %>%
+    replace(is.na(.), "excluded") %>%
+    ordered(c(sce.clusters$cluster, "excluded"))
   DefaultAssay(seurat_obj) <- "RNA"
   seurat_obj <- seurat_obj %>% NormalizeData(verb=F)
   cluster_data <- seurat_obj %>%
     FetchData(gene_list) %>%
     split(seurat_obj$seurat_clusters) %>%
-    sapply(\(m) colMeans(m != 0)) %>%
-    t
-  cluster_data <- cbind(
-    data.frame(
-      is_doublet = levels(seurat_obj$seurat_clusters) %in% doublet_names,
-      n = as.data.frame(table(seurat_obj$seurat_clusters))$Freq
-    ),
-    cluster_data
-  )
+    sapply(\(m) colMeans(m != 0) %>% round(5)) %>%
+    t %>%
+    as.data.frame %>%
+    dplyr::rename(roX2="lncRNA:roX2")
+  cluster_data <- FetchData(seurat_obj, "nCount_RNA")[, 1] %>%
+      split(seurat_obj$seurat_clusters) %>%
+      sapply(\(v) quantile(v, c(0.25, 0.5, 0.75))) %>%
+      matrix(
+        ncol = 3,
+        byrow = TRUE,
+        dimnames = list(
+          levels(seurat_obj$seurat_clusters),
+          c("nUMI_IQR-", "nUMIMedian", "nUMI_IQR+")
+        )
+      ) %>%
+      as.data.frame %>%
+      cbind(
+        tibble(
+          n = as.data.frame(table(seurat_obj$seurat_clusters))$Freq,
+          removed_doublet = levels(seurat_obj$seurat_clusters) %in% doublet_names,
+          is_high_nUMI = .$`nUMI_IQR-` >= (
+            seurat_obj$nCount_RNA %>% subset(. >= 2200) %>% median
+          ) * 0.9,
+          is_doublet_scDblFinder = SingleCellExperiment(list(counts=GetAssayData(seurat_obj, "RNA", "counts"))) %>%
+            `colLabels<-`(value = seurat_obj$seurat_clusters) %>%
+            findDoubletClusters %>%
+            as.data.frame %>%
+            rownames_to_column %>%
+            pull(num.de, rowname) %>%
+            `[`(levels(seurat_obj$seurat_clusters)) %>%
+            isOutlier(type="lower", log=TRUE) %>%
+            sapply(isTRUE),
+          mode = idents %>%
+            split(seurat_obj$seurat_clusters) %>%
+            mapply(
+              \(chrs, filter_cells) c(
+                with(
+                  as.data.frame(table(chrs)),
+                  chrs[which.max(Freq)]
+                ),
+                with(
+                  as.data.frame(table(chrs[filter_cells])),
+                  if (max(Freq) > 25) Var1[which.max(Freq)] else tail(Var1, 1)
+                )
+              ) %>%
+                droplevels %>%
+                levels %>%
+                head(1),
+              .,
+              with(
+                FetchData(seurat_obj, c("nCount_RNA", "nFeature_RNA")),
+                between(nCount_RNA, 2200, 7500)
+                & between(nFeature_RNA, 500, 2500)
+              ) %>%
+                split(seurat_obj$seurat_clusters)
+            )
+        ),
+        cluster_data,
+        .
+      ) %>%
+    rownames_to_column("Seurat Cluster ID")
 }

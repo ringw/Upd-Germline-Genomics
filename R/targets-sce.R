@@ -198,7 +198,7 @@ targets.sce <- list(
   # CySC markers including H3-GFP.
   tar_target(
     unintegrated_marker_genes,
-    c("nos", "vas", "tj", "Egfr", "lncRNA:roX2", "Mst77F", "wb", "Act57B")
+    c("nos", "vas", "tj", "Egfr", "lncRNA:roX2", "Mst77F", "Act57B")
   ),
   tar_target(
     unintegrated_clusters_doublets,
@@ -216,15 +216,25 @@ targets.sce <- list(
     mapply(
       unintegrated_report_cluster_expression,
       list(
-        seurat_qc_nos.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F),
-        seurat_qc_nos.2 %>% FindNeighbors(dims=1:9, verb=F) %>% FindClusters(res = 0.5, verb=F),
-        seurat_qc_tj.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.15, verb=F),
-        seurat_qc_tj.2 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F)
+        `nos-Upd_H3-GFP_Rep1`=seurat_qc_nos.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F),
+        `nos-Upd_H3-GFP_Rep2`=seurat_qc_nos.2 %>% FindNeighbors(dims=1:9, verb=F) %>% FindClusters(res = 0.5, verb=F),
+        `tj-Upd_H3-GFP_Rep1`=seurat_qc_tj.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.15, verb=F),
+        `tj-Upd_H3-GFP_Rep2`=seurat_qc_tj.2 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F)
       ),
       unintegrated_clusters_doublets$cluster %>%
         split(factor(unintegrated_clusters_doublets$obj, c("nos.1", "nos.2", "tj.1", "tj.2"))),
       list(unintegrated_marker_genes),
+      list(read.csv(metadata, row.names=1)),
       SIMPLIFY=FALSE
-    )
+    ),
+    packages = tar_option_get("packages") %>% c("scDblFinder", "scuttle")
+  ),
+  tar_target(
+    sd02_xlsx,
+    publish_sd02(
+      unintegrated_clusters_report,
+      "scRNA-seq-Regression/SD02-scRNA-seq-Cell-Level.xlsx"
+    ),
+    packages = tar_option_get("packages") %>% union("openxlsx")
   )
 )
