@@ -2169,14 +2169,7 @@ list(
         list(Germline=tss_sc_chr_active_data_Germline, Somatic=tss_sc_chr_active_data_Somatic) %>%
           bind_rows(.id = "name") %>%
           arrange(desc(row_number())) %>%
-          mutate(
-            facet = factor(str_extract(genes, "[^.]+"), setdiff(levels(sc_chr_factor_Germline$chr), "Y"), ordered=TRUE),
-            genes = interaction(
-              factor(str_extract(genes, "[.](\\S+)", group=1), c("off", "active"), ordered=TRUE),
-              ordered(name)
-            )
-          ) %>%
-          subset(!is.na(facet)) %>%
+          mutate(genes=interaction(activity, ordered(name)), l2FC=value) %>%
           chic_plot_average_profiles_facet_grid(
             "CPM Quartile",
             c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
