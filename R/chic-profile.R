@@ -32,96 +32,15 @@ chic_heatmap_facet_genes <- function(
 chic_average_profile_limits <- c(0.25, 4.4)
 chic_average_breaks <- c(1/2, 1, 2, 3)
 chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2))
-chic_average_profiles <- function(
-  chic_factor,
-  chic_path,
-  metafeatures_path,
-  chic_driver,
-  legend_title,
-  quartile_colors
-) {
-  chic_table <- table(chic_factor)
-  chic_factor <- chic_factor %>%
-    fct_relabel(\(n) n %>% sapply(\(n) paste0(n, " (n = ", chic_table[n], ")")))
 
-  metafeatures <- read.csv(metafeatures_path, row.names = 1)
-  annotations <- metafeatures %>%
-    rownames_to_column %>%
-    left_join(
-      data.frame(group=chic_factor) %>% rownames_to_column, "rowname"
-    )
-  facets <- expand.grid(
-    genes = levels(chic_factor),
-    marks = chic.mark.data$mark
-  )
-  before <- 500
-  after <- 1500
-  facets <- facets %>%
-    rowwise %>%
-    mutate(
-      profile = flybase_big_matrix(
-              annotations %>%
-                subset(group == genes & !is.na(chr) & !is.na(start) & !is.na(end) & chr %in% names(chr.lengths)) %>% subset(!duplicated(flybase)),
-              str_glue("{chic_path}/{chic_driver}_{marks}.new.FE.bw"),
-              before = before,
-              after = after
-            ) %>%
-              subset(rowAlls(. > 0.001)) %>%
-              # log %>%
-              # `/`(log(2)) %>%
-              colMeans %>%
-              list
-    )
-  facets_easy = dcast(facets, genes ~ marks, value.var='profile') %>% column_to_rownames('genes')
-  facet_data <- pull(facets, profile) %>%
-    sapply(
-      \(v) data.frame(pos=seq(-before, after-1), l2FC=v),
-      simplify=F) %>%
-    setNames(seq_along(.)) %>%
-    bind_rows(.id = "profile_index") %>%
-    left_join(
-      facets %>% subset(select=-profile) %>% rownames_to_column("profile_index"),
-      .,
-      by = "profile_index"
-    ) %>%
-    ungroup %>%
-    mutate(marks = marks %>% factor(chic.mark.data$mark, ordered=TRUE))
-  facet_data %>% ggplot(
-    aes(x=pos, y=l2FC, color=genes, linewidth=genes, group=genes)
-  ) + geom_line(
-    data = cross_join(
-      tribble(~pos, ~l2FC, -Inf, 1, Inf, 1),
-      tibble(
-        genes = NA,
-        marks = factor(chic.mark.data$mark, chic.mark.data$mark, ordered=TRUE)
-      )
-    ),
-    color = "darkred",
-    linewidth = 0.33
-  ) + geom_line() + facet_wrap(
-    vars(marks)
-  ) + scale_color_manual(
-    values = quartile_colors,
-    guide = guide_legend(title = legend_title, reverse = TRUE)
-  ) + scale_linewidth_manual(
-    values = c(0.25, 0.5, 0.7, 1),
-    guide = guide_legend(title = legend_title, reverse = TRUE)
-  ) + scale_y_continuous(
-    trans = "log",
-    labels = \(v) round(log(v) / log(2), 1),
-    limits = chic_average_profile_limits,
-    breaks = chic_average_breaks,
-    minor_breaks = chic_average_minor_breaks,
-    expand = c(0, 0)
-  ) + coord_cartesian(expand=FALSE) + labs(
-    x = "bp (from TSS)", y = "log2(mean(mark/input))"
-  ) + theme(
-    aspect.ratio = 1
-  )
-}
-
+# TSS plot. Rows come from var named "facet". Cols come from "mark".
+# Grouping within the panel is always called "genes" because it normally
+# consists of a group-by then mean (using disjoint sets).
+# Line plot is called "l2FC" although it is actually Fold Change and log
+# transform is applied to the y-axis in ggplot.
 chic_plot_average_profiles_facet_grid <- function(
-  facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1)
+  facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1),
+  faceter = facet_grid(rows = vars(facet), cols = vars(mark))
 ) {
   break_labels <- tibble(
     pos = seq(head(levels(facet_data$pos), 1), tail(levels(facet_data$pos), 1)),
@@ -145,9 +64,7 @@ chic_plot_average_profiles_facet_grid <- function(
       ),
     color = "darkred",
     linewidth = 0.25
-  ) + geom_line() + facet_grid(
-    rows = vars(facet), cols = vars(mark)
-  ) + scale_color_manual(
+  ) + geom_line() + faceter + scale_color_manual(
     values = quartile_colors,
     guide = guide_legend(title = legend_title, reverse = TRUE)
   ) + scale_linewidth_manual(

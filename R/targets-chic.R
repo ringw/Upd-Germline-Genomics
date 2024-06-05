@@ -792,6 +792,7 @@ targets.chic <- list(
         quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}"))
       ),
     names = celltype,
+    tar_target(chic.experiment.tss.heatmaps, named_tss_data),
     tar_target(
       facet_genes,
       with(

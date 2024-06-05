@@ -1944,38 +1944,30 @@ list(
     format = 'file'
   ),
 
-  tar_target(
-    name = cpm.chic.quarter.tss.plot_Germline,
-    chic_average_profiles(
-      quartile.factor_Germline,
-      dirname(
-        c(
-          chic.bw_H3K4_Germline,
-          chic.bw_H3K27_Germline,
-          chic.bw_H3K9_Germline
-        )[1]
+  tar_map(
+    experiment.driver %>%
+      mutate(
+        quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}")),
+        chic.experiment.tss.heatmaps = rlang::syms(str_glue("chic.experiment.tss.heatmaps_{celltype}"))
       ),
-      assay.data.sc,
-      'nos',
-      'CPM Quartile',
-      setNames(sc_quartile_annotations, NULL)
-    )
-  ),
-  tar_target(
-    name = cpm.chic.quarter.tss.plot_Somatic,
-    chic_average_profiles(
-      quartile.factor_Somatic,
-      dirname(
-        c(
-          chic.bw_H3K4_Somatic,
-          chic.bw_H3K27_Somatic,
-          chic.bw_H3K9_Somatic
-        )[1]
-      ),
-      assay.data.sc,
-      'tj',
-      'CPM Quartile',
-      setNames(sc_quartile_annotations, NULL)
+    names = celltype,
+    tar_target(
+      assay.data.with.quant,
+      quartile.factor %>%
+        fct_recode(off="Q1", low="Q2", medium="Q3", high="Q4") %>%
+        enframe("gene", "genes")
+    ),
+    tar_target(
+      name = cpm.chic.quarter.tss.plot,
+      chic.experiment.tss.heatmaps %>%
+        sapply(\(mat) mat %>% chic_heatmap_facet_genes(assay.data.with.quant), simplify=F) %>%
+        bind_rows(.id="mark") %>%
+        mutate(mark = factor(mark, chic.mark.data$mark), l2FC = value) %>%
+        chic_plot_average_profiles_facet_grid(
+          "CPM Quartile",
+          setNames(sc_quartile_annotations, NULL),
+          faceter = facet_wrap(vars(mark))
+        )
     )
   ),
   tar_target(
