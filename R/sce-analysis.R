@@ -884,3 +884,49 @@ report_cpm_in_gene_sets <- function(Upd_cpm, gene_sets, output_html, output_pdf)
   dev.off()
   return(c(output_html, output_pdf))
 }
+
+plot_volcano_apeglm <- function(Upd_regression_somatic) {
+
+  quant = tibble(
+    rowname = rownames(Upd_regression_somatic$map),
+    log2FC = Upd_regression_somatic$map[,2] / log(2),
+    log10.svalue = log(Upd_regression_somatic$svalue[match(rownames(Upd_regression_somatic$map), rownames(Upd_regression_somatic$svalue)),1]) / log(10)
+  ) %>%
+    arrange(runif(nrow(.))) %>%
+    mutate(
+      color = ifelse(abs(log2FC) >= 1 & log10.svalue <= -4, "#1e498f", "#777777")
+      # color = hcl(
+      #   256,
+      #   # seq(0, 1, length.out=length(rowname))^4 * (30-61) + 61,
+      #   # seq(0, 1, length.out=length(rowname))^4 * (40-32) + 32
+      #   61,
+      #   32
+      # ) %>%
+      #   replace(
+      #     abs(log2FC) < 1 | log10.svalue > -4,
+      #     "#777777"
+      #   )
+    )
+
+  ggplot(
+    quant, aes(log2FC, log10.svalue, color=color)
+  ) + geom_point() + geom_line(
+    aes(group=group),
+    tribble(
+      ~log2FC, ~log10.svalue, ~group,
+      -Inf, -4, "1",
+      -1, -4, "1",
+      -1, -Inf, "1",
+      1, -Inf, "2",
+      Inf, -4, "2",
+      1, -4, "2"
+    ),
+    color = "#8a2311",
+    linetype = "longdash"
+  ) + scale_color_identity() + scale_x_continuous(
+    limits=c(-1,1) * 7.5, oob=scales::squish, expand=c(0,0)
+  ) + scale_y_reverse(
+    limits=c(0, -50), oob=scales::squish, expand=c(0,0)
+  ) + theme(aspect.ratio = 3/4)
+
+}
