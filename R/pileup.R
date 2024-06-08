@@ -119,6 +119,12 @@ paired_end_reads_to_fragment_lengths <- function(df) {
   df
 }
 
+paired_end_reads_to_granges <- function(df, ...) {
+  df <- df %>% paired_end_reads_to_fragment_lengths
+  df <- df[seq(1, nrow(df), by=2), ]
+  GRanges(df$rname, IRanges(start = df$pos, width = df$length), ...)
+}
+
 paired_end_pos_to_5_prime <- function(df) {
   stopifnot(all(df$strand[seq(2, nrow(df), by=2)] == "-"))
   df <- df %>% bam_reference_coords
