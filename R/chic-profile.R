@@ -40,7 +40,8 @@ chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2))
 # transform is applied to the y-axis in ggplot.
 chic_plot_average_profiles_facet_grid <- function(
   facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1),
-  faceter = facet_grid(rows = vars(facet), cols = vars(mark))
+  faceter = facet_grid(rows = vars(facet), cols = vars(mark)),
+  x_intercept_red = 1
 ) {
   break_labels <- tibble(
     pos = seq(head(levels(facet_data$pos), 1), tail(levels(facet_data$pos), 1)),
@@ -50,7 +51,7 @@ chic_plot_average_profiles_facet_grid <- function(
   facet_data %>% ggplot(
     aes(x=pos, y=l2FC, color=genes, linewidth=genes, group=genes)
   ) + geom_line(
-    data = tribble(~pos, ~l2FC, -Inf, 1, Inf, 1) %>%
+    data = tribble(~pos, ~l2FC, -Inf, x_intercept_red, Inf, x_intercept_red) %>%
       cross_join(
         tibble(
           genes = NA,

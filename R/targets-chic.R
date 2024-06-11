@@ -644,6 +644,14 @@ targets.chic <- list(
         as_tibble(read.csv(assay.data.sc)),
         grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
       )
+    ),
+    tar_target(
+      chic.heatmap.tss.nucleosome,
+      track_to_heatmap(
+        grep("Imputed_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+        as_tibble(read.csv(assay.data.sc)),
+        grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
+      )
     )
   ),
 
@@ -660,6 +668,7 @@ targets.chic <- list(
           ),
           simplify=F
         ),
+        nucleosome_data = rlang::syms(str_glue("chic.heatmap.tss.nucleosome_H3K4_{celltype}_CN_chr")),
         quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}"))
       ),
     names = celltype,
@@ -703,6 +712,14 @@ targets.chic <- list(
       ) %>%
         bind_rows(.id = "mark") %>%
         mutate(mark = factor(mark, chic.mark.data$mark)),
+      format = "parquet"
+    ),
+    tar_target(
+      tss_sc_chr_nucleosome_data,
+      tibble(
+        chic_heatmap_facet_genes(nucleosome_data, subset(facet_genes, select=c(facet,activity,gene))),
+        mark = ""
+      ),
       format = "parquet"
     )
   ),
