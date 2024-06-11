@@ -885,7 +885,7 @@ report_cpm_in_gene_sets <- function(Upd_cpm, gene_sets, output_html, output_pdf)
   return(c(output_html, output_pdf))
 }
 
-plot_volcano_apeglm <- function(Upd_regression_somatic) {
+plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
 
   quant = tibble(
     rowname = rownames(Upd_regression_somatic$map),
@@ -894,7 +894,7 @@ plot_volcano_apeglm <- function(Upd_regression_somatic) {
   ) %>%
     arrange(runif(nrow(.))) %>%
     mutate(
-      color = ifelse(abs(log2FC) >= 1 & log10.svalue <= -4, "#1e498f", "#777777")
+      color = ifelse(abs(log2FC) >= log2Threshold & log10.svalue <= -4, "#1e498f", "#777777")
       # color = hcl(
       #   256,
       #   # seq(0, 1, length.out=length(rowname))^4 * (30-61) + 61,
@@ -915,11 +915,11 @@ plot_volcano_apeglm <- function(Upd_regression_somatic) {
     tribble(
       ~log2FC, ~log10.svalue, ~group,
       -Inf, -4, "1",
-      -1, -4, "1",
-      -1, -Inf, "1",
-      1, -Inf, "2",
+      -log2Threshold, -4, "1",
+      -log2Threshold, -Inf, "1",
+      log2Threshold, -Inf, "2",
       Inf, -4, "2",
-      1, -4, "2"
+      log2Threshold, -4, "2"
     ),
     color = "#8a2311",
     linetype = "longdash"
