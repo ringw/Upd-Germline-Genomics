@@ -910,7 +910,7 @@ plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
 
   ggplot(
     quant, aes(log2FC, log10.svalue, color=color)
-  ) + geom_point() + geom_line(
+  ) + geom_point(size=0.1) + geom_line(
     aes(group=group),
     tribble(
       ~log2FC, ~log10.svalue, ~group,
@@ -926,7 +926,6 @@ plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
   ) + scale_color_identity() + scale_x_continuous(
     limits=c(-1,1) * 7.5, oob=scales::squish, expand=c(0,0)
   ) + scale_y_reverse(
-    limits=c(0, -50), oob=scales::squish, expand=c(0,0)
-  ) + theme(aspect.ratio = 3/4)
-
+    limits=c(0, -50), oob=scales::squish, expand=rep(0.01,2)
+  ) + theme_bw() + theme(aspect.ratio = 3/4)
 }

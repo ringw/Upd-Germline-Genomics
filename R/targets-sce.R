@@ -117,6 +117,20 @@ targets.sce <- list(
       c("dendextend", "ggdendro", "tidyr")
   ),
   tar_file(
+    Upd_volcano,
+    save_figures(
+      "figure/Integrated-scRNAseq", ".pdf",
+      tibble(
+        name="RNAseq-Volcano",
+        figure=plot_volcano_apeglm(Upd_regression_somatic) %>%
+          rasterise(dpi=300) %>%
+          list,
+        width = 6,
+        height = 4
+      )
+    )
+  ),
+  tar_file(
     Upd_genes_heatmap_excel,
     publish_heatmap_named_cuts(
       Upd_genes_newcut$lower %>% setNames(head(LETTERS, length(.))),
