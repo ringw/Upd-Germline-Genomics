@@ -2138,6 +2138,38 @@ list(
       )
     )
   ),
+  tar_map(
+    tribble(
+      ~celltype, ~tss_sc_chr_nucleosome_data, ~granges,
+      "Germline", rlang::sym("tss_sc_chr_nucleosome_data_Germline"), rlang::sym("chic.experiment.quantify_H3K4_Germline_CN_chr"),
+      "Somatic", rlang::sym("tss_sc_chr_nucleosome_data_Somatic"), rlang::sym("chic.experiment.quantify_H3K4_Somatic_CN_chr")
+    ),
+    names = celltype,
+    tar_target(
+      fig.fpkm.chic.facet.nucleosome,
+      save_figures(
+        str_glue("figure/", celltype),
+        ".pdf",
+        tibble(
+          rowname="CHIC-TSS-Chr-Nucleosome-Occupancy-RNAseq",
+          figure=list(
+            chic_plot_average_profiles_facet_grid(
+              dplyr::rename(tss_sc_chr_nucleosome_data, genes=activity, l2FC=value),
+              "",
+              rep(chic_line_track_colors[[tolower(celltype)]], 2),
+              faceter = facet_wrap(vars(facet)),
+              x_intercept = 1000 * 1000 * 1000 / sum(seqlengths(granges))
+            ) + scale_y_continuous(
+              name = "H3 Monosome FPKM",
+              expand = c(0.05, 0.05)
+            ) + guides(linewidth = guide_none(), color = guide_none())
+          ),
+          width=6,
+          height=6
+        )
+      )
+    )
+  ),
 
   tar_target(
     germline_somatic_line_plot_legend,

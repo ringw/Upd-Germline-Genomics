@@ -774,7 +774,7 @@ targets.chic <- list(
           ),
           simplify=F
         ),
-        nucleosome_data = rlang::syms(str_glue("chic.heatmap.tss.nucleosome_H3K4_{celltype}_CN_chr")),
+        nucleosome_data = rlang::syms(str_glue("chic.heatmap.tss.nucleosome_H3K27_{celltype}_CN_chr")),
         quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}"))
       ),
     names = celltype,
