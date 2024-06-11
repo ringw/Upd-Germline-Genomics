@@ -655,6 +655,112 @@ targets.chic <- list(
     )
   ),
 
+  # Binning of chic H3 fragments by length and by mapq.
+  tar_target(
+    chic.nucleosome.fragment.stats.cut.bounds,
+    seq(50, 500, by=50)
+  ),
+  tar_target(
+    chic.nucleosome.fragment.stats.cut.levels,
+    paste0(
+      chic.nucleosome.fragment.stats.cut.bounds %>% head(length(.) - 1),
+      "..",
+      chic.nucleosome.fragment.stats.cut.bounds %>% tail(length(.) - 1)
+    )
+  ),
+  tar_target(
+    chic.mapq.stats.cut.bounds,
+    c(0, 1, seq(10, 50, by=10))
+  ),
+  tar_target(
+    chic.mapq.stats.cut.levels,
+    c(
+      "0",
+      "1..10",
+      "10..20",
+      "20..30",
+      "30..40",
+      "40..42"
+    )
+  ),
+  tar_map(
+    chic.samples %>%
+      mutate(celltype = driver %>% forcats::fct_recode(Germline="nos", Somatic="tj") %>% as.character) %>%
+      rowwise %>%
+      reframe(
+        celltype,
+        group,
+        molecule,
+        bulk_reads = rlang::syms(str_glue("bulk_reads_{names(chr.lengths)}_chic.bam_{sample}_chr")),
+        chr = names(chr.lengths)
+      ) %>%
+      filter(group == "H3K4", molecule == "H3") %>%
+      group_by(celltype) %>%
+      summarise(
+        bulk_reads = list(bulk_reads),
+        chr = list(chr)
+      ),
+    names = celltype,
+    tar_target(
+      chic.nucleosome.fragment.stats,
+      left_join(
+        cross_join(
+          tibble(chr = factor(c("2", "3", "4", "X", "Y"))),
+          tibble(fragment_sizes = chic.nucleosome.fragment.stats.cut.levels)
+        ),
+        sapply(
+          bulk_reads,
+          \(df) df %>%
+            paired_end_reads_to_fragment_lengths %>%
+            group_by(cut(length, chic.nucleosome.fragment.stats.cut.bounds)) %>%
+            tally %>%
+            `colnames<-`(value = c("fragment_sizes", "n")) %>%
+            subset(!is.na(fragment_sizes)) %>%
+            within(levels(fragment_sizes) <- chic.nucleosome.fragment.stats.cut.levels),
+          simplify=F
+        ) %>%
+          setNames(fct_recode(chr, `2`="2L", `2`="2R", `3`="3L", `3`="3R")) %>%
+          bind_rows(.id = "chr"),
+        c("chr", "fragment_sizes")
+      ) %>%
+        mutate(n = n %>% replace_na(0)),
+      packages = tar_option_get("packages") %>% c("tidyr")
+    ),
+    tar_target(
+      chic.h3.mapq.stats,
+      left_join(
+        cross_join(
+          tibble(chr = factor(c("2", "3", "4", "X", "Y"))),
+          tibble(mapq_range = chic.mapq.stats.cut.levels)
+        ),
+        sapply(
+          bulk_reads,
+          \(df) df %>%
+            group_by(cut(mapq, chic.mapq.stats.cut.bounds)) %>%
+            tally %>%
+            `colnames<-`(value = c("mapq_range", "n")) %>%
+            subset(!is.na(mapq_range)) %>%
+            within(levels(mapq_range) <- chic.mapq.stats.cut.levels),
+          simplify=F
+        ) %>%
+          setNames(fct_recode(chr, `2`="2L", `2`="2R", `3`="3L", `3`="3R")) %>%
+          bind_rows(.id = "chr"),
+        c("chr", "mapq_range")
+      ) %>%
+        mutate(n = n %>% replace_na(0)),
+      packages = tar_option_get("packages") %>% c("tidyr")
+    )
+  ),
+
+  tar_file(
+    sd_chic_fragments,
+    publish_chic_fragments(
+      list(Germline=chic.nucleosome.fragment.stats_Germline, Somatic=chic.nucleosome.fragment.stats_Somatic),
+      list(Germline=chic.h3.mapq.stats_Germline, Somatic=chic.h3.mapq.stats_Somatic),
+      "Supplemental_Data/SD03_Bulk_Sequence_Stats.xlsx"
+    )
+  ),
+
   # Profiles of ChIC faceted by quantification
   tar_map(
     experiment.driver %>%
