@@ -234,7 +234,11 @@ write_regression_table <- function(
     p95minus = apeglm$map[,coef] - qnorm(0.975) * apeglm$sd[,coef],
     map = apeglm$map[,coef],
     p95plus = apeglm$map[,coef] + qnorm(0.975) * apeglm$sd[,coef],
-    fsr = apeglm$fsr[,1] %>% signif(digits=2),
+    s.value = apeglm$svalue[
+      rownames(apeglm$map) %>% match(rownames(apeglm$svalue)),
+      1
+    ] %>%
+      signif(digits=2),
     padj = if('mle.test' %in% names(apeglm)) apeglm$mle.test$adj_pval[match(names(flybase), apeglm$mle.test$name)] %>% signif(digits=2) else 0.01
   )
   data[, 4:6] = round(as.matrix(data[, 4:6]) / log(2), digits=2)
