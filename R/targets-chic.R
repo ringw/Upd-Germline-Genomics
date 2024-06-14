@@ -38,6 +38,8 @@ target_chic_load_raw_expr <- function(group, driver) {
   rlang::call2("tibble", rowname = samples$sample, molecule = samples$molecule, rep = call("factor", samples$rep), pileup = samples$pileup)
 }
 
+log2 <- function(n) (log(n) / log(2))
+
 targets.chic.aligned <- tar_map(
   bowtie.refs,
   names = name,
@@ -290,7 +292,7 @@ targets.chic <- list(
         reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
           sapply(
             \(df) df %>%
-        pos_fixer_callable %>%
+              pos_fixer_callable %>%
               filter(between(length, 100, 200)),
             simplify=F
           ) %>%
@@ -310,7 +312,7 @@ targets.chic <- list(
         granges = mapply(
           count_overlaps_bases, tile_granges, reads
         )
-        ) %>%
+      ) %>%
         with(
           granges %>%
             GRangesList %>%
@@ -472,9 +474,9 @@ targets.chic <- list(
     ),
     tar_target(
       chic.experiment.granges.offset_diameter_40,
-        GRanges(
-          seqnames(chic.experiment.granges.diameter_40),
-          ranges(chic.experiment.granges.diameter_40),
+      GRanges(
+        seqnames(chic.experiment.granges.diameter_40),
+        ranges(chic.experiment.granges.diameter_40),
         # Median of 1kb-window coverage scores (rescaled to match the scale of
         # the 40 bp count overlaps). Because each fragment is assigned exactly
         # 1 bp to count overlaps with, we can exactly scale down by the
@@ -559,7 +561,7 @@ targets.chic <- list(
 
     tar_map(
       tibble(
-        bw = c(25, 100000),
+        bw = c(40, 100000),
         bw_name = str_glue("bw{str_trim(format(bw, scientific=F))}")
       ),
       names = bw_name,
@@ -585,16 +587,25 @@ targets.chic <- list(
         list(elementMetadata(chic.experiment.quantify)[, 2]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
         0,
-        "Rough_Enrich",
+        "Rough_Mark_L2FC",
         list(
-          pmin(
+          (
             elementMetadata(chic.experiment.quantify)[, 2]
-            / elementMetadata(chic.experiment.quantify)[, 1],
-            100
-          )
+            / elementMetadata(chic.experiment.quantify)[, 1]
+          ) %>%
+            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            pmax(0.01) %>%
+            pmin(100) %>%
+            log2
         ),
-        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-        / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
+        list(
+          (
+            elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
+            / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
+          ) %>%
+            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            log2
+        ),
         1,
         "Imputed_Input",
         list(elementMetadata(chic.experiment.quantify)[, 1]),
@@ -604,30 +615,51 @@ targets.chic <- list(
         list(elementMetadata(chic.experiment.quantify)[, 2]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
         0,
-        "Imputed_Enrich",
+        "Imputed_Mark_L2FC",
         list(
-          pmin(
+          (
             elementMetadata(chic.experiment.quantify)[, 2]
-            / elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1],
-            100
-          )
+            / elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]
+          ) %>%
+            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            pmax(0.01) %>%
+            pmin(100) %>%
+            log2
         ),
-        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-        / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
+        list(
+          (
+            elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
+            / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
+          ) %>%
+            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            log2
+        ),
         1,
         "FSeq_Input",
-        list(elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1]),
+        list(elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
         0,
         "FSeq_Mark",
-        list(elementMetadata(chic.experiment.quantify.smooth_bw25)[, 2]),
+        list(elementMetadata(chic.experiment.quantify.smooth_bw40)[, 2]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
         0,
-        "FSeq_Enrich",
-        list(elementMetadata(chic.experiment.quantify.smooth_bw25)[, 2]
-        / elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1]),
-        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-        / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
+        "FSeq_Mark_L2FC",
+        list(
+          (
+            elementMetadata(chic.experiment.quantify.smooth_bw40)[, 2]
+            / elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]
+          ) %>%
+            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            log2
+        ),
+        list(
+          (
+            elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
+            / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
+          ) %>%
+            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            log2
+        ),
         1
       ) %>%
         rowwise %>%
@@ -645,9 +677,9 @@ targets.chic <- list(
               if (grepl("FSeq_[^I]|Imputed", filename))
                 score[[1]] %>%
                   replace(
-                    which(elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1),
+                    which(elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1] < 0.1),
                     score_smooth[[1]][
-                      elementMetadata(chic.experiment.quantify.smooth_bw25)[, 1] < 1
+                      elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1] < 0.1
                     ]
                   )
               else score[[1]]
@@ -669,12 +701,14 @@ targets.chic <- list(
           elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
           / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
         )[chic.tile.diameter_1000_lookup] %>%
-          replace(is.na(.), 1)
+        `/`(median(.[as.logical(seqnames(chic.experiment.quantify.smooth_bw100000) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+          replace(is.na(.), 1) %>%
+          log2
       ) %>%
         export(
           with(
             list(mark=mark, name=name, bp_suffix=bp_suffix, reference=reference),
-            str_glue("chic/{reference}/{name}_{mark}_{bp_suffix}_Wide_Enrich.bw")
+            str_glue("chic/{reference}/{name}_{mark}_{bp_suffix}_Wide_Mark_L2FC")
           ) %>%
             BigWigFile
         ) %>%
