@@ -258,8 +258,8 @@ targets.chic <- list(
       cross_join(
         tribble(
           ~bp_suffix, ~pos_fixer_callable,
-          "CN", rlang::sym("paired_end_pos_to_midpoint"),
-          "FE", rlang::sym("paired_end_pos_to_5_prime")
+          "CN", rlang::sym("paired_end_pos_to_midpoint") # ,
+          # "FE", rlang::sym("paired_end_pos_to_5_prime")
         )
       ) %>%
       rowwise %>%
@@ -367,7 +367,7 @@ targets.chic <- list(
   tar_map(
     chic.experiments %>%
       cross_join(dplyr::rename(bowtie.refs, reference="name")) %>%
-      cross_join(tibble(bp_suffix = c("CN", "FE"))) %>%
+      cross_join(tibble(bp_suffix = c("CN"))) %>%
       mutate(driver = driver %>% replace(. == "Nos", "nos")) %>%
       rowwise %>%
       mutate(
