@@ -707,7 +707,7 @@ targets.chic <- list(
         export(
           with(
             list(mark=mark, name=name, bp_suffix=bp_suffix, reference=reference),
-            str_glue("chic/{reference}/{name}_{mark}_{bp_suffix}_Wide_Mark_L2FC")
+            str_glue("chic/{reference}/{name}_{mark}_{bp_suffix}_Wide_Mark_L2FC.bw")
           ) %>%
             BigWigFile
         ) %>%
