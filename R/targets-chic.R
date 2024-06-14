@@ -291,7 +291,7 @@ targets.chic <- list(
           sapply(
             \(df) df %>%
         pos_fixer_callable %>%
-              filter(between(length, 150, 200), between(mapq, 20, 254)),
+              filter(between(length, 100, 200)),
             simplify=F
           ) %>%
           setNames(NULL),
@@ -325,7 +325,7 @@ targets.chic <- list(
         sapply(
           bulk_reads_split,
           \(df) bam_cover_paired_end_fragments_bp(
-            df, min_mapq = 20, min_fl = 150, max_fl = 200, markdup = TRUE
+            df, min_mapq = 0, min_fl = 100, max_fl = 200, markdup = TRUE
           )[[1]],
           simplify=FALSE
         ),
@@ -333,8 +333,7 @@ targets.chic <- list(
           (
             bulk_reads_misc %>%
               paired_end_reads_to_fragment_lengths %>%
-              # mutate(rname = rname %>% factor(setdiff(levels(.), names(if (name == "masked") masked.lengths else chr.lengths)))) %>%
-              filter(between(mapq, 20, 254), between(length, 150, 200)) %>%
+              filter(between(length, 100, 200)) %>%
               split(.$rname) %>%
               sapply(\(df) nrow(df))
           )[setdiff(levels(bulk_reads_misc$rname), names(if (name == "masked") masked.lengths else chr.lengths))] %>%
