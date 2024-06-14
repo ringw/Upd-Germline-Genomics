@@ -286,18 +286,36 @@ targets.chic <- list(
 
     tar_target(
       chic.granges.diameter_40,
-      do.call(
-        rbind,
-        append(bulk_reads_split, list(bulk_reads_misc))
-      ) %>%
+      tibble(
+        reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
+          sapply(
+            \(df) df %>%
         pos_fixer_callable %>%
-        filter(
-          between(length, 150, 200),
-          between(mapq, 20, 254)
+              filter(between(length, 150, 200), between(mapq, 20, 254)),
+            simplify=F
+          ) %>%
+          setNames(NULL),
+        tile_granges = reads %>%
+          sapply(
+            \(df) chic.tile.diameter_40[
+              if (!nrow(df))
+                integer(0)
+              else if (df$rname[1] %in% names(masked.lengths))
+                seqnames(chic.tile.diameter_40) == df$rname[1]
+              else
+                !(seqnames(chic.tile.diameter_40) %in% names(masked.lengths))
+            ]
+          ),
+        partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_40)),
+        granges = mapply(
+          count_overlaps_bases, tile_granges, reads
+        )
         ) %>%
         with(
-          count_overlaps_bases(chic.tile.diameter_40, .) %>%
-          `metadata<-`(value = list(est_library_size = length(pos)))
+          granges %>%
+            GRangesList %>%
+            unlist %>%
+            `metadata<-`(value = list(est_library_size = sum(sapply(reads, length))))
         )
     ),
 
