@@ -18,7 +18,15 @@ ksmooth_sliding_windows <- function(granges, bw = 25) {
   granges_bw <- bw / (granges@ranges@start[3] - granges@ranges@start[2])
   fftlength <- 2^ceil_discrete_log(length(granges))
   smooth_result <- apply(
-    elementMetadata(granges),
+    elementMetadata(granges) %>%
+      as.data.frame %>%
+      list(
+        .,
+        # Do not smooth "R" factor (replicate) as log-link batch effect can be
+        # a -Infinity or Infinity.
+        select = grep("^score.R", colnames(.), val=T, invert=T)
+      ) %>%
+      do.call(subset, .),
     2,
     \(score) {
       weights <- as(score, "sparseVector")

@@ -393,7 +393,7 @@ targets.chic <- list(
           chic.samples$molecule[match(chic_sample_names, chic.samples$sample)]
         ) %>%
           list,
-        rep = (
+        model_matrix_rep = (
           chic.samples$rep[match(chic_sample_names, chic.samples$sample)]
         ) %>%
           list
@@ -430,7 +430,7 @@ targets.chic <- list(
       chic.experiment.granges.diameter_40,
       chic.granges.diameter_40[[1]] %>%
         attributes %>%
-        append(list(molecule=molecule, rep=rep)) %>%
+        append(list(molecule=molecule, rep=model_matrix_rep)) %>%
         with(
           GRanges(
             seqnames,
@@ -471,14 +471,14 @@ targets.chic <- list(
     ),
     tar_target(
       chic.experiment.quantify,
-      if (length(unique(rep)) > 1)
+      if (length(unique(model_matrix_rep)) > 1)
         glm_gp(
           as.matrix(chic.experiment.granges.diameter_40@elementMetadata),
           # We put "molecule" and "rep" in our tar_map, so create new names.
           ~ 0 + mol + R,
           tibble(
             mol = molecule,
-            R = rep %>%
+            R = model_matrix_rep %>%
               factor %>%
               `contrasts<-`(value = contr.helmert(length(levels(.))))
           ),
