@@ -578,15 +578,13 @@ targets.chic <- list(
     tar_file(
       chic.bw.tracks,
       tribble(
-        ~filename, ~score, ~score_smooth, ~na.value,
+        ~filename, ~score, ~score_smooth,
         "Rough_Input",
         list(elementMetadata(chic.experiment.quantify)[, 1]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
-        0,
         "Rough_Mark",
         list(elementMetadata(chic.experiment.quantify)[, 2]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
-        0,
         "Rough_Mark_L2FC",
         list(
           (
@@ -594,8 +592,8 @@ targets.chic <- list(
             / elementMetadata(chic.experiment.quantify)[, 1]
           ) %>%
             `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
-            pmax(0.01) %>%
-            pmin(100) %>%
+            pmax(2^-10) %>%
+            pmin(2^10) %>%
             log2
         ),
         list(
@@ -604,17 +602,16 @@ targets.chic <- list(
             / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
           ) %>%
             `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            pmax(2^-10) %>%
+            pmin(2^10) %>%
             log2
         ),
-        1,
         "Imputed_Input",
         list(elementMetadata(chic.experiment.quantify)[, 1]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
-        0,
         "Imputed_Mark",
         list(elementMetadata(chic.experiment.quantify)[, 2]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
-        0,
         "Imputed_Mark_L2FC",
         list(
           (
@@ -622,8 +619,8 @@ targets.chic <- list(
             / elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]
           ) %>%
             `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
-            pmax(0.01) %>%
-            pmin(100) %>%
+            pmax(2^-10) %>%
+            pmin(2^10) %>%
             log2
         ),
         list(
@@ -632,17 +629,16 @@ targets.chic <- list(
             / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
           ) %>%
             `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            pmax(2^-10) %>%
+            pmin(2^10) %>%
             log2
         ),
-        1,
         "FSeq_Input",
         list(elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
-        0,
         "FSeq_Mark",
         list(elementMetadata(chic.experiment.quantify.smooth_bw40)[, 2]),
         list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
-        0,
         "FSeq_Mark_L2FC",
         list(
           (
@@ -650,6 +646,8 @@ targets.chic <- list(
             / elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]
           ) %>%
             `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            pmax(2^-10) %>%
+            pmin(2^10) %>%
             log2
         ),
         list(
@@ -658,9 +656,10 @@ targets.chic <- list(
             / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
           ) %>%
             `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            pmax(2^-10) %>%
+            pmin(2^10) %>%
             log2
-        ),
-        1
+        )
       ) %>%
         rowwise %>%
         summarise(
@@ -685,7 +684,7 @@ targets.chic <- list(
               else score[[1]]
             ) %>%
               # Now replace actual holes (e.g. in an FBte sequence) with 1 (no enrichment).
-              replace(is.na(.), na.value)
+              replace(is.na(.), 0)
           ) %>%
             list,
           filename = export(gr, BigWigFile(filename)) %>% as.character
@@ -702,8 +701,8 @@ targets.chic <- list(
           / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
         )[chic.tile.diameter_1000_lookup] %>%
         `/`(median(.[as.logical(seqnames(chic.experiment.quantify.smooth_bw100000) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
-          replace(is.na(.), 1) %>%
-          log2
+          log2 %>%
+          replace(is.na(.), 0)
       ) %>%
         export(
           with(
