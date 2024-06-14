@@ -472,17 +472,43 @@ targets.chic <- list(
     ),
     tar_target(
       chic.experiment.granges.offset_diameter_40,
-      with(
-        list(ones = matrix(1, nrow = nrow(chic.experiment.granges.diameter_40@elementMetadata), ncol = ncol(chic.experiment.granges.diameter_40@elementMetadata))),
         GRanges(
           seqnames(chic.experiment.granges.diameter_40),
           ranges(chic.experiment.granges.diameter_40),
-          offset = as.matrix(
-            Diagonal(x = log(ranges(chic.experiment.granges.diameter_40)@width))
-            %*% ones
-            + ones %*%
-            Diagonal(x = log(chic.experiment.granges.diameter_40@metadata$est_library_size))
-          ) - 3 * log(1000)
+        # Median of 1kb-window coverage scores (rescaled to match the scale of
+        # the 40 bp count overlaps). Because each fragment is assigned exactly
+        # 1 bp to count overlaps with, we can exactly scale down by the
+        # difference in window size using the rolling mean of windows.
+        offset = matrix(
+          log(
+            chic.experiment.granges.diameter_40[
+              seqnames(chic.experiment.granges.diameter_40) %in%
+              c("2L", "2R", "3L", "3R", "4")
+            ] %>%
+              elementMetadata %>%
+              apply(
+                2,
+                \(v) v %>% rollmean(50, fill=0, align="center") %>% median
+              )
+          ) %>%
+            rep(each = length(chic.experiment.granges.diameter_40))
+          + log(ranges(chic.experiment.granges.diameter_40)@width)
+          - log(
+            median(
+              ranges(chic.experiment.granges.diameter_40)@width[
+                as.logical(
+                  seqnames(chic.experiment.granges.diameter_40) %in%
+                  c("2L", "2R", "3L", "3R", "4")
+                )
+              ]
+            )
+          ),
+          nrow = length(chic.experiment.granges.diameter_40),
+          ncol = ncol(elementMetadata(chic.experiment.granges.diameter_40)),
+          dimnames = list(
+            NULL,
+            colnames(elementMetadata(chic.experiment.granges.diameter_40))
+          )
         )
       )
     ),
