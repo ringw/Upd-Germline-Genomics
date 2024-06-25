@@ -2,7 +2,7 @@ track_to_heatmap <- function(
   track,
   assay.data.sc,
   mask_track = NULL,
-  mask_threshold = 1,
+  mask_threshold = 0.1,
   genomic_feature = "TSS",
   before = 500,
   after = 1500
@@ -77,7 +77,7 @@ inter_track_to_heatmap <- function(
   track,
   assay.data.sc,
   mask_track = NULL,
-  mask_threshold = 1,
+  mask_threshold = 0.1,
   bp_before,
   bp_after,
   n_sample = 99

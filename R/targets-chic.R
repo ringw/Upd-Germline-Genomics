@@ -716,7 +716,21 @@ targets.chic <- list(
     tar_target(
       chic.heatmap.tss,
       track_to_heatmap(
-        grep("Imputed_Enrich", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+        grep(
+          str_glue(
+            if (grepl("H3K9", chic.bw.tracks[1])) "FSeq" else "Imputed",
+            "_Mark_L2FC"
+          ), chic.bw.tracks, val=T
+        ) %>% BigWigFile %>% import %>%
+          attributes %>%
+          with(
+            GRanges(
+              seqnames,
+              ranges,
+              seqinfo = seqinfo,
+              score = exp(elementMetadata$score * log(2))
+            )
+          ),
         as_tibble(read.csv(assay.data.sc)),
         grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
       )
@@ -724,7 +738,16 @@ targets.chic <- list(
     tar_target(
       chic.heatmap.tss.nucleosome,
       track_to_heatmap(
-        grep("Imputed_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+        grep("Imputed_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import %>%
+          attributes %>%
+          with(
+            GRanges(
+              seqnames,
+              ranges,
+              seqinfo = seqinfo,
+              score = exp(elementMetadata$score * log(2))
+            )
+          ),
         as_tibble(read.csv(assay.data.sc)),
         grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
       )
@@ -862,7 +885,7 @@ targets.chic <- list(
         tibble(
           facet = chr %>%
             fct_recode(`2`="2L", `2`="2R", `3`="3L", `3`="3R") %>%
-            factor(c("2", "3", "4", "X")),
+            factor(c("X", "2", "3", "4")),
           quant = quartile.factor %>%
             fct_recode(off="Q1", low="Q2", med="Q3", high="Q4"),
           activity = quartile.factor %>%

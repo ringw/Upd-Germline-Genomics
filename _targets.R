@@ -2200,8 +2200,8 @@ list(
             linewidth = c(0.33, 0.66, 0.33, 0.66)
           ) %>%
           replace_legend(germline_somatic_line_plot_legend),
-        9,
-        12
+        12,
+        8
       )
     )
   ),
