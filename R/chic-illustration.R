@@ -54,24 +54,6 @@ illustrate_poisson_variable <- function(coverage) {
   )
 }
 
-chic_illustrate_mean_variance <- function(chic.replicates, window=10000) {
-  chic.table = chic.replicates %>%
-    sapply(
-      \(raw) raw[1:sum(chr.lengths)] %>%
-        smooth_sparse_vector_macs(
-          Rle(names(chr.lengths), chr.lengths),
-          window,
-          sample_size = 200,
-          norm=F
-        ) %>%
-        sapply(list, simplify=F) %>%
-        as_tibble,
-      simplify=F
-    ) %>%
-    do.call(rbind, .)
-  chic_illustrate_mean_variance_from_rle_table(chic.table)
-}
-
 chic_illustrate_mean_variance_gaussian <- function(chic.replicates, bw) {
   chic.table = chic.replicates %>%
     sapply(

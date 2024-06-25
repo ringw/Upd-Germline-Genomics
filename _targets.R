@@ -1039,21 +1039,6 @@ list(
   chic.raw.tracks,
 
   # ChIC coverage tracks.
-  tar_target(
-    chic.macs.bandwidth, list(500, 1000, 2000)
-  ),
-  # Background value for uniform FPKM. We have a multiplier of 1MM but this
-  # amount is spread across the reference sequence length.
-  tar_target(
-    chic.macs.background.value,
-    1000 * 1000 * 1000 / sum(feature.lengths)
-  ),
-  tar_target(
-    chic.macs.background.track,
-    feature.lengths %>%
-      sapply(\(len) Rle(values = chic.macs.background.value, len)) %>%
-      RleList
-  ),
   tar_map(
     chic.lookup,
     names = lookup_name,
@@ -1112,55 +1097,6 @@ list(
         purrr::reduce(`+`) %>%
         `/`(length(samples)),
     ),
-    tar_target(chic.macs.tagcounts, samples %>% sapply(sum)),
-    tar_target(
-      chic.macs.byparam,
-      # MACS adaptive parameter using a large window (chic.macs.bandwidth), now
-      # with multiple replicates (samples).
-      samples %>%
-        sapply(
-          \(x) x %>%
-            smooth_sparse_vector_macs(
-              feature.rle,
-              chic.macs.bandwidth[[1]],
-              sample_size = 200,
-              normalize_tag_count = TRUE
-            ),
-          simplify = FALSE
-        ) %>%
-        # In MACS Poisson distribution fitting, we can take the arithmetic mean
-        # of the parameter normalized by tag count, for the biological
-        # replicates.
-        # TODO: Optimize the parameter using glm instead of using arithmetic
-        # mean. We have applied an offset (tag count - FPKM calculation), so
-        # unlike the case with no offset, the optimum might be different than
-        # arithmetic mean.
-        purrr::reduce(`+`) %>%
-        `/`(length(samples)),
-      pattern = map(chic.macs.bandwidth),
-      iteration = "list"
-    ),
-    tar_target(
-      # MACS Poisson parameter is the max of the input track created by 3
-      # different large sliding window sizes. We removed the uniform coverage
-      # track.
-      chic.macs.fpkm,
-      purrr::reduce(chic.macs.byparam, pmax)
-    ),
-    tar_target(
-      chic.macs.peakdetect,
-      samples %>%
-        sapply(
-          \(x) x %>%
-            smooth_sparse_vector_macs(
-              feature.rle,
-              diameter = 150,
-              sample_size = 50,
-              normalize_tag_count = FALSE
-            ),
-          simplify = FALSE
-        )
-    ),
     # Alternative pipeline merging BAM files before proceeding.
     tar_target(
       chic.merge.bam,
@@ -1211,55 +1147,6 @@ list(
   tar_target(
     chic.squeezeVar,
     list(Germline = chic.squeezeVar_Germline, Somatic = chic.squeezeVar_Somatic)
-  ),
-
-  tar_target(
-    chic.macs.peak_H3K4_Germline,
-    chic_macs_test(
-      chic.macs.fpkm_input_H3K4_Germline,
-      chic.wide_input_H3K4_Germline,
-      chic.macs.peakdetect_mod_H3K4_Germline
-    )
-  ),
-  tar_target(
-    chic.macs.peak_H3K27_Germline,
-    chic_macs_test(
-      chic.macs.fpkm_input_H3K27_Germline,
-      chic.wide_input_H3K27_Germline,
-      chic.macs.peakdetect_mod_H3K27_Germline
-    )
-  ),
-  tar_target(
-    chic.macs.peak_H3K9_Germline,
-    chic_macs_test(
-      chic.macs.fpkm_input_H3K9_Germline,
-      chic.wide_input_H3K9_Germline,
-      chic.macs.peakdetect_mod_H3K9_Germline
-    )
-  ),
-  tar_target(
-    chic.macs.peak_H3K4_Somatic,
-    chic_macs_test(
-      chic.macs.fpkm_input_H3K4_Somatic,
-      chic.wide_input_H3K4_Somatic,
-      chic.macs.peakdetect_mod_H3K4_Somatic
-    )
-  ),
-  tar_target(
-    chic.macs.peak_H3K27_Somatic,
-    chic_macs_test(
-      chic.macs.fpkm_input_H3K27_Somatic,
-      chic.wide_input_H3K27_Somatic,
-      chic.macs.peakdetect_mod_H3K27_Somatic
-    )
-  ),
-  tar_target(
-    chic.macs.peak_H3K9_Somatic,
-    chic_macs_test(
-      chic.macs.fpkm_input_H3K9_Somatic,
-      chic.wide_input_H3K9_Somatic,
-      chic.macs.peakdetect_mod_H3K9_Somatic
-    )
   ),
 
   tar_map(
@@ -1539,101 +1426,6 @@ list(
   ),
 
   tar_map(
-    data.frame(macs_background = c(500, 1000, 5000, 10000)),
-    tar_target(
-      chic_macs_mean_variance,
-      chic_illustrate_mean_variance(
-        list(
-          chic.raw_GC2894001_S1_L001, chic.raw_GC2894002_S2_L001,
-          chic.raw_GC2894003_S3_L001
-        ),
-        macs_background
-      ),
-    )
-  ),
-  tar_target(
-    chic_macs_mean_variance_s2_files,
-    c("chip_seq_s2/SRR067914.bw", "chip_seq_s2/SRR067915.bw"),
-    format = "file"
-  ),
-  tar_target(
-    chic_macs_mean_variance_s2,
-    chic_illustrate_s2_mean_variance(chic_macs_mean_variance_s2_files)
-  ),
-  tar_target(
-    chic_macs_mean_variance_gaussian,
-    chic_illustrate_mean_variance_gaussian(
-      list(
-        chic.raw_GC2894001_S1_L001, chic.raw_GC2894002_S2_L001,
-        chic.raw_GC2894003_S3_L001
-      ),
-      bw = 250
-    )
-    + coord_cartesian(c(0,12), c(0,30), expand=F)
-  ),
-
-  tar_target(
-    chic.h3.tj.track.plot,
-    plot_chic_rect_window_replicates(
-      c(
-        chic.macs.peakdetect_input_H3K4_Germline,
-        chic.macs.peakdetect_input_H3K27_Germline,
-        chic.macs.peakdetect_input_H3K9_Germline
-      ),
-      "2L", 19462000:19468800
-    ) %>% ggplot(aes(x, y))
-      + geom_line(aes(group=sample, color=sample), alpha=0.5)
-      + geom_smooth(method="loess", span=0.2)
-      + scale_color_manual(values=c("purple", "forestgreen", "cyan", "goldenrod", "red", "limegreen", "violet", "steelblue", "brown"), guide=NULL)
-      + coord_cartesian(NULL, c(-2, 60), expand=F)
-      + scale_x_continuous(labels=\(x) paste0(x / 1000 / 1000, " Mb"))
-      + labs(x = NULL, y = "count")
-      + theme_bw()
-      + theme(aspect.ratio = 0.33)
-  ),
-  tar_target(
-    chic.h3.histone.track.plot,
-    plot_chic_rect_window_replicates(
-      c(
-        chic.macs.peakdetect_input_H3K4_Germline,
-        chic.macs.peakdetect_input_H3K27_Germline,
-        chic.macs.peakdetect_input_H3K9_Germline
-      ),
-      "2L",
-      21398000:21549000,
-      by = 100
-    ) %>% ggplot(aes(x, y))
-      + geom_line(aes(group=sample, color=sample), alpha=0.5)
-      + geom_smooth(method="loess", span=0.2)
-      + scale_color_manual(values=c("purple", "forestgreen", "cyan", "goldenrod", "red", "limegreen", "violet", "steelblue", "brown"), guide=NULL)
-      + coord_cartesian(NULL, c(-2, 10000), expand=F)
-      + scale_x_continuous(labels=\(x) paste0(x / 1000 / 1000, " Mb"))
-      + labs(x = NULL, y = "count")
-      + theme_bw()
-      + theme(aspect.ratio = 0.33)
-  ), tar_target(
-    chic.h3.histone.track.plot.fpkm,
-    plot_chic_rect_window_replicates(
-      c(
-        chic.macs.peakdetect_input_H3K4_Germline,
-        chic.macs.peakdetect_input_H3K27_Germline,
-        chic.macs.peakdetect_input_H3K9_Germline
-      ) %>%
-        sapply(\(rl) rl * 1000 * 1000 * 1000 / 150 / attr(rl, "num_tags")),
-      "2L",
-      21398000:21549000,
-      by = 100
-    ) %>% ggplot(aes(x, y))
-      + geom_line(aes(group=sample, color=sample), alpha=0.5)
-      + geom_smooth(method="loess", span=0.2)
-      + scale_color_manual(values=c("purple", "forestgreen", "cyan", "goldenrod", "red", "limegreen", "violet", "steelblue", "brown"), guide=NULL)
-      + coord_cartesian(NULL, c(-2, 1000), expand=F)
-      + scale_x_continuous(labels=\(x) paste0(x / 1000 / 1000, " Mb"))
-      + labs(x = NULL, y = "count")
-      + theme_bw()
-      + theme(aspect.ratio = 0.33)
-  ),
-  tar_map(
     data.frame(extension=c(".png", ".pdf")),
     tar_target(
       tss_mark_heatmap_legend,
@@ -1741,27 +1533,6 @@ list(
           ),
           4,
           4,
-          "CHIC-H3K4-Mean-Variance-Window-500",
-          chic_macs_mean_variance_500,
-          4,
-          8,
-          "CHIC-H3K4-Mean-Variance-Window-1K",
-          chic_macs_mean_variance_1000
-          + coord_cartesian(c(0,350), c(0,25000), expand=FALSE),
-          4,
-          8,
-          "CHIC-H3K4-Mean-Variance-Window-5K",
-          chic_macs_mean_variance_5000,
-          4,
-          8,
-          "CHIC-S2-H3-Mean-Variance-Window-1K",
-          chic_macs_mean_variance_s2,
-          4,
-          8,
-          "CHIC-H3K4-Mean-Variance-Gaussian",
-          chic_macs_mean_variance_gaussian,
-          4,
-          8,
           "CHIC-H3-TJ",
           chic.h3.tj.track.plot,
           6,
@@ -1850,31 +1621,6 @@ list(
         H3K27=chic.test.limma_H3K27_Somatic %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10)
       ),
       "chic/Somatic-Peaks.bed"
-    ),
-    format = "file"
-  ),
-
-  tar_target(
-    chic.macs.bed_Germline,
-    write_chic_peaks(
-      list(
-        H3K4=chic.macs.peak_H3K4_Germline %>% chic_macs_generate_table,
-        H3K27=chic.macs.peak_H3K27_Germline %>% chic_macs_generate_table,
-        H3K9=chic.macs.peak_H3K9_Germline %>% chic_macs_generate_table(1e-3)
-      ),
-      "chic/Germline-Peaks-MACS.bed"
-    ),
-    format = "file"
-  ),
-  tar_target(
-    chic.macs.bed_Somatic,
-    write_chic_peaks(
-      list(
-        H3K4=chic.macs.peak_H3K4_Somatic %>% chic_macs_generate_table,
-        H3K27=chic.macs.peak_H3K27_Somatic %>% chic_macs_generate_table,
-        H3K9=chic.macs.peak_H3K9_Somatic %>% chic_macs_generate_table(1e-3)
-      ),
-      "chic/Somatic-Peaks-MACS.bed"
     ),
     format = "file"
   ),

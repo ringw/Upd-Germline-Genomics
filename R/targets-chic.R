@@ -4,7 +4,7 @@ chic.samples = read.csv('chic/chic_samples.csv') %>%
 
 chic.fpkm.data <- tribble(
   ~name, ~contrast, ~driver,
-  'Germline', c(1,0,0,0,0,0,0), 'Nos',
+  'Germline', c(1,0,0,0,0,0,0), 'nos',
   'Somatic', c(1,1,0,0,0,0,0), 'tj'
 )
 # We are going to pull a "bed" target in the cross product below, which defines
@@ -387,13 +387,13 @@ targets.chic <- list(
     chic.experiments %>%
       cross_join(dplyr::rename(bowtie.refs, reference="name")) %>%
       cross_join(tibble(bp_suffix = c("CN"))) %>%
-      mutate(driver = driver %>% replace(. == "Nos", "nos")) %>%
+      mutate(driver = driver) %>%
       rowwise %>%
       mutate(
         chic.tile.diameter_40_score = rlang::syms(str_glue("chic.tile.diameter_40_score_{reference}")),
         chic_sample_names = subset(
           chic.samples$sample,
-          (chic.samples$driver %>% replace(. == "Nos", "nos")) == driver &
+          chic.samples$driver == driver &
           # (chic.samples$molecule == "H3" | chic.samples$group == mark)
           chic.samples$group == mark
         ) %>%
@@ -933,7 +933,7 @@ targets.chic <- list(
   tar_target(
     chic.track_chr,
     tibble(
-      filename = chic.bw.2_H3K4_Germline,
+      filename = "chic/nos_H3K4.new.FE.bw",
       track = list(import(BigWigFile(filename)))
     ) %>%
       with(
@@ -947,7 +947,7 @@ targets.chic <- list(
   tar_target(
     chic.track_masked,
     tibble(
-      filename = chic.bw.2_H3K4_Germline,
+      filename = "chic/nos_H3K4.new.FE.bw",
       track = list(import(BigWigFile(filename)))
     ) %>%
       with(
@@ -958,8 +958,8 @@ targets.chic <- list(
         )
       )
   ),
-  tar_target(chic.results_nos_chr, list(H3K4=chic.bw.2_H3K4_Germline, H3K27=chic.bw.2_H3K27_Germline, H3K9=chic.bw.2_H3K9_Germline)),
-  tar_target(chic.results_tj_chr, list(H3K4=chic.bw.2_H3K4_Somatic, H3K27=chic.bw.2_H3K27_Somatic, H3K9=chic.bw.2_H3K9_Somatic)),
+  tar_target(chic.results_nos_chr, list(H3K4="chic/nos_H3K4.new.FE.bw", H3K27="chic/nos_H3K27.new.FE.bw", H3K9="chic/nos_H3K9.new.FE.bw")),
+  tar_target(chic.results_tj_chr, list(H3K4="chic/tj_H3K4.new.FE.bw", H3K27="chic/tj_H3K27.new.FE.bw", H3K9="chic/tj_H3K9.new.FE.bw")),
   tar_target(chic.results_nos_masked, chic.results_nos_chr),
   tar_target(chic.results_tj_masked, chic.results_tj_chr)
 )
