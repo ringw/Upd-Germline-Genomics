@@ -120,48 +120,15 @@ repli.coverage <- list(
 )
 
 chic.raw.tracks <- tar_map(
-  chic.samples,
+  tibble(
+    chic.samples,
+    chr_target = rlang::syms(paste0("chic.bam_", sample, "_chr"))
+  ),
   names = sample,
   unlist = FALSE,
   tar_file(
     chic.bam,
-    tibble(
-      tmp_name = tempfile(pattern = sample, fileext = ".bam"),
-      filtered_name = paste0("chic/", group, "/", sample, ".bam"),
-      align_lightfiltering = run(
-        "bash",
-        c(
-          "-i",
-          align_chic_lightfiltering,
-          flybase.bowtie %>% paste("chic_bowtie2", sep="/"),
-          paste0(batch, "/", sample, "_R1_001.fastq.gz"),
-          paste0(batch, "/", sample, "_R2_001.fastq.gz"),
-          tmp_name
-        )
-      ) %>%
-        list,
-      chromatin_specific = run(
-        "bash",
-        c(
-          "-i",
-          align_chic_chromatin_specific_filtering,
-          tmp_name,
-          filtered_name
-        )
-      ) %>%
-        list,
-      move_log = file.copy(
-        str_replace(tmp_name, ".bam", ".log"),
-        str_replace(filtered_name, ".bam", ".log")
-      ),
-      move_markdup_log = file.copy(
-        str_replace(tmp_name, ".bam", ".markdup.log"),
-        str_replace(filtered_name, ".bam", ".markdup.log")
-      ),
-      clean_up_large_tmp_file = file.remove(tmp_name)
-    ) %>%
-      pull(filtered_name),
-    cue = tar_cue("never")
+    chr_target
   ),
   tar_target(
     chic.raw,
@@ -994,10 +961,6 @@ list(
   # ChIC paired-end alignment targets.
   tar_file(align_chic_lightfiltering, "scripts/align_chic_lightfiltering.sh"),
   tar_file(align_repli_lightfiltering, "scripts/align_repli_lightfiltering.sh"),
-  tar_file(
-    align_chic_chromatin_specific_filtering,
-    "scripts/align_chic_chromatin_specific_filtering.sh"
-  ),
   tar_file(align_repli, "scripts/align_repli.sh"),
   chic.raw.tracks,
 
