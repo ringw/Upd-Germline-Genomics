@@ -929,3 +929,34 @@ plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
     limits=c(0, -50), oob=scales::squish, expand=rep(0.01,2)
   ) + theme_bw() + theme(aspect.ratio = 3/4)
 }
+
+l2fc_bar_plot <- function(l2fc_data) {
+  l2fc_data <- l2fc_data %>% sort(dec=T)
+  ggplot(
+    enframe(l2fc_data) %>% cbind(y = seq(nrow(.))),
+    aes(y, value, fill=factor(y, y))
+  ) + geom_bar(
+    stat="identity"
+  ) + geom_text(
+    aes(label=name),
+    hjust = l2fc_data > 0,
+    size = 3
+  ) + coord_flip() + scale_x_reverse(
+    expand = rep(0.01, 2),
+    labels = NULL
+  ) + scale_y_continuous(
+    expand = rep(0.02, 2),
+    breaks = \(v) union(-2.5, scales::pretty_breaks()(v))
+  ) + scale_fill_manual(
+    values = hcl(
+      -30 + seq(0, 360, length.out=length(l2fc_data)+1)[-(length(l2fc_data)+1)],
+      60,
+      90
+    ),
+    guide = NULL
+  ) + labs(
+    y = bquote(log[2]*"(CySC/GSC)"), x = NULL
+  ) + theme_bw() + theme(
+    panel.grid = element_blank()
+  )
+}

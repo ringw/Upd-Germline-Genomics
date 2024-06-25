@@ -207,6 +207,40 @@ targets.sce <- list(
     packages = c(tar_option_get("packages"), "gt")
   ),
 
+  tar_file(go_gene_sets_input, "Supplemental_Data/Gene_Sets_of_Interest.csv"),
+  tar_target(
+    go_gene_sets,
+    apply(
+      read.csv(go_gene_sets_input),
+      2,
+      \(v) v %>% subset(str_length(.) > 0),
+      simplify=FALSE
+    ) %>%
+      enframe
+  ),
+  tar_file(
+    go_gene_set_figure,
+    save_figures(
+      "figure/Integrated-scRNAseq",
+      ".pdf",
+      tibble(
+        filename=paste0("Gene_Set_", pull(go_gene_sets, name)),
+        figure=(Upd_regression_somatic$map[
+          pull(go_gene_sets, value)[[1]],
+          2
+        ] / log(2)) %>%
+          l2fc_bar_plot %>%
+          list,
+        width=8,
+        height=c(
+          Regulators_of_Nucleosome_Spacing=4,
+          Origin_Binding_Components=8
+        )[go_gene_sets$name]
+      )
+    ),
+    pattern = map(go_gene_sets)
+  ),
+
   # Unintegrated clusters - SD02. Which clusters (from sce.R RenameIdents) are
   # removed as doublets? This is justified based on expressing all of the GSC &
   # CySC markers including H3-GFP.
