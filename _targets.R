@@ -1081,7 +1081,7 @@ list(
     tar_target(
       bed,
       reference_sort_by_fpkm_table(
-        Upd_fpkm, tolower(name), assay.data.sc,
+        Upd_cpm, tolower(name), assay.data.sc,
         paste0("scRNA-seq-Regression/", name, "-FPKM.bed")
       ),
       format = "file"
