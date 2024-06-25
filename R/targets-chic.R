@@ -319,67 +319,6 @@ targets.chic <- list(
             unlist %>%
             `metadata<-`(value = list(est_library_size = sum(sapply(reads, length))))
         )
-    ),
-
-    tar_target(
-      chic.sparseVector,
-      append(
-        sapply(
-          bulk_reads_split,
-          \(df) bam_cover_paired_end_fragments_bp(
-            df, min_mapq = 0, min_fl = 100, max_fl = 200, markdup = TRUE
-          )[[1]],
-          simplify=FALSE
-        ),
-        as.list(
-          (
-            bulk_reads_misc %>%
-              paired_end_reads_to_fragment_lengths %>%
-              filter(between(length, 100, 200)) %>%
-              split(.$rname) %>%
-              sapply(\(df) nrow(df))
-          )[setdiff(levels(bulk_reads_misc$rname), names(if (name == "masked") masked.lengths else chr.lengths))] %>%
-            setNames(
-              setdiff(levels(bulk_reads_misc$rname), names(if (name == "masked") masked.lengths else chr.lengths))
-            )
-        )
-      )
-    ),
-    tar_target(
-      chic.chr.fpkm,
-      GRanges(
-        seqnames = names(chic.sparseVector),
-        IRanges(
-          start = 1,
-          width = pull(bulk_reads_idxstats, "rlength", "rname")[names(chic.sparseVector)]
-        ),
-        score = sapply(chic.sparseVector, sum) %>%
-          `/`(sum(.)) %>%
-          `*`(1000^3 / pull(bulk_reads_idxstats, "rlength", "rname")[names(chic.sparseVector)]),
-        seqlengths = pull(bulk_reads_idxstats, "rlength", "rname")[names(chic.sparseVector)]
-      ) %>%
-        `metadata<-`(value = list(est_library_size = sum(sapply(chic.sparseVector, sum)))) %>%
-        split(names(chic.sparseVector) %>% factor(., .))
-    ),
-    tar_target(
-      chic.granges.fpkm,
-      chic.chr.fpkm %>%
-        replace(
-          which(sapply(chic.sparseVector, length) > 1),
-          chic.sparseVector %>%
-            subset(sapply(chic.sparseVector, length) > 1) %>%
-            mapply(
-              \(rname, v) density_est_granges_approx(
-                chic.chr.fpkm[[rname]],
-                obs_vector = v,
-                bw = 25,
-                sample_rate = 20
-              ),
-              names(.),
-              .
-            ) %>%
-            GRangesList
-        )
     )
   ),
 
@@ -397,8 +336,6 @@ targets.chic <- list(
           # (chic.samples$molecule == "H3" | chic.samples$group == mark)
           chic.samples$group == mark
         ) %>%
-          list,
-        chic.granges.fpkm = rlang::syms(str_glue("chic.granges.fpkm_{chic_sample_names}_{bp_suffix}_{reference}")) %>%
           list,
         chic.granges.diameter_40 = rlang::syms(str_glue("chic.granges.diameter_40_{chic_sample_names}_{bp_suffix}_{reference}")) %>%
           list,
@@ -418,33 +355,6 @@ targets.chic <- list(
           list
       ),
     names = mark | name | bp_suffix | reference,
-    tar_target(
-      chic.experiment.sample.names, chic_sample_names
-    ),
-    tar_target(
-      chic.experiment.granges.fpkm,
-      unlist(chic.granges.fpkm[[1]]) %>%
-        attributes %>%
-        with(
-          GRanges(
-            seqnames,
-            ranges,
-            seqlengths = seqlengths(chic.granges.fpkm[[1]]),
-            score = sapply(
-              chic.granges.fpkm,
-              \(lst) unlist(lst)$score
-            )
-          ) %>%
-            `metadata<-`(
-              value = list(
-                est_library_size = sapply(
-                  chic.granges.fpkm,
-                  \(lst) lst[[1]]@metadata$est_library_size
-                )
-              )
-            )
-        )
-    ),
     tar_target(
       chic.experiment.granges.diameter_40,
       chic.granges.diameter_40[[1]] %>%
