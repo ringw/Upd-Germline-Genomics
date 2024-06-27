@@ -730,6 +730,28 @@ targets.chic <- list(
         as_tibble(read.csv(assay.data.sc)),
         grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
       )
+    ),
+    tar_target(
+      chic.heatmap.paneled,
+      track_to_heatmap_with_panels(
+        grep(
+          str_glue(
+            if (grepl("H3K9", chic.bw.tracks[1])) "FSeq" else "Imputed",
+            "_Mark_L2FC"
+          ), chic.bw.tracks, val=T
+        ) %>% BigWigFile %>% import %>%
+          attributes %>%
+          with(
+            GRanges(
+              seqnames,
+              ranges,
+              seqinfo = seqinfo,
+              score = exp(elementMetadata$score * log(2))
+            )
+          ),
+        as_tibble(read.csv(assay.data.sc)),
+        mask_track = grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
+      )
     )
   ),
 
@@ -842,20 +864,21 @@ targets.chic <- list(
   # Profiles of ChIC faceted by quantification
   tar_map(
     experiment.driver %>%
+      cross_join(tibble(plot_name=c("TSS", "Paneled"))) %>%
       mutate(
-        named_tss_data = sapply(
-          celltype,
-          \(celltype) call(
+        named_tss_data = mapply(
+          \(celltype, plot_name) call(
             "setNames",
-            rlang::syms(str_glue("chic.heatmap.tss_{chic.mark.data$mark}_{celltype}_CN_chr")),
+            rlang::syms(str_glue("chic.heatmap.{tolower(plot_name)}_{chic.mark.data$mark}_{celltype}_CN_chr")),
             chic.mark.data$mark
           ),
-          simplify=F
+          celltype,
+          plot_name,
+          SIMPLIFY=F
         ),
-        nucleosome_data = rlang::syms(str_glue("chic.heatmap.tss.nucleosome_H3K27_{celltype}_CN_chr")),
         quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}"))
       ),
-    names = celltype,
+    names = celltype | plot_name,
     tar_target(chic.experiment.tss.heatmaps, named_tss_data),
     tar_target(
       facet_genes,
@@ -875,7 +898,7 @@ targets.chic <- list(
       )
     ),
     tar_target(
-      tss_sc_chr_quartile_data,
+      sc_chr_quartile_data,
       mapply(
         chic_heatmap_facet_genes,
         named_tss_data,
@@ -887,7 +910,7 @@ targets.chic <- list(
       format = "parquet"
     ),
     tar_target(
-      tss_sc_chr_active_data,
+      sc_chr_active_data,
       mapply(
         chic_heatmap_facet_genes,
         named_tss_data,
@@ -899,24 +922,37 @@ targets.chic <- list(
       format = "parquet"
     ),
     tar_target(
-      tss_sc_extended_data,
+      sc_extended_data,
       tibble(
         gene_list = names(cpm_gene_lists_extended)[1],
-        profile = chic_heatmap_facet_genes(
+        mapply(
+          chic_heatmap_facet_genes,
           named_tss_data,
-          tibble(gene = cpm_gene_lists_extended[[1]])
-        )
+          list(tibble(gene = cpm_gene_lists_extended[[1]])),
+          SIMPLIFY=F
+        ) %>%
+          bind_rows(.id = "mark") %>%
+          mutate(mark = factor(mark, chic.mark.data$mark))
       ),
-      pattern = map(cpm_gene_lists_extended)
-    ),
-    tar_target(
-      tss_sc_chr_nucleosome_data,
-      tibble(
-        chic_heatmap_facet_genes(nucleosome_data, subset(facet_genes, select=c(facet,activity,gene))),
-        mark = ""
-      ),
+      pattern = map(cpm_gene_lists_extended),
       format = "parquet"
     )
+  ),
+  tar_target(
+    sc_chr_nucleosome_data_Germline_TSS,
+    tibble(
+      chic_heatmap_facet_genes(chic.heatmap.tss.nucleosome_H3K27_Germline_CN_chr, subset(facet_genes, select=c(facet,activity,gene))),
+      mark = ""
+    ),
+    format = "parquet"
+  ),
+  tar_target(
+    sc_chr_nucleosome_data_Somatic_TSS,
+    tibble(
+      chic_heatmap_facet_genes(chic.heatmap.tss.nucleosome_H3K27_Somatic_CN_chr, subset(facet_genes, select=c(facet,activity,gene))),
+      mark = ""
+    ),
+    format = "parquet"
   ),
 
   # Temp targets for loading chic.bw.2 and producing repli graphics

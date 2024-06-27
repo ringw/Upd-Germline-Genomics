@@ -18,14 +18,17 @@ chic_heatmap_facet_genes <- function(
   enrichment_mat,
   facet_genes
 ) {
-  facet_genes %>%
+  df <- facet_genes %>%
     group_by(subset(facet_genes, select=-gene)) %>%
     reframe(
       enrichment_mat[gene,, drop=F] %>%
         colMeans(na.rm=T) %>%
         enframe("pos")
-    ) %>%
-    mutate(pos = factor(pos, unique(pos)))
+    )
+  if (length(attr(enrichment_mat, "x")))
+    as_tibble(cbind(df, x = attr(enrichment_mat, "x")))
+  else
+    df %>% mutate(pos = factor(pos, unique(pos)))
 }
 
 # Analysis with TSS profile as x-axis, with ChIC tracks.
@@ -85,6 +88,106 @@ chic_plot_average_profiles_facet_grid <- function(
   ) + theme(
     aspect.ratio = 1
   )
+}
+
+chic_plot_paneled_profiles_facet_grid <- function(
+  facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1),
+  faceter = facet_grid(rows = vars(mark), cols = vars(facet)),
+  x_intercept_red = 1
+) {
+  tss_left <- min(facet_data$x)
+  # Infer flanking of TSS and TES.
+  bp_flanking <- head(which(facet_data$pos == "TSS") - 1, 1)
+  tss_right <- facet_data$x[which(facet_data$pos == bp_flanking)[1]]
+  tes_left <- facet_data$x[which(facet_data$pos == -bp_flanking)[2]]
+  tes_right <- max(facet_data$x)
+  label_data <- tribble(
+    ~x, ~value,
+    tss_left, as.character(-bp_flanking),
+    mean(c(tss_left, tss_right)), "TSS",
+    tss_right, as.character(bp_flanking),
+    mean(c(tss_right, tes_left)), "50%",
+    tes_left, as.character(-bp_flanking),
+    mean(c(tes_left, tes_right)), "TES",
+    tes_right, as.character(bp_flanking)
+  )
+  minor_breaks <- unique(facet_data$x[facet_data$pos %in% c("25%", "75%")])
+  facet_data %>% ggplot(
+      aes(x, y = value, color=genes, linewidth=genes, group=genes)
+    ) + geom_tile(
+      data = tribble(
+        ~x, ~value, ~width,
+        # Full-size background color
+        1,
+        1,
+        Inf
+      ) %>%
+        tibble(
+          height = Inf,
+          genes = NA
+        ),
+      aes(width=width, height=height, color=NULL, linewidth=NULL, genes=NULL),
+      color = "transparent",
+      fill = "#eeeeee"
+    ) + geom_tile(
+      # Colored tile (TSS and TES)
+      data = tribble(
+        ~x, ~value, ~width,
+        mean(c(tss_left, tss_right)),
+        1,
+        2 * bp_flanking + 1,
+        mean(c(tes_left, tes_right)),
+        1,
+        2 * bp_flanking + 1
+      ) %>%
+        tibble(
+          height = Inf,
+          genes = NA
+        ),
+      aes(width=width, height=height, color=NULL, linewidth=NULL, genes=NULL),
+      color = "transparent",
+      fill = viridis(2, option = "magma", end = 0.99)[2]
+    ) + faceter + scale_color_manual(
+      values = quartile_colors,
+      guide = guide_legend(title = legend_title, reverse = TRUE, override.aes = list(fill = "transparent"))
+    ) + scale_linewidth_manual(
+      values = linewidth,
+      guide = guide_legend(title = legend_title, reverse = TRUE)
+    ) + coord_cartesian(
+      c(tss_left, tes_right),
+      chic_average_profile_limits,
+      expand=FALSE
+    ) + scale_y_continuous(
+      trans = "log",
+      labels = \(v) round(log(v) / log(2), 1),
+      limits = chic_average_profile_limits,
+      breaks = chic_average_breaks,
+      minor_breaks = chic_average_minor_breaks,
+      expand = c(0, 0)
+    ) + theme(
+      panel.background = element_rect(fill = NA),
+      panel.ontop = TRUE
+    ) + geom_line(
+      # Dark red line at the origin (enrichment of 1)
+      data = cross_join(
+        tribble(~x, ~value, -Inf, 1.01, Inf, 1.01),
+        tibble(
+          genes = NA,
+          chic_mark = factor(chic.mark.data$mark, chic.mark.data$mark, ordered=TRUE)
+        )
+      ),
+      color = "darkred",
+      linewidth = 0.33
+    ) + geom_line() + labs(
+      x = "base pairs", y = "log2(mean(mark/input))"
+    ) + scale_x_continuous(
+      breaks = label_data$x,
+      labels = label_data$value,
+      minor_breaks = minor_breaks
+    ) + theme(
+      panel.margin = unit(25, "pt"),
+      aspect.ratio = 1
+    )
 }
 
 chic_average_gene_list_profiles <- function(
