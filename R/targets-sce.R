@@ -15,8 +15,36 @@ targets.sce <- list(
           fpkm_third_density(log(Upd_cpm) / log(10), ylim = c(-2.75, 4.5))
           + scale_y_continuous(
             breaks = seq(-2, 4)
+          )
+          + theme(
+            # Aspect ratio found in Fig 1 when the graphic is square (4x4 in).
+            # Maintain this aspect ratio the same in +
+            aspect.ratio = 1.34
           ),
           4, 4,
+          "RNAseq-Quantification-Quarters-CPM-Criteria",
+          ggarrange(
+            plotlist = {
+              cpm_gene_lists_extended[
+                c("NonExclusiveGermlineAndSomaticGenes", "ExclusiveSomaticGenes", "ExclusiveGermlineGenes", "OffGenes")
+              ] %>%
+                sapply(
+                  \(lst) fpkm_third_density(
+                    log(Upd_cpm[lst, ]) / log(10),
+                    ylim = c(-2.75, 4.5),
+                    inter_cutoffs = rep(list(rep(Inf, 2)), 2)
+                  ) + scale_y_continuous(
+                    breaks = seq(-2, 4)
+                  ) + theme(
+                    aspect.ratio = 1.34
+                  ),
+                  simplify=F
+                )
+            },
+            nrow = 2,
+            ncol = 2
+          ),
+          8, 8,
           "RNAseq-Quantification-Quarters-SCT",
           fpkm_quarter_density(
             with(
@@ -31,7 +59,22 @@ targets.sce <- list(
             y_label = bquote(Q["90%"]*"(SCT)"),
             ylim = c(-0.5, 5)
           ),
-          4, 4
+          4, 4,
+          "RNAseq-Scatter",
+          ggplot(
+            as.data.frame(Upd_cpm),
+            aes(germline, somatic)
+          )
+          + rasterise(
+            geom_point(stroke=NA, size=1, color=hcl(256, 40, 25)),
+            dpi=240
+          )
+          + scale_x_continuous(trans="log", oob=squish, expand=rep(0.01,2), breaks=10^seq(-3,3), labels=partial(round, dig=3), limits=c(1e-3, 1000))
+          + scale_y_continuous(trans="log", oob=squish, expand=rep(0.01,2), breaks=10^seq(-3,3), labels=partial(round, dig=3), limits=c(1e-3, 1000))
+          + labs(x = "Germline CPM", y = "Somatic CPM")
+          + theme_bw()
+          + theme(aspect.ratio = 1),
+          4.5, 4
         )
       ),
       format = "file"

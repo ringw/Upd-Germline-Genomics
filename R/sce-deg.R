@@ -19,7 +19,7 @@ Upd_celltype_model_matrix <- matrix(
 )
 
 # Find an nCount_RNA threshold so that % expressed is more comparable between
-# the Nos and tj-driven samples. This is saved in the csv metadata and is
+# the nos and tj-driven samples. This is saved in the csv metadata and is
 # applied later for a supplemental dot plot.
 plot_nCount_RNA_threshold <- function(Upd_sc, ident, gene) {
   Upd_sc$batch <- Upd_sc$batch %>% factor

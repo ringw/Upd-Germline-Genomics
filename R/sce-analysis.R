@@ -603,7 +603,8 @@ fpkm_quarter_density <- function(
 }
 
 fpkm_third_density <- function(
-  log_fpkm, cutoff = log(7) / log(10), ylim = c(-5, NA), y_label = bquote(log[10]*"(CPM)"), clusters = c('germline', 'somatic')
+  log_fpkm, cutoff = log(5) / log(10), ylim = c(-5, NA), y_label = bquote(log[10]*"(CPM)"), clusters = c('germline', 'somatic'),
+  inter_cutoffs = apply(log_fpkm, 2, \(v) v %>% subset(. >= cutoff) %>% quantile(c(1/3, 2/3)), simplify=F)
 ) {
   log_fpkm <- log_fpkm %>% subset(rowAlls(is.finite(.)))
   names(dimnames(log_fpkm)) <- c('gene', 'cluster')
@@ -613,15 +614,25 @@ fpkm_third_density <- function(
     \(v) density(v, n=1000),
     simplify = F
   )
-  density_cut <- apply(
-    log_fpkm,
-    2,
-    \(v) c(-Inf, cutoff, quantile(v[v > cutoff], c(1/3, 2/3)), Inf)
+  density_cut <- mapply(
+    \(name, v) c(-Inf, cutoff, inter_cutoffs[[name]], Inf),
+    colnames(log_fpkm),
+    apply(log_fpkm, 2, identity, simplify=FALSE)
   )
   density_melt <- mapply(
-      \(d, density_cut) d %>%
+      \(name, d, density_cut) d %>%
         with(data.frame(x, y, quartile=cut(x, density_cut))) %>%
-        within(levels(quartile) <- factor(paste0('Q', 1:4))),
+        as_tibble %>%
+        mutate(
+          quartile = quartile %>% `levels<-`(
+            value = if (length(levels(.)) <= 2) c("off", "on") else paste0('Q', 1:4)
+          )
+        ) %>%
+        group_by(quartile) %>%
+        filter(
+          sum(between(log_fpkm[, name], min(x), max(x))) > 0
+        ),
+      colnames(log_fpkm),
       density_data,
       density_cut %>% asplit(2),
       SIMPLIFY = F) %>%
@@ -647,7 +658,16 @@ fpkm_third_density <- function(
       values = sc_quartile_colors %>% replace(1, "#aaaaaa") %>% setNames(NULL) %>% rev
     ) + coord_cartesian(
       NULL, ylim
-    ) + theme_bw() + labs(
+    ) + scale_x_continuous(
+      breaks = c(1, 2),
+      labels = sapply(
+        clusters,
+        \(n) paste0(toupper(substr(n, 1, 1)), substr(n, 2, str_length(n)))
+      )
+    ) + theme_bw() + theme(
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank()
+    ) + labs(
       x = 'Cluster', y = y_label
     )
 }
