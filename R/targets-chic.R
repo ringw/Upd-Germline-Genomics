@@ -951,5 +951,84 @@ targets.chic <- list(
   tar_target(chic.results_nos_chr, list(H3K4="chic/nos_H3K4.new.FE.bw", H3K27="chic/nos_H3K27.new.FE.bw", H3K9="chic/nos_H3K9.new.FE.bw")),
   tar_target(chic.results_tj_chr, list(H3K4="chic/tj_H3K4.new.FE.bw", H3K27="chic/tj_H3K27.new.FE.bw", H3K9="chic/tj_H3K9.new.FE.bw")),
   tar_target(chic.results_nos_masked, chic.results_nos_chr),
-  tar_target(chic.results_tj_masked, chic.results_tj_chr)
+  tar_target(chic.results_tj_masked, chic.results_tj_chr),
+
+  # Nucleosome positioning analysis.
+  tar_file(
+    nucleosome_normal_bin,
+    tibble(
+      make_cmd = processx::run("make", wd="NOrMAL")$status,
+      make_test_cmd = processx::run("make", "test", wd="NOrMAL")$status,
+      bin = "NOrMAL/NOrMAL"
+    )$bin
+  ),
+  tar_file(
+    nucleosome_normal_config, "NOrMAL/config.txt"
+  ),
+  tar_map(
+    tibble(
+      cross_join(experiment.driver, tibble(chr = names(chr.lengths))),
+      bulk_reads = mapply(
+        \(driver, chr) str_glue(
+          "bulk_reads_",
+          chr,
+          "_chic.bam_{chic.samples$sample[chic.samples$driver == driver & chic.samples$molecule == 'H3' & chic.samples$group == 'H3K27']}_chr"
+        ) %>%
+          rlang::syms(),
+        driver,
+        chr,
+        SIMPLIFY=FALSE
+      )
+    ),
+    names = chr | celltype,
+    tar_file(
+      nucleosome_analysis,
+      tibble(
+        do.call(rbind, bulk_reads) %>%
+          paired_end_reads_to_fragment_lengths %>%
+          subset(between(length, 100, 200)),
+        forw_file = tempfile("forw"),
+        do_write_forw_file = write.table(data.frame(format(pos, sci=F)), forw_file[1], quote=F, row.names=F, col.names=F),
+        rev_file = tempfile("rev"),
+        do_write_rev_file = write.table(data.frame(format(fragment_end_crick, sci=F)), rev_file[1], quote=F, row.names=F, col.names=F),
+        output_file = str_glue("chic/NOrMAL/", celltype, "/", "Analysis_", chr, ".txt"),
+        mk_output = dir.create(dirname(output_file[1]), showW=F, rec=T),
+        do_run_normal = processx::run(
+          nucleosome_normal_bin,
+          c(
+            nucleosome_normal_config,
+            forw_file[1],
+            rev_file[1],
+            output_file[1]
+          ),
+          stdout="",
+          stderr=""
+        )$status
+      )$output_file[1]
+    )
+  ),
+  tar_map(
+    tibble(
+      experiment.driver,
+      nucleosome_analysis = sapply(
+        celltype,
+        \(celltype) rlang::syms(
+          str_glue("nucleosome_analysis_{names(chr.lengths)}_{celltype}")
+        ),
+        simplify=F
+      )
+    ),
+    names = celltype,
+    tar_target(
+      nucleosome_analysis_bed,
+      nucleosome_normal_to_bed(
+        setNames(nucleosome_analysis, names(chr.lengths)),
+        str_glue("chic/NOrMAL/", celltype, "_Pos.bed")
+      )
+    ),
+    tar_target(
+      nucleosome_analysis_bw,
+      nucleosome_analysis_bed %>% bed_to_mark_bigwig(str_glue("chic/NOrMAL/", celltype, "_Pos.bw"))
+    )
+  )
 )

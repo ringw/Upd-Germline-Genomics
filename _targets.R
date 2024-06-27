@@ -1606,6 +1606,39 @@ list(
       )
     )
   ),
+  tar_target(
+    fig.fpkm.chic.facet.nucleosome.both,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        rowname="CHIC-TSS-Chr-Nucleosome-Occupancy-RNAseq",
+        figure=list(
+          (
+            chic_plot_average_profiles_facet_grid(
+              list(Germline=tss_sc_chr_nucleosome_data_Germline, Somatic=tss_sc_chr_nucleosome_data_Somatic) %>%
+                bind_rows(.id = "name") %>%
+                arrange(desc(row_number())) %>%
+                mutate(genes=interaction(activity, ordered(name)), l2FC=value, facet=facet %>% ordered(c("X","2","3","4"))),
+              "",
+              c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
+              linewidth = c(0.33, 0.66, 0.33, 0.66),
+              faceter = facet_wrap(vars(facet), ncol=4),
+              x_intercept = 1000 * 1000 * 1000 / sum(seqlengths(chic.tile.diameter_40_score_chr))
+            ) + scale_y_continuous(
+              name = "H3 Monosome FPKM",
+              expand = c(0.05, 0.05)
+            ) + theme(
+              aspect.ratio = 1
+            )
+          ) %>%
+            replace_legend(germline_somatic_line_plot_legend)
+        ),
+        width=10,
+        height=3
+      )
+    )
+  ),
 
   tar_target(
     germline_somatic_line_plot_legend,
