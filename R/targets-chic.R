@@ -170,7 +170,7 @@ targets.chic <- list(
       chic.tile.diameter_40,
       sapply(
         levels(seqnames(chic.tile_chr_granges_list[[1]])),
-        \(n) if (n %in% names(masked.lengths))
+        \(n) if (n %in% names(masked.feature.lengths))
           chic.tile_all_chr_diameter_40_granges_list[[n]]
         else
           chic.tile_chr_granges_list[[n]],
@@ -191,7 +191,7 @@ targets.chic <- list(
       chic.tile.diameter_40_score,
       sapply(
         levels(seqnames(chic.tile_chr_granges_list[[1]])),
-        \(n) if (n %in% names(masked.lengths))
+        \(n) if (n %in% names(masked.feature.lengths))
           chic.tile_all_chr_diameter_20_granges_list[[n]]
         else
           chic.tile_chr_granges_list[[n]],
@@ -212,7 +212,7 @@ targets.chic <- list(
       chic.tile.diameter_1000,
       sapply(
         levels(seqnames(chic.tile_chr_granges_list[[1]])),
-        \(n) if (n %in% names(masked.lengths))
+        \(n) if (n %in% names(masked.feature.lengths))
           chic.tile_all_chr_diameter_1000_granges_list[[n]]
         else
           chic.tile_chr_granges_list[[n]],

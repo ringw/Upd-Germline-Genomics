@@ -395,9 +395,9 @@ list(
   ),
   tar_target(
     flybase.lengths,
-    read.table(flybase.genome.index, header=F) %>%
-      reframe(name=V1, value=V2) %>%
-      deframe
+    bulk_reads_idxstats_chic.bam_GC3772016_S1_L002_chr %>%
+      subset(rname != "*") %>%
+      pull(rlength, rname)
   ),
   tar_target(
     feature.lengths,
