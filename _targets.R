@@ -652,16 +652,6 @@ list(
     format = "file"
   ),
   tar_target(
-    sct_gene_lists,
-    determine_gene_list(sctransform_quantile, supplemental_bulk_cpm)
-  ),
-  tar_target(
-    sct_gene_venn,
-    plot_gene_lists(
-      sct_gene_lists
-    )
-  ),
-  tar_target(
     cpm_gene_lists,
     apply(
       Upd_cpm[, c("germline", "somatic")],
@@ -687,7 +677,6 @@ list(
           "RNAseq-Integrated-Cluster-Dots", supplemental_cluster_dot_plot_figure, 3, 4,
           "RNAseq-Validation-Elbow", supplemental_elbow_figure, 5, 2.5,
           "RNAseq-CPM-Gene-List-Venn-Area-Blank", cpm_gene_venn, 3.6, 2.7,
-          "RNAseq-SCT-Gene-List-Venn-Area-Blank", sct_gene_venn, 3.6, 2.7,
           "RNAseq-UMAP-Genotype",
           Upd_sc %>%
             AddMetaData(recode(Upd_sc$batch, nos.1="nos", nos.2="nos", tj.1="tj", tj.2="tj"), "genotype") %>%
@@ -1442,21 +1431,6 @@ list(
   ),
 
   tar_target(
-    sct_gene_lists_extended,
-    sct_gene_lists %>%
-      with(
-        list(
-          AllGermlineGenes = germline,
-          AllSomaticGenes = somatic,
-          ExclusiveGermlineGenes = setdiff(germline, somatic),
-          ExclusiveSomaticGenes = setdiff(somatic, germline),
-          AllGermlineOrSomaticGenes = union(germline, somatic),
-          OffGenes = rownames(read.csv(assay.data.sc, row.names=1)) %>% setdiff(germline) %>% setdiff(somatic)
-        )
-    )
-  ),
-  tar_target(sct_OffGenes, sct_gene_lists_extended$OffGenes),
-  tar_target(
     cpm_gene_lists_extended,
     cpm_gene_lists %>%
       with(
@@ -1471,18 +1445,10 @@ list(
         )
     )
   ),
-  tar_target(cpm_OffGenes, cpm_gene_lists_extended$OffGenes),
   tar_map(
-    cross_join(
-      tribble(
-        ~genelist, ~gene_obj, ~OffGenes,
-        "SCT", rlang::sym("sct_gene_lists_extended"), rlang::sym("sct_OffGenes"),
-        "CPM", rlang::sym("cpm_gene_lists_extended"), rlang::sym("cpm_OffGenes")
-      ),
-      chic.fpkm.data %>%
-        mutate(driver = driver %>% replace(. == "Nos", "nos"))
-    ),
-    names = genelist | name,
+    chic.fpkm.data %>%
+      mutate(driver = driver %>% replace(. == "Nos", "nos")),
+    names = name,
     tar_target(
       name = fpkm.chic.plots,
       list(
@@ -1494,8 +1460,8 @@ list(
             experiment = name,
             gene_list = names(gene_obj),
             tss_plot = chic_average_gene_list_profiles(
-              gene_obj[[1]],
-              OffGenes,
+              cpm_gene_lists_extended[[1]],
+              cpm_gene_lists_extended$OffGenes,
               dirname,
               assay.data.sc,
               driver,
@@ -1503,8 +1469,8 @@ list(
             ) %>%
               list,
             paneled_plot = chic_custom_gene_list_paneled_profile(
-              gene_obj[[1]],
-              OffGenes,
+              cpm_gene_lists_extended[[1]],
+              cpm_gene_lists_extended$OffGenes,
               dirname,
               assay.data.sc,
               driver,
@@ -1513,7 +1479,7 @@ list(
               list
           )
         ),
-      pattern = map(gene_obj)
+      pattern = map(cpm_gene_lists_extended)
     ),
     tar_file(
       name = fig.fpkm.chic,
@@ -1844,8 +1810,8 @@ list(
         tar_target_raw(
           paste0("chic.psd.gene.list_", name),
           if (name == "Germline")
-            quote(sct_gene_lists$germline)
-          else quote(sct_gene_lists$somatic)
+            quote(cpm_gene_lists$germline)
+          else quote(cpm_gene_lists$somatic)
         ),
         tar_target_raw(
           paste0("chic.psd.obs_", name),
