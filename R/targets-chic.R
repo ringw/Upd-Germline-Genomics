@@ -40,6 +40,26 @@ target_chic_load_raw_expr <- function(group, driver) {
 
 log2 <- function(n) (log(n) / log(2))
 
+granges_to_normalize_euchromatin <- substitute(
+  which(as.logical(seqnames(chic.tile.diameter_40_score) %in% c("2L", "2R", "3L", "3R", "4")))
+)
+# granges_to_normalize_heterochromatin <- substitute(
+#   rep(
+#     grep("[23]Cen", as.character(seqnames(chic.tile.diameter_40_score))),
+#     seqlengths(seqinfo(chic.tile.diameter_40_score)[grep("[23]Cen", as.character(seqnames(chic.tile.diameter_40_score)), val=T)])
+#   )
+# )
+granges_to_normalize_heterochromatin <- substitute(
+  which(
+    as.logical(
+      seqnames(chic.tile.diameter_40_score) %in%
+        grep("[23]Cen", names(chr.lengths), value=T)
+    )
+  )
+)
+
+granges_to_normalize_summarize_fn <- median
+
 targets.chic.aligned <- tar_map(
   bowtie.refs,
   names = name,
@@ -352,7 +372,27 @@ targets.chic <- list(
         model_matrix_rep = (
           chic.samples$rep[match(chic_sample_names, chic.samples$sample)]
         ) %>%
-          list
+          list,
+        chic.experiment.granges.offset.elementMetadata = rlang::syms(
+          str_glue(
+            "chic.experiment.granges.offset.",
+            c(H3K4="euchromatin", H3K27="euchromatin", H3K9="euchromatin")[mark],
+            "_diameter_40_{mark}_{name}_{bp_suffix}_{reference}"
+          )
+        ),
+        granges_to_normalize = list(
+          do.call(
+            substitute,
+            list(
+              list(
+                H3K4=granges_to_normalize_euchromatin,
+                H3K27=granges_to_normalize_euchromatin,
+                H3K9=granges_to_normalize_euchromatin
+              )[[mark]],
+              list(chic.tile.diameter_40_score = chic.tile.diameter_40_score)
+            )
+          )
+        )
       ),
     names = mark | name | bp_suffix | reference,
     tar_target(
@@ -383,45 +423,75 @@ targets.chic <- list(
         )
     ),
     tar_target(
+      chic.experiment.granges.offset.euchromatin_diameter_40,
+      # Median of 1kb-window coverage scores (rescaled to match the scale of
+      # the 40 bp count overlaps). Because each fragment is assigned exactly
+      # 1 bp to count overlaps with, we can exactly scale down by the
+      # difference in window size using the rolling mean of windows.
+      matrix(
+        log(
+          chic.experiment.granges.diameter_40[
+            seqnames(chic.experiment.granges.diameter_40) %in%
+            c("2L", "2R", "3L", "3R", "4")
+          ] %>%
+            elementMetadata %>%
+            apply(
+              2,
+              \(v) v %>% rollmean(50, fill=0, align="center") %>% median
+            )
+        ) %>%
+          rep(each = length(chic.experiment.granges.diameter_40))
+        + log(ranges(chic.experiment.granges.diameter_40)@width)
+        - log(
+          median(
+            ranges(chic.experiment.granges.diameter_40)@width[
+              as.logical(
+                seqnames(chic.experiment.granges.diameter_40) %in%
+                c("2L", "2R", "3L", "3R", "4")
+              )
+            ]
+          )
+        ),
+        nrow = length(chic.experiment.granges.diameter_40),
+        ncol = ncol(elementMetadata(chic.experiment.granges.diameter_40)),
+        dimnames = list(
+          NULL,
+          colnames(elementMetadata(chic.experiment.granges.diameter_40))
+        )
+      )
+    ),
+    tar_target(
+      chic.experiment.granges.offset.heterochromatin_diameter_40,
+      matrix(
+        log(
+          chic.experiment.granges.diameter_40[
+            grepl("Cen", seqnames(chic.experiment.granges.diameter_40))
+          ] %>%
+            attributes %>%
+            with(
+              apply(
+                elementMetadata,
+                2,
+                \(v) median(v / ranges@width)
+              )
+            )
+        ) %>%
+          rep(each = length(chic.experiment.granges.diameter_40))
+        + log(ranges(chic.experiment.granges.diameter_40)@width),
+        nrow = length(chic.experiment.granges.diameter_40),
+        ncol = ncol(elementMetadata(chic.experiment.granges.diameter_40)),
+        dimnames = list(
+          NULL,
+          colnames(elementMetadata(chic.experiment.granges.diameter_40))
+        )
+      )
+    ),
+    tar_target(
       chic.experiment.granges.offset_diameter_40,
       GRanges(
         seqnames(chic.experiment.granges.diameter_40),
         ranges(chic.experiment.granges.diameter_40),
-        # Median of 1kb-window coverage scores (rescaled to match the scale of
-        # the 40 bp count overlaps). Because each fragment is assigned exactly
-        # 1 bp to count overlaps with, we can exactly scale down by the
-        # difference in window size using the rolling mean of windows.
-        offset = matrix(
-          log(
-            chic.experiment.granges.diameter_40[
-              seqnames(chic.experiment.granges.diameter_40) %in%
-              c("2L", "2R", "3L", "3R", "4")
-            ] %>%
-              elementMetadata %>%
-              apply(
-                2,
-                \(v) v %>% rollmean(50, fill=0, align="center") %>% median
-              )
-          ) %>%
-            rep(each = length(chic.experiment.granges.diameter_40))
-          + log(ranges(chic.experiment.granges.diameter_40)@width)
-          - log(
-            median(
-              ranges(chic.experiment.granges.diameter_40)@width[
-                as.logical(
-                  seqnames(chic.experiment.granges.diameter_40) %in%
-                  c("2L", "2R", "3L", "3R", "4")
-                )
-              ]
-            )
-          ),
-          nrow = length(chic.experiment.granges.diameter_40),
-          ncol = ncol(elementMetadata(chic.experiment.granges.diameter_40)),
-          dimnames = list(
-            NULL,
-            colnames(elementMetadata(chic.experiment.granges.diameter_40))
-          )
-        )
+        elementMetadata = chic.experiment.granges.offset.elementMetadata
       )
     ),
     tar_target(
@@ -438,9 +508,7 @@ targets.chic <- list(
               `contrasts<-`(value = contr.helmert(length(levels(.))))
           ),
           size_factors = 1,
-          offset = as.matrix(
-            elementMetadata(chic.experiment.granges.offset_diameter_40)
-          ),
+          offset = chic.experiment.granges.offset.elementMetadata,
           overdispersion = "global",
           overdispersion_shrinkage = FALSE,
           verbose = TRUE
@@ -462,7 +530,7 @@ targets.chic <- list(
         ranges(chic.experiment.granges.diameter_40),
         score = (
           as.matrix(elementMetadata(chic.experiment.granges.diameter_40))
-          / exp(as.matrix(elementMetadata(chic.experiment.granges.offset_diameter_40)))
+          / exp(chic.experiment.granges.offset.elementMetadata)
         ) %>%
           replace(. < 1e-8, 0) %>%
           as.data.frame
@@ -501,7 +569,7 @@ targets.chic <- list(
             elementMetadata(chic.experiment.quantify)[, 2]
             / elementMetadata(chic.experiment.quantify)[, 1]
           ) %>%
-            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
             pmax(2^-10) %>%
             pmin(2^10) %>%
             log2
@@ -511,7 +579,7 @@ targets.chic <- list(
             elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
             / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
           ) %>%
-            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
             pmax(2^-10) %>%
             pmin(2^10) %>%
             log2
@@ -528,7 +596,7 @@ targets.chic <- list(
             elementMetadata(chic.experiment.quantify)[, 2]
             / elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]
           ) %>%
-            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
             pmax(2^-10) %>%
             pmin(2^10) %>%
             log2
@@ -538,7 +606,7 @@ targets.chic <- list(
             elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
             / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
           ) %>%
-            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
             pmax(2^-10) %>%
             pmin(2^10) %>%
             log2
@@ -555,7 +623,7 @@ targets.chic <- list(
             elementMetadata(chic.experiment.quantify.smooth_bw40)[, 2]
             / elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]
           ) %>%
-            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
             pmax(2^-10) %>%
             pmin(2^10) %>%
             log2
@@ -565,7 +633,7 @@ targets.chic <- list(
             elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
             / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
           ) %>%
-            `/`(median(.[as.logical(seqnames(chic.experiment.quantify) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
             pmax(2^-10) %>%
             pmin(2^10) %>%
             log2
@@ -609,8 +677,9 @@ targets.chic <- list(
         score = (
           elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
           / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
-        )[chic.tile.diameter_1000_lookup] %>%
-        `/`(median(.[as.logical(seqnames(chic.experiment.quantify.smooth_bw100000) %in% c("2L", "2R", "3L", "3R", "4"))], na.rm=T)) %>%
+        ) %>%
+          `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
+          `[`(chic.tile.diameter_1000_lookup) %>%
           log2 %>%
           replace(is.na(.), 0)
       ) %>%
@@ -828,6 +897,17 @@ targets.chic <- list(
         bind_rows(.id = "mark") %>%
         mutate(mark = factor(mark, chic.mark.data$mark)),
       format = "parquet"
+    ),
+    tar_target(
+      tss_sc_extended_data,
+      tibble(
+        gene_list = names(cpm_gene_lists_extended)[1],
+        profile = chic_heatmap_facet_genes(
+          named_tss_data,
+          tibble(gene = cpm_gene_lists_extended[[1]])
+        )
+      ),
+      pattern = map(cpm_gene_lists_extended)
     ),
     tar_target(
       tss_sc_chr_nucleosome_data,
