@@ -313,7 +313,7 @@ targets.chic <- list(
           sapply(
             \(df) df %>%
               pos_fixer_callable %>%
-              filter(between(length, 100, 200)),
+              filter(between(length, 100, 200), mapq >= 20),
             simplify=F
           ) %>%
           setNames(NULL),
@@ -711,7 +711,8 @@ targets.chic <- list(
             )
           ),
         as_tibble(read.csv(assay.data.sc)),
-        grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
+        grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+        mask_threshold = 0
       )
     ),
     tar_target(
@@ -728,7 +729,8 @@ targets.chic <- list(
             )
           ),
         as_tibble(read.csv(assay.data.sc)),
-        grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
+        grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+        mask_threshold = 0
       )
     ),
     tar_target(
@@ -750,7 +752,8 @@ targets.chic <- list(
             )
           ),
         as_tibble(read.csv(assay.data.sc)),
-        mask_track = grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import
+        mask_track = grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+        mask_threshold = 0
       )
     )
   ),
@@ -915,6 +918,30 @@ targets.chic <- list(
         chic_heatmap_facet_genes,
         named_tss_data,
         list(subset(facet_genes, select=c(facet, activity, gene))),
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, chic.mark.data$mark)),
+      format = "parquet"
+    ),
+    tar_target(
+      sc_quartile_data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        list(subset(facet_genes, select=c(quant, gene))),
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, chic.mark.data$mark)),
+      format = "parquet"
+    ),
+    tar_target(
+      sc_active_data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        list(subset(facet_genes, select=c(activity, gene))),
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%

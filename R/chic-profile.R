@@ -1,6 +1,6 @@
 chic_line_track_colors <- list(
-  germline = "#4ddf60",
-  somatic = "#de31e4"
+  germline = "#5DC663",
+  somatic = "#D845E8"
 )
 
 quant_quartile_factor <- function(v, q1_threshold) {
@@ -32,8 +32,8 @@ chic_heatmap_facet_genes <- function(
 }
 
 # Analysis with TSS profile as x-axis, with ChIC tracks.
-chic_average_profile_limits <- c(0.25, 4.4)
-chic_average_breaks <- c(1/2, 1, 2, 3)
+chic_average_profile_limits <- c(0.25, 5)
+chic_average_breaks <- c(1/2, 1, 2, 3, 4)
 chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2))
 
 # TSS plot. Rows come from var named "facet". Cols come from "mark".
@@ -44,17 +44,17 @@ chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2))
 chic_plot_average_profiles_facet_grid <- function(
   facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1),
   faceter = facet_grid(rows = vars(mark), cols = vars(facet)),
-  x_intercept_red = 1
+  x_intercept_red = 0
 ) {
   break_labels <- tibble(
     pos = seq(head(levels(facet_data$pos), 1), tail(levels(facet_data$pos), 1)),
     label = levels(facet_data$pos)
   )
-  facet_data$pos <- break_labels$pos[match(facet_data$pos, break_labels$label)]
+  facet_data$pos.continuous <- break_labels$pos[match(facet_data$pos, break_labels$label)]
   facet_data %>% ggplot(
-    aes(x=pos, y=l2FC, color=genes, linewidth=genes, group=genes)
+    aes(x=pos.continuous, y=value, color=genes, linewidth=genes, group=genes)
   ) + geom_line(
-    data = tribble(~pos, ~l2FC, -Inf, x_intercept_red, Inf, x_intercept_red) %>%
+    data = tribble(~pos.continuous, ~value, -Inf, x_intercept_red, Inf, x_intercept_red) %>%
       cross_join(
         tibble(
           genes = NA,
@@ -70,10 +70,10 @@ chic_plot_average_profiles_facet_grid <- function(
     linewidth = 0.25
   ) + geom_line() + faceter + scale_color_manual(
     values = quartile_colors,
-    guide = guide_legend(title = legend_title, reverse = TRUE)
+    guide = guide_legend(title = legend_title)
   ) + scale_linewidth_manual(
     values = linewidth,
-    guide = guide_legend(title = legend_title, reverse = TRUE)
+    guide = guide_legend(title = legend_title)
   ) + scale_x_continuous(
     labels = \(n) break_labels$label[match(n, break_labels$pos)]
   ) + scale_y_continuous(
@@ -149,10 +149,10 @@ chic_plot_paneled_profiles_facet_grid <- function(
       fill = viridis(2, option = "magma", end = 0.99)[2]
     ) + faceter + scale_color_manual(
       values = quartile_colors,
-      guide = guide_legend(title = legend_title, reverse = TRUE, override.aes = list(fill = "transparent"))
+      guide = guide_legend(title = legend_title, override.aes = list(fill = "transparent"))
     ) + scale_linewidth_manual(
       values = linewidth,
-      guide = guide_legend(title = legend_title, reverse = TRUE)
+      guide = guide_legend(title = legend_title)
     ) + coord_cartesian(
       c(tss_left, tes_right),
       chic_average_profile_limits,
@@ -225,7 +225,7 @@ chic_average_gene_list_profiles <- function(
       )
       facet_data <- mark_tracks %>%
         sapply(
-          \(v) data.frame(pos=seq(-before, after-1), l2FC=v),
+          \(v) data.frame(pos=seq(-before, after-1), value=v),
           simplify=F) %>%
         bind_rows(.id = "marks") %>%
         mutate(marks = marks %>% factor(chic.mark.data$mark))
