@@ -11,13 +11,16 @@ nucleosome_normal_to_bed <- function(named_normal_files, output_path) {
     start = round(V1 - qnorm(0.975) * V2) - 1,
     end = round(V1 + qnorm(0.975) * V2)
   )
-  write.table(
-    data[c("chr", "start", "end")],
-    output_path,
-    quote=F,
-    sep="\t",
-    row.names=F,
-    col.names=F
+  with_options(
+    list(scipen=100),
+    write.table(
+      data[c("chr", "start", "end")],
+      output_path,
+      quote=F,
+      sep="\t",
+      row.names=F,
+      col.names=F
+    )
   )
   output_path
 }
