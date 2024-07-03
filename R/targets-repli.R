@@ -19,56 +19,75 @@ repli.exp.contrast.denominator <- c(1, 1, 1, 1)
 targets.repli <- list(
   # FASTQ files: Align to BAM and count lines in FASTQ.
   tar_map(
-    bowtie.refs,
-    names = name,
-    tar_map(
-      dplyr::rename(repli.samples, repli_target="name"),
-      names = repli_target,
-      tar_file(
-        repli.bam,
-        with(
-          list(name=name, repli_target=repli_target) %>%
-            with(
-              list(output_path = str_glue("repli/{name}/{repli_target}.bam"), filename=filename)
-            ),
-          {
-            run(
-              "bash",
-              c(
+    cross_join(
+      bowtie.refs,
+      dplyr::rename(repli.samples, repli_target="name")
+    ) %>%
+      rowwise %>%
+      mutate(
+        command_line = if (isTRUE(is_paired_end))
+            list(
+              call(
+                "c",
                 "-i",
-                align_repli_lightfiltering,
-                str_replace(bowtie[1], "\\..*", ""),
-                str_glue("Upd_Tumor/Repli/{filename}"),
-                output_path
+                quote(align_chic_lightfiltering),
+                substitute(str_replace(ref_paths[1], "\\..*", ""), list(ref_paths=bowtie)),
+                str_glue("{filename}_R1_001.fastq.gz"),
+                str_glue("{filename}_R2_001.fastq.gz"),
+                quote(output_path)
               )
             )
-            output_path
-          }
+          else
+            list(
+              call(
+                "c",
+                "-i",
+                quote(align_repli_lightfiltering),
+                substitute(str_replace(ref_paths[1], "\\..*", ""), list(ref_paths=bowtie)),
+                str_glue("Upd_Tumor/Repli/{filename}"),
+                quote(output_path)
+              )
+            )
         ),
-        cue = tar_cue("never"),
-        packages = c(
-          "dplyr",
-          "processx",
-          "stringr"
-        )
-      ),
-      tar_target(
-        repli.readcount,
-        as.integer(
+    names = repli_target | name,
+    tar_file(
+      repli.bam,
+      with(
+        list(name=name, repli_target=repli_target) %>%
+          with(
+            list(output_path = str_glue("repli/{name}/{repli_target}.bam"))
+          ),
+        {
           run(
             "bash",
-            c(
-              "-c",
-              paste0(
-                "rclone cat sharepoint:'Bio Data'/Upd_Tumor/Repli/",
-                filename,
-                " | gunzip -c | wc -l"
-              )
-            )
-          )$stdout
-        ),
-        packages = "processx"
+            command_line
+          )
+          output_path
+        }
+      ),
+      cue = tar_cue("never"),
+      packages = c(
+        "dplyr",
+        "processx",
+        "stringr"
       )
+    ),
+    tar_target(
+      repli.readcount,
+      as.integer(
+        run(
+          "bash",
+          c(
+            "-c",
+            paste0(
+              "rclone cat sharepoint:'Bio Data'/Upd_Tumor/Repli/",
+              filename,
+              " | gunzip -c | wc -l"
+            )
+          )
+        )$stdout
+      ),
+      packages = "processx"
     )
   ),
 
