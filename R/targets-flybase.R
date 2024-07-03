@@ -121,7 +121,8 @@ targets.flybase <- list(
           glob_result = list(Sys.glob(glob_arg))
         ) %>%
         pull(glob_result) %>%
-        unlist
+        unlist,
+      cue = tar_cue("never")
     )
   )
 )
