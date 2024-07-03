@@ -1093,5 +1093,25 @@ targets.chic <- list(
       nucleosome_analysis_bw,
       nucleosome_analysis_bed %>% bed_to_mark_bigwig(str_glue("chic/NOrMAL/", celltype, "_Pos.bw"))
     )
+  ),
+  tar_file(
+    plot.chic.nucleosome.median,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "Median-Nucleosome-Phasing",
+        granges_plot_nuc_median_phasing(
+          c(
+            Germline=nucleosome_analysis_bed_Germline,
+            Somatic=nucleosome_analysis_bed_Somatic
+          ),
+          legend.position = "none"
+        ),
+        6,
+        3
+      )
+    )
   )
 )
