@@ -393,7 +393,7 @@ targets.chic <- list(
           granges %>%
             GRangesList %>%
             unlist %>%
-            `metadata<-`(value = list(est_library_size = sum(sapply(reads, length))))
+            `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
         )
     )
   ),
