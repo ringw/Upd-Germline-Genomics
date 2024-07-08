@@ -327,7 +327,7 @@ targets.chic <- list(
   tar_map(
     cross_join(
       bowtie.refs,
-      chic.samples
+      chic.samples %>% subset(str_starts(molecule, "H3"))
     ) %>%
       cross_join(
         tribble(
@@ -490,8 +490,8 @@ targets.chic <- list(
         chic_sample_names = subset(
           chic.samples$sample,
           chic.samples$driver == driver &
-          # (chic.samples$molecule == "H3" | chic.samples$group == mark)
-          chic.samples$group == mark
+          chic.samples$group == mark &
+          str_starts(chic.samples$molecule, "H3")
         ) %>%
           list,
         bp_suffix = bp_name %>% replace(which(grepl("peakcalling", .)), "CN"),
