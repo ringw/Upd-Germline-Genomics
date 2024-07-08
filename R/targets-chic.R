@@ -156,6 +156,12 @@ targets.chic <- list(
       )
     ),
     tar_target(
+      chic.tile_all_chr_diameter_100_granges_list,
+      unlist(chic.tile_chr_granges_list, use.names=F) %>%
+        slidingWindows(w=100L, s=100L) %>%
+        setNames(names(chic.tile_chr_granges_list))
+    ),
+    tar_target(
       chic.tile_all_chr_diameter_1000_granges_list,
       slidingWindows(
         unlist(chic.tile_chr_granges_list), w=1000L, s=1000L
@@ -186,6 +192,14 @@ targets.chic <- list(
       ) %>%
         pull(granges)
     ),
+    # Fix to the all chr diameter 100 track! Use resize/restrict which is much
+    # simpler than new slidingWindows call/slice into the result to get the
+    # desired step size.
+    tar_target(
+      chic.tile_all_chr_diameter_500_granges_list,
+      chic.tile_all_chr_diameter_100_granges_list %>%
+        sapply(\(gr) gr %>% resize(500L, "center") %>% restrict(1L, max(end(gr))))
+    ),
     tar_target(
       chic.tile.diameter_40,
       sapply(
@@ -213,6 +227,48 @@ targets.chic <- list(
         levels(seqnames(chic.tile_chr_granges_list[[1]])),
         \(n) if (n %in% names(masked.feature.lengths))
           chic.tile_all_chr_diameter_20_granges_list[[n]]
+        else
+          chic.tile_chr_granges_list[[n]],
+        USE.NAMES = FALSE
+      ) %>%
+        GRangesList %>%
+        unlist %>%
+        GRanges(
+          seqlengths = idxstats %>%
+            subset(
+              rname != "*",
+              select = c(rname, rlength)
+            ) %>%
+            deframe
+        )
+    ),
+    tar_target(
+      chic.tile.diameter_500,
+      sapply(
+        levels(seqnames(chic.tile_chr_granges_list[[1]])),
+        \(n) if (n %in% names(masked.feature.lengths))
+          chic.tile_all_chr_diameter_500_granges_list[[n]]
+        else
+          chic.tile_chr_granges_list[[n]],
+        USE.NAMES = FALSE
+      ) %>%
+        GRangesList %>%
+        unlist %>%
+        GRanges(
+          seqlengths = idxstats %>%
+            subset(
+              rname != "*",
+              select = c(rname, rlength)
+            ) %>%
+            deframe
+        )
+    ),
+    tar_target(
+      chic.tile.diameter_500_score,
+      sapply(
+        levels(seqnames(chic.tile_chr_granges_list[[1]])),
+        \(n) if (n %in% names(masked.feature.lengths))
+          chic.tile_all_chr_diameter_100_granges_list[[n]]
         else
           chic.tile_chr_granges_list[[n]],
         USE.NAMES = FALSE
