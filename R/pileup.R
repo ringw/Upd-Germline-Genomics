@@ -120,8 +120,8 @@ paired_end_reads_to_fragment_lengths <- function(df) {
 }
 
 paired_end_reads_to_granges <- function(df, ...) {
-  df <- df %>% paired_end_reads_to_fragment_lengths
-  df <- df[seq(1, nrow(df), by=2), ]
+  if (!("length" %in% colnames(df)))
+    df <- df %>% paired_end_reads_to_fragment_lengths
   GRanges(df$rname, IRanges(start = df$pos, width = df$length), ...)
 }
 
