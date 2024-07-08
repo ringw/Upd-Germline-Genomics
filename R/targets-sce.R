@@ -1,5 +1,16 @@
 targets.sce <- list(
   # Fig. 1. UMAP plots.
+  tar_file(
+    sc_idents_supp,
+    save_figures(
+      "figure/Integrated-scRNAseq", ".pdf",
+      tibble(
+        rowname="RNAseq-Validation-Subset-PCA",
+        figure=Upd_sc_plot_idents_pcasubset(Upd_sc) %>% list,
+        width=6, height=4
+      )
+    )
+  ),
   tar_map(
     tibble(extension = c(".pdf", ".png")),
     tar_target(
@@ -62,15 +73,29 @@ targets.sce <- list(
           4, 4,
           "RNAseq-Scatter",
           ggplot(
-            as.data.frame(Upd_cpm),
+            Upd_cpm %>%
+              pmax(1e-10) %>%
+              as.data.frame,
             aes(germline, somatic)
           )
           + rasterise(
-            geom_point(stroke=NA, size=1, color=hcl(256, 40, 25)),
+            geom_point(
+              stroke=NA, size=0.5,
+              # size=0.75, alpha=0.25,
+              color=hcl(256, 40, 25)
+            ),
             dpi=240
           )
-          + scale_x_continuous(trans="log", oob=squish, expand=rep(0.01,2), breaks=10^seq(-3,3), labels=partial(round, dig=3), limits=c(1e-3, 1000))
-          + scale_y_continuous(trans="log", oob=squish, expand=rep(0.01,2), breaks=10^seq(-3,3), labels=partial(round, dig=3), limits=c(1e-3, 1000))
+          + geom_segment(
+            aes(xend=germline_end, yend=somatic_end),
+            tribble(
+              ~germline, ~somatic, ~germline_end, ~somatic_end,
+              0, 5, Inf, 5,
+              5, 0, 5, Inf
+            )
+          )
+          + scale_x_continuous(trans="log", oob=squish, expand=rep(0.01,2), breaks=10^seq(-3,3), labels=partial(round, dig=3), limits=c(1e-3, 1e4))
+          + scale_y_continuous(trans="log", oob=squish, expand=rep(0.01,2), breaks=10^seq(-3,3), labels=partial(round, dig=3), limits=c(1e-3, 1e4))
           + labs(x = "Germline CPM", y = "Somatic CPM")
           + theme_bw()
           + theme(aspect.ratio = 1),
@@ -326,8 +351,8 @@ targets.sce <- list(
             labels = as.character(rbind("", head(LETTERS, length(Upd_genes_newcut_breaks))) %>% c(""))
           )
         ),
-        width=4.5,
-        height=6
+        width=5,
+        height=4
       )
     ),
     packages = tar_option_get("packages") %>%

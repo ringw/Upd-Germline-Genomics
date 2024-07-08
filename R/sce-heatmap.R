@@ -135,7 +135,7 @@ plot_logcpm_heatmap <- function(Upd_cpm, genes, genes_cut = 130) {
   genes <- (genes %>% cut(h=genes_cut))$upper %>% hang.dendrogram
 
   genes_data <- dendro_data(genes)$segments
-  dendrowidth <- 2
+  dendrowidth <- 1.5
   scal <- -dendrowidth / diff(range(c(genes_data$y, genes_data$yend)))
   genes_data$y <- 0.5 + scal * (genes_data$y - min(genes_data$yend))
   genes_data$yend <- 0.5 + scal * (genes_data$yend - min(genes_data$yend))
@@ -146,26 +146,27 @@ plot_logcpm_heatmap <- function(Upd_cpm, genes, genes_cut = 130) {
     # clusters
     x=NULL
   )
-  identbar <- c(GSC = 3.5, CySC = 3.5, germ = 1, soma = 1, muscle = 1) * 2
+  all_genes <- logCPM %>% melt(value.name="logCPM")
+
   identbarheight <- nrow(logCPM) * 0.1
-  all_genes <- logCPM[, rep(seq(ncol(logCPM)), identbar)] %>%
-    melt(value.name="logCPM")
   gg <- (
     ggplot(
       all_genes,
       aes(x, y)
     )
     + rasterise(geom_raster(aes(fill=logCPM)))
-    + scale_fill_viridis_c(limits = c(-2, 4), oob=squish)
+    + scale_fill_viridis_c(
+      name = bquote(log[10]*"CPM"),
+      limits = c(-2, 4), oob=squish
+    )
 
     # Clusters bar:
     + new_scale_fill()
     + scale_fill_manual(values = setNames(cluster_colors[sce.clusters$cluster], NULL), guide=guide_none())
     + geom_tile(
-      aes(fill = ident),
+      aes(fill = x),
       data.frame(
-        ident = factor(rep(letters[1:5], identbar)),
-        x = seq(sum(identbar)),
+        x = colnames(Upd_cpm),
         y = -identbarheight/2
       ),
       height = identbarheight
@@ -178,7 +179,7 @@ plot_logcpm_heatmap <- function(Upd_cpm, genes, genes_cut = 130) {
       linewidth = 0.2
     )
 
-    + scale_x_continuous(breaks = NULL, labels = NULL)
+    + scale_x_discrete(breaks = NULL, labels = NULL)
     + scale_y_continuous(pos = "right")
     + coord_cartesian(
       c(0.5, NA),
@@ -186,7 +187,7 @@ plot_logcpm_heatmap <- function(Upd_cpm, genes, genes_cut = 130) {
       expand = F, clip = "off"
     )
     + labs(
-      x = "Cells",
+      x = "Clusters (n=5)",
       y = paste0("Genes")
     )
     + theme(

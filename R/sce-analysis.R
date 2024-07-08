@@ -66,6 +66,29 @@ Upd_sc_plot_idents <- function(Upd_sc) {
   )
 }
 
+Upd_sc_plot_idents_pcasubset <- function(Upd_sc) {
+  # Rename spermatocyte to differentiated below.
+  FetchData(
+    Upd_sc,
+    c("ident", "pcasubset_1", "pcasubset_2")
+  ) %>%
+    subset(ident %in% c("germline", "somatic")) %>%
+    ggplot(
+      aes(-pcasubset_1, pcasubset_2, color=ident)
+    ) + rasterize(geom_point(
+      stroke=NA, size = 0.25
+    ), dpi=80, scale=0.5) + scale_color_manual(
+      values=unlist(cluster_colors),
+      guide=guide_legend(title=NULL, override.aes = list(size=4))
+    ) + coord_cartesian(
+      c(-25, 25), c(-20, 20), expand=F
+    ) + labs(
+      x = "PC 1", y = "PC 2"
+    ) + theme_cowplot() + theme(
+      aspect.ratio = 0.75
+    )
+}
+
 Upd_sc_plot_subset <- function(sc.plot.idents) {
   sc.plot.idents$data <- sc.plot.idents$data %>%
     subset(ident %in% c('germline', 'somatic'))
@@ -909,23 +932,20 @@ plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
 
   quant = tibble(
     rowname = rownames(Upd_regression_somatic$map),
-    log2FC = Upd_regression_somatic$map[,2] / log(2),
+    log2FC = -Upd_regression_somatic$map[,2] / log(2),
     log10.svalue = log(Upd_regression_somatic$svalue[match(rownames(Upd_regression_somatic$map), rownames(Upd_regression_somatic$svalue)),1]) / log(10)
   ) %>%
     arrange(runif(nrow(.))) %>%
     mutate(
-      color = ifelse(abs(log2FC) >= log2Threshold & log10.svalue <= -4, "#1e498f", "#777777")
-      # color = hcl(
-      #   256,
-      #   # seq(0, 1, length.out=length(rowname))^4 * (30-61) + 61,
-      #   # seq(0, 1, length.out=length(rowname))^4 * (40-32) + 32
-      #   61,
-      #   32
-      # ) %>%
-      #   replace(
-      #     abs(log2FC) < 1 | log10.svalue > -4,
-      #     "#777777"
-      #   )
+      color = ifelse(
+        log2FC >= log2Threshold & log10.svalue <= -4,
+        chic_line_track_colors$germline,
+        ifelse(
+          log2FC <= -log2Threshold & log10.svalue <= -4,
+          chic_line_track_colors$somatic,
+          "#dddddd"
+        )
+      )
     )
 
   ggplot(
