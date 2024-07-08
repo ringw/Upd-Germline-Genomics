@@ -38,8 +38,6 @@ target_chic_load_raw_expr <- function(group, driver) {
   rlang::call2("tibble", rowname = samples$sample, molecule = samples$molecule, rep = call("factor", samples$rep), pileup = samples$pileup)
 }
 
-log2 <- function(n) (log(n) / log(2))
-
 granges_to_normalize_euchromatin <- substitute(
   which(as.logical(seqnames(chic.tile.diameter_40_score) %in% c("2L", "2R", "3L", "3R", "4")))
 )
@@ -57,8 +55,6 @@ granges_to_normalize_heterochromatin <- substitute(
     )
   )
 )
-
-granges_to_normalize_summarize_fn <- median
 
 targets.chic.aligned <- tar_map(
   bowtie.refs,
@@ -358,7 +354,8 @@ targets.chic <- list(
           str_glue("chic.bam_{sample}_{name}"),
           SIMPLIFY=F
         ),
-        chic.tile.diameter_40 = rlang::syms(str_glue("chic.tile.diameter_40_{name}"))
+        chic.tile.diameter_40 = rlang::syms(str_glue("chic.tile.diameter_40_{name}")),
+        chic.tile.diameter_500 = rlang::syms(str_glue("chic.tile.diameter_500_{name}"))
       ),
     names = suffix,
 
@@ -395,13 +392,97 @@ targets.chic <- list(
             unlist %>%
             `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
         )
+    ),
+    tar_target(
+      chic.granges.peakcalling.diameter_40,
+      tibble(
+        reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
+          sapply(
+            \(df) df %>%
+              paired_end_reads_to_fragment_lengths %>%
+              filter(between(length, 100, 200), mapq >= 20),
+            simplify=F
+          ) %>%
+          setNames(NULL),
+        tile_granges = reads %>%
+          sapply(
+            \(df) chic.tile.diameter_40[
+              if (!nrow(df))
+                integer(0)
+              else if (df$rname[1] %in% names(masked.lengths))
+                seqnames(chic.tile.diameter_40) == df$rname[1]
+              else
+                !(seqnames(chic.tile.diameter_40) %in% names(masked.lengths))
+            ]
+          ),
+        partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_40)),
+        granges = mapply(
+          \(tile_granges, reads) GRanges(
+            tile_granges,
+            score = countOverlaps(
+              tile_granges,
+              reads %>% paired_end_reads_to_granges
+            )
+          ),
+          tile_granges,
+          reads
+        )
+      ) %>%
+        with(
+          granges %>%
+            GRangesList %>%
+            unlist %>%
+            `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
+        )
+    ),
+    tar_target(
+      chic.granges.peakcalling.diameter_500,
+      tibble(
+        reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
+          sapply(
+            \(df) df %>%
+              paired_end_reads_to_fragment_lengths %>%
+              filter(between(length, 100, 200), mapq >= 20),
+            simplify=F
+          ) %>%
+          setNames(NULL),
+        tile_granges = reads %>%
+          sapply(
+            \(df) chic.tile.diameter_500[
+              if (!nrow(df))
+                integer(0)
+              else if (df$rname[1] %in% names(masked.lengths))
+                seqnames(chic.tile.diameter_500) == df$rname[1]
+              else
+                !(seqnames(chic.tile.diameter_500) %in% names(masked.lengths))
+            ]
+          ),
+        partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_500)),
+        granges = mapply(
+          \(tile_granges, reads) GRanges(
+            tile_granges,
+            score = countOverlaps(
+              tile_granges,
+              reads %>% paired_end_reads_to_granges
+            )
+          ),
+          tile_granges,
+          reads
+        )
+      ) %>%
+        with(
+          granges %>%
+            GRangesList %>%
+            unlist %>%
+            `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
+        )
     )
   ),
 
   tar_map(
     chic.experiments %>%
       cross_join(dplyr::rename(bowtie.refs, reference="name")) %>%
-      cross_join(tibble(bp_suffix = c("CN"))) %>%
+      cross_join(tibble(bp_name = c("CN", "peakcalling.sharp", "peakcalling.broad"))) %>%
       mutate(driver = driver) %>%
       rowwise %>%
       mutate(
@@ -413,8 +494,21 @@ targets.chic <- list(
           chic.samples$group == mark
         ) %>%
           list,
-        chic.granges.diameter_40 = rlang::syms(str_glue("chic.granges.diameter_40_{chic_sample_names}_{bp_suffix}_{reference}")) %>%
+        bp_suffix = bp_name %>% replace(which(grepl("peakcalling", .)), "CN"),
+        chic.granges = rlang::syms(
+          str_glue(
+            "chic.granges",
+            if (str_starts(bp_name, "peakcalling")) ".peakcalling" else "",
+            ".diameter_{c(CN=40, peakcalling.sharp=40, peakcalling.broad=500)[bp_name]}_{chic_sample_names}_{bp_suffix}_{reference}"
+          )
+        ) %>%
           list,
+        chic.tile = rlang::syms(
+          str_glue("chic.tile.diameter_{c(CN=40, peakcalling.sharp=40, peakcalling.broad=500)[bp_name]}_{reference}")
+        ),
+        chic.tile.score = rlang::syms(
+          str_glue("chic.tile.diameter_{c(CN=40, peakcalling.sharp=40, peakcalling.broad=500)[bp_name]}_score_{reference}")
+        ),
         chic.tile.diameter_1000 = rlang::syms(str_glue("chic.tile.diameter_1000_{reference}")),
         chic.tile.diameter_1000_lookup = rlang::syms(str_glue("chic.tile.diameter_1000_lookup_{reference}")),
         experimental_group = (
@@ -433,7 +527,7 @@ targets.chic <- list(
           str_glue(
             "chic.experiment.granges.offset.",
             c(H3K4="euchromatin", H3K27="euchromatin", H3K9="euchromatin")[mark],
-            "_diameter_40_{mark}_{name}_{bp_suffix}_{reference}"
+            "_{mark}_{name}_{bp_name}_{reference}"
           )
         ),
         granges_to_normalize = list(
@@ -448,20 +542,30 @@ targets.chic <- list(
               list(chic.tile.diameter_40_score = chic.tile.diameter_40_score)
             )
           )
-        )
+        ),
+        generate_chic_tracks = rlang::syms(
+          c(
+            CN="generate_chic_tracks",
+            FE="generate_chic_tracks",
+            peakcalling.sharp="generate_chic_tracks_peakcalling",
+            peakcalling.broad="generate_chic_tracks_peakcalling"
+          )
+        )[bp_name],
+        # global_overdispersion = bp_name != "peakcalling.broad",
+        test_de = str_starts(bp_name, "peakcalling")
       ),
-    names = mark | name | bp_suffix | reference,
+    names = mark | name | bp_name | reference,
     tar_target(
-      chic.experiment.granges.diameter_40,
-      chic.granges.diameter_40[[1]] %>%
+      chic.experiment.granges,
+      chic.granges[[1]] %>%
         attributes %>%
         append(list(molecule=molecule, rep=model_matrix_rep)) %>%
         with(
           GRanges(
             seqnames,
             ranges,
-            seqlengths = seqlengths(chic.granges.diameter_40[[1]]),
-            score = sapply(chic.granges.diameter_40, \(gr) gr$score) %>%
+            seqlengths = seqlengths(chic.granges[[1]]),
+            score = sapply(chic.granges, \(gr) gr$score) %>%
               matrix(
                 nrow = nrow(.),
                 dimnames = list(NULL, str_glue("{molecule}_Rep{rep}"))
@@ -470,7 +574,7 @@ targets.chic <- list(
             `metadata<-`(
               value = list(
                 est_library_size = sapply(
-                  chic.granges.diameter_40,
+                  chic.granges,
                   \(gr) gr@metadata$est_library_size
                 ) %>%
                   setNames(str_glue("{molecule}_Rep{rep}"))
@@ -479,15 +583,15 @@ targets.chic <- list(
         )
     ),
     tar_target(
-      chic.experiment.granges.offset.euchromatin_diameter_40,
+      chic.experiment.granges.offset.euchromatin,
       # Median of 1kb-window coverage scores (rescaled to match the scale of
       # the 40 bp count overlaps). Because each fragment is assigned exactly
       # 1 bp to count overlaps with, we can exactly scale down by the
       # difference in window size using the rolling mean of windows.
       matrix(
         log(
-          chic.experiment.granges.diameter_40[
-            seqnames(chic.experiment.granges.diameter_40) %in%
+          chic.experiment.granges[
+            seqnames(chic.experiment.granges) %in%
             c("2L", "2R", "3L", "3R", "4")
           ] %>%
             elementMetadata %>%
@@ -496,32 +600,32 @@ targets.chic <- list(
               \(v) v %>% rollmean(50, fill=0, align="center") %>% median
             )
         ) %>%
-          rep(each = length(chic.experiment.granges.diameter_40))
-        + log(ranges(chic.experiment.granges.diameter_40)@width)
+          rep(each = length(chic.experiment.granges))
+        + log(ranges(chic.experiment.granges)@width)
         - log(
           median(
-            ranges(chic.experiment.granges.diameter_40)@width[
+            ranges(chic.experiment.granges)@width[
               as.logical(
-                seqnames(chic.experiment.granges.diameter_40) %in%
+                seqnames(chic.experiment.granges) %in%
                 c("2L", "2R", "3L", "3R", "4")
               )
             ]
           )
         ),
-        nrow = length(chic.experiment.granges.diameter_40),
-        ncol = ncol(elementMetadata(chic.experiment.granges.diameter_40)),
+        nrow = length(chic.experiment.granges),
+        ncol = ncol(elementMetadata(chic.experiment.granges)),
         dimnames = list(
           NULL,
-          colnames(elementMetadata(chic.experiment.granges.diameter_40))
+          colnames(elementMetadata(chic.experiment.granges))
         )
       )
     ),
     tar_target(
-      chic.experiment.granges.offset.heterochromatin_diameter_40,
+      chic.experiment.granges.offset.heterochromatin,
       matrix(
         log(
-          chic.experiment.granges.diameter_40[
-            grepl("Cen", seqnames(chic.experiment.granges.diameter_40))
+          chic.experiment.granges[
+            grepl("Cen", seqnames(chic.experiment.granges))
           ] %>%
             attributes %>%
             with(
@@ -532,64 +636,33 @@ targets.chic <- list(
               )
             )
         ) %>%
-          rep(each = length(chic.experiment.granges.diameter_40))
-        + log(ranges(chic.experiment.granges.diameter_40)@width),
-        nrow = length(chic.experiment.granges.diameter_40),
-        ncol = ncol(elementMetadata(chic.experiment.granges.diameter_40)),
+          rep(each = length(chic.experiment.granges))
+        + log(ranges(chic.experiment.granges)@width),
+        nrow = length(chic.experiment.granges),
+        ncol = ncol(elementMetadata(chic.experiment.granges)),
         dimnames = list(
           NULL,
-          colnames(elementMetadata(chic.experiment.granges.diameter_40))
+          colnames(elementMetadata(chic.experiment.granges))
         )
       )
     ),
     tar_target(
-      chic.experiment.granges.offset_diameter_40,
+      chic.experiment.granges.offset,
       GRanges(
-        seqnames(chic.experiment.granges.diameter_40),
-        ranges(chic.experiment.granges.diameter_40),
+        seqnames(chic.experiment.granges),
+        ranges(chic.experiment.granges),
         elementMetadata = chic.experiment.granges.offset.elementMetadata
       )
     ),
     tar_target(
       chic.experiment.quantify,
-      if (length(unique(model_matrix_rep)) > 1)
-        glm_gp(
-          as.matrix(chic.experiment.granges.diameter_40@elementMetadata),
-          # We put "molecule" and "rep" in our tar_map, so create new names.
-          ~ 0 + mol + R,
-          tibble(
-            mol = molecule,
-            R = model_matrix_rep %>%
-              factor %>%
-              `contrasts<-`(value = contr.helmert(length(levels(.))))
-          ),
-          size_factors = 1,
-          offset = chic.experiment.granges.offset.elementMetadata,
-          overdispersion = "global",
-          overdispersion_shrinkage = FALSE,
-          verbose = TRUE
-        ) %>%
-          with(
-            GRanges(
-              seqnames(chic.experiment.granges.diameter_40),
-              ranges(chic.experiment.granges.diameter_40),
-              score = as.data.frame(exp(Beta)) %>%
-                replace(. < 1e-8, 0),
-              seqlengths = seqlengths(chic.experiment.granges.diameter_40)
-            ) %>%
-              `metadata<-`(
-                value = list(overdispersions=overdispersions)
-              )
-          )
-      else GRanges(
-        seqnames(chic.experiment.granges.diameter_40),
-        ranges(chic.experiment.granges.diameter_40),
-        score = (
-          as.matrix(elementMetadata(chic.experiment.granges.diameter_40))
-          / exp(chic.experiment.granges.offset.elementMetadata)
-        ) %>%
-          replace(. < 1e-8, 0) %>%
-          as.data.frame
+      chic_quantify(
+        chic.experiment.granges,
+        molecule,
+        model_matrix_rep,
+        offset = chic.experiment.granges.offset.elementMetadata,
+        # global_overdispersion = global_overdispersion,
+        test_de = test_de
       )
     ),
 
@@ -611,89 +684,11 @@ targets.chic <- list(
 
     tar_file(
       chic.bw.tracks,
-      tribble(
-        ~filename, ~score, ~score_smooth,
-        "Rough_Input",
-        list(elementMetadata(chic.experiment.quantify)[, 1]),
-        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
-        "Rough_Mark",
-        list(elementMetadata(chic.experiment.quantify)[, 2]),
-        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
-        "Rough_Mark_L2FC",
-        list(
-          (
-            elementMetadata(chic.experiment.quantify)[, 2]
-            / elementMetadata(chic.experiment.quantify)[, 1]
-          ) %>%
-            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
-            pmax(2^-10) %>%
-            pmin(2^10) %>%
-            log2
-        ),
-        list(
-          (
-            elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-            / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
-          ) %>%
-            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
-            pmax(2^-10) %>%
-            pmin(2^10) %>%
-            log2
-        ),
-        "Imputed_Input",
-        list(elementMetadata(chic.experiment.quantify)[, 1]),
-        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
-        "Imputed_Mark",
-        list(elementMetadata(chic.experiment.quantify)[, 2]),
-        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
-        "Imputed_Mark_L2FC",
-        list(
-          (
-            elementMetadata(chic.experiment.quantify)[, 2]
-            / elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]
-          ) %>%
-            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
-            pmax(2^-10) %>%
-            pmin(2^10) %>%
-            log2
-        ),
-        list(
-          (
-            elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-            / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
-          ) %>%
-            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
-            pmax(2^-10) %>%
-            pmin(2^10) %>%
-            log2
-        ),
-        "FSeq_Input",
-        list(elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]),
-        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
-        "FSeq_Mark",
-        list(elementMetadata(chic.experiment.quantify.smooth_bw40)[, 2]),
-        list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
-        "FSeq_Mark_L2FC",
-        list(
-          (
-            elementMetadata(chic.experiment.quantify.smooth_bw40)[, 2]
-            / elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]
-          ) %>%
-            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
-            pmax(2^-10) %>%
-            pmin(2^10) %>%
-            log2
-        ),
-        list(
-          (
-            elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-            / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
-          ) %>%
-            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
-            pmax(2^-10) %>%
-            pmin(2^10) %>%
-            log2
-        )
+      generate_chic_tracks(
+        chic.experiment.quantify = chic.experiment.quantify,
+        chic.experiment.quantify.smooth_bw40 = chic.experiment.quantify.smooth_bw40,
+        chic.experiment.quantify.smooth_bw100000 = chic.experiment.quantify.smooth_bw100000,
+        granges_to_normalize = granges_to_normalize
       ) %>%
         rowwise %>%
         summarise(
@@ -703,9 +698,9 @@ targets.chic <- list(
           ),
           dir.create = dir.create(dirname(filename), rec=T, showW=F),
           gr = GRanges(
-            seqnames(chic.tile.diameter_40_score),
-            ranges(chic.tile.diameter_40_score),
-            seqlengths = seqlengths(chic.tile.diameter_40_score),
+            seqnames(chic.tile.score),
+            ranges(chic.tile.score),
+            seqlengths = seqlengths(chic.tile.score),
             score = (
               if (grepl("FSeq_[^I]|Imputed", filename))
                 score[[1]] %>%
@@ -728,25 +723,26 @@ targets.chic <- list(
     ),
     tar_file(
       chic.bw.track.wide,
-      GRanges(
-        chic.tile.diameter_1000,
-        score = (
-          elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-          / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
-        ) %>%
-          `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
-          `[`(chic.tile.diameter_1000_lookup) %>%
-          log2 %>%
-          replace(is.na(.), 0)
-      ) %>%
-        export(
-          with(
-            list(mark=mark, name=name, bp_suffix=bp_suffix, reference=reference),
-            str_glue("chic/{reference}/{name}_{mark}_{bp_suffix}_Wide_Mark_L2FC.bw")
+      if (bp_name != "peakcalling")
+        GRanges(
+          chic.tile.diameter_1000,
+          score = (
+            elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
+            / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
           ) %>%
-            BigWigFile
+            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
+            `[`(chic.tile.diameter_1000_lookup) %>%
+            log2 %>%
+            replace(is.na(.), 0)
         ) %>%
-        as.character
+          export(
+            with(
+              list(mark=mark, name=name, bp_suffix=bp_suffix, reference=reference),
+              str_glue("chic/{reference}/{name}_{mark}_{bp_suffix}_Wide_Mark_L2FC.bw")
+            ) %>%
+              BigWigFile
+          ) %>%
+          as.character
     ),
     tar_target(
       chic.heatmap.tss,
@@ -909,6 +905,120 @@ targets.chic <- list(
         mutate(n = n %>% replace_na(0)),
       packages = tar_option_get("packages") %>% c("tidyr")
     )
+  ),
+  
+  # Peak calling at TSS using regression of ChIC samples.
+  tar_target(
+    chic.gene.enrichment,
+    tibble(
+      read.csv(assay.data.sc),
+      chr.test = chr %>% replace(!(. %in% names(chr.lengths)), "*"),
+      windows.rough = findOverlaps(
+        GRanges(
+          chr.test,
+          IRanges(
+            ifelse(
+              chr.test != "*",
+              ifelse(
+                strand == "+",
+                start,
+                end - 499
+              ),
+              1
+            ),
+            width=500
+          ),
+          seqlengths = c(seqlengths(chic.tile.diameter_500_score_chr), `*`=1)
+        ),
+        chic.tile.diameter_40_score_chr
+      ) %>%
+        as("List") %>%
+        as.list,
+      windows.broad = findOverlaps(
+        GRanges(
+          chr.test,
+          IRanges(
+            ifelse(
+              chr.test != "*",
+              ifelse(
+                strand == "+",
+                start + 250,
+                end - 250
+              ),
+              1
+            ),
+            width=1
+          ),
+          seqlengths = c(seqlengths(chic.tile.diameter_500_score_chr), `*`=1)
+        ),
+        chic.tile.diameter_500_score_chr
+      ) %>%
+        as("List") %>%
+        as.list,
+      windows.rbind = mapply(
+        \(v1, v2) c(v1, length(chic.tile.diameter_40_score_chr) + v2),
+        windows.rough,
+        windows.broad
+      ),
+      as_tibble(
+        sapply(
+          list(
+            H3K4_Germline=c(
+              chic.experiment.quantify_H3K4_Germline_peakcalling.sharp_chr,
+              chic.experiment.quantify_H3K4_Germline_peakcalling.broad_chr
+            ),
+            H3K27_Germline=c(
+              chic.experiment.quantify_H3K27_Germline_peakcalling.sharp_chr,
+              chic.experiment.quantify_H3K27_Germline_peakcalling.broad_chr
+            ),
+            H3K9_Germline=c(
+              chic.experiment.quantify_H3K9_Germline_peakcalling.sharp_chr,
+              chic.experiment.quantify_H3K9_Germline_peakcalling.broad_chr
+            ),
+            H3K4_Somatic=c(
+              chic.experiment.quantify_H3K4_Somatic_peakcalling.sharp_chr,
+              chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_chr
+            ),
+            H3K27_Somatic=c(
+              chic.experiment.quantify_H3K27_Somatic_peakcalling.sharp_chr,
+              chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_chr
+            ),
+            H3K9_Somatic=c(
+              chic.experiment.quantify_H3K9_Somatic_peakcalling.sharp_chr,
+              chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_chr
+            )
+          ),
+          \(gr) sapply(
+            windows.rbind,
+            \(w) with(
+              elementMetadata(gr)[w, ],
+              min(
+                p_peak[L2FC > 0],
+                if (length(p_peak) > 0) 1 else numeric(0),
+                na.rm=T
+              ) %>%
+                replace(!is.finite(.), NA)
+            )
+          ),
+          simplify=FALSE
+        )
+      )
+    ) %>%
+      reframe(
+        symbol = X,
+        flybase,
+        chr,
+        start,
+        end,
+        strand,
+        H3K4_Germline,
+        H3K27_Germline,
+        H3K9_Germline,
+        H3K4_Somatic,
+        H3K27_Somatic,
+        H3K9_Somatic
+      ),
+    format = "parquet"
   ),
 
   tar_file(

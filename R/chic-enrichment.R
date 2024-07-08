@@ -1,3 +1,99 @@
+chic_quantify <- function(
+  chic_experiment,
+  molecule,
+  replicate_nums,
+  offset,
+  global_overdispersion=TRUE,
+  test_de=FALSE
+) {
+  if (length(unique(replicate_nums)) == 1)
+    return(
+      GRanges(
+        seqnames(chic_experiment),
+        ranges(chic_experiment)
+      ) %>%
+        `elementMetadata<-`(
+          value = (
+            as.matrix(elementMetadata(chic_experiment))
+            / exp(offset)
+          ) %>%
+            replace(. < 1e-8, 0) %>%
+            as.data.frame %>%
+            cbind(
+              p_peak=1, L2FC=0
+            )
+        )
+    )
+  fit <- glm_gp(
+    as.matrix(chic_experiment@elementMetadata),
+    # We put "molecule" and "rep" in our tar_map, so create new names. As
+    # "molecule" coefs come first, our p_peak contrast will be the log fold
+    # change between the two levels of "molecule".
+    ~ 0 + mol + R,
+    tibble(
+      mol = molecule,
+      R = replicate_nums %>%
+        factor %>%
+        `contrasts<-`(value = contr.helmert(length(levels(.))))
+    ),
+    size_factors = 1,
+    offset = offset,
+    overdispersion = list(TRUE, "global")[
+      c(isFALSE(global_overdispersion), isTRUE(global_overdispersion))][[1]],
+    overdispersion_shrinkage = list(TRUE, FALSE)[
+      c(isFALSE(global_overdispersion), isTRUE(global_overdispersion))][[1]],
+    verbose = TRUE
+  )
+  GRanges(
+    seqnames(chic_experiment),
+    ranges(chic_experiment),
+    seqlengths = seqlengths(chic_experiment)
+  ) %>%
+    `elementMetadata<-`(
+      value = with(
+        if (test_de)
+          test_de(
+            fit,
+            c(-1, 1) %>% c(rep(0, ncol(fit$Beta) - length(.))),
+            verbose=T
+          )
+        else list(pval=1, lfc=0),
+        tibble(
+          as.data.frame(exp(fit$Beta)) %>%
+            replace(. < 1e-8, 0) %>%
+            rename_with(~ str_glue("score.{.}")),
+          p_peak=pval,
+          L2FC=lfc
+        )
+      )
+    ) %>%
+    `metadata<-`(
+      value = list(
+        overdispersions=fit$overdispersions,
+        overdispersion_shrinkage_list=fit$overdispersion_shrinkage_list,
+        deviances=fit$deviances,
+        ridge_penalty=fit$ridge_penalty,
+        model_matrix=fit$model_matrix,
+        design_formula=fit$design_formula
+      )
+    )
+}
+
+enrich_int_list <- function(p_peak_granges, int_list) {
+  sapply(
+    int_list,
+    \(w) with(
+      elementMetadata(gr)[w, ],
+      min(
+        p_peak[L2FC > 0],
+        if (length(p_peak) > 0) 1 else numeric(0),
+        na.rm=T
+      ) %>%
+        replace(!is.finite(.), NA)
+    )
+  )
+}
+
 write_chic_peaks <- function(peak_table_list, output_path) {
   dir.create(dirname(output_path), recursive = TRUE, showW = FALSE)
   peaks_bed <- peak_table_list %>%
