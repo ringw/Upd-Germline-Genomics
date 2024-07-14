@@ -294,81 +294,6 @@ sce_targets <- tar_map(
     )
   )
 
-repli_targets <- tar_map(
-  repli.samples,
-  names = name,
-  tar_file(
-    repli.fastqc,
-    tibble(
-      input_path = paste0("Upd_Tumor/Repli/", filename),
-      output_dir = "repli/fastqc",
-      output_dir_create = dir.create(output_dir, rec=TRUE, showW=FALSE),
-      output_path = paste0(
-        output_dir, "/", str_replace(filename, ".fastq.gz", "_fastqc.zip")
-      ),
-      run_fastqc = processx::run(run_fastqc_sh, c(input_path, output_path)) %>% list
-    ) %>%
-      pull(output_path)
-  ),
-  tar_file(
-    repli.bam,
-    tibble(
-      output_path = paste0("repli/bam/", str_replace(filename, ".fastq.gz", ".bam")),
-      align = run(
-        "bash",
-        c(
-          "-i",
-          align_repli,
-          flybase.bowtie %>% paste("chic_bowtie2", sep="/"),
-          paste0("Upd_Tumor/Repli/", filename),
-          output_path
-        )
-      ) %>%
-        list
-    ) %>%
-      pull(output_path),
-    cue = tar_cue("never")
-  )
-) %>%
-  list(
-    sapply(
-      c("nos", "tj"),
-      \(suffix) tar_target_raw(
-        paste0("repli.bams_", suffix),
-        subset(repli.samples, genotype == suffix) %>%
-          with(
-            call(
-              "tibble",
-              condition = as.character(abbrev),
-              rep = rep,
-              name = name,
-              source_file = "repli.bam_" %>%
-                paste0(name) %>%
-                rlang::syms() %>%
-                append("c", .) %>%
-                do.call(call, ., quote=T)
-            ) %>%
-              # later, build all bams and decide which ones to omit from coverage...
-              list("subset", ., quote(file.exists(source_file))) %>%
-              do.call(call, ., quote=T)
-          )
-      )
-    ),
-    tar_map(
-      tribble(~suffix, ~my_table, "nos", quote(repli.bams_nos), "tj", quote(repli.bams_tj)),
-      names = suffix,
-      tar_target(
-        repli.coverage,
-        read_replicated_coverage(
-          my_table,
-          flybase.lengths,
-          feature.lengths
-        ),
-        packages = "GenomicAlignments"
-      )
-  )
-)
-
 list(
   tar_file(
     flybase.annotations.current,
@@ -637,18 +562,6 @@ list(
         write_excel_tables_list_percentages(filename)
     ) %>%
       pull(filename),
-    format = "file"
-  ),
-  tar_target(
-    supplemental_pca_figure,
-    {
-      filename <- "figure/Integrated-scRNAseq/Germline-Somatic-Pairs.pdf"
-      dir.create(dirname(filename), recursive = TRUE, showW = FALSE)
-      CairoPDF(filename, width = 16, height = 9)
-      print(plot_Upd_pca_components(Upd_sc, load_cell_cycle_score_drosophila(cell_cycle_drosophila, assay.data.sc)))
-      dev.off()
-      filename
-    },
     format = "file"
   ),
   tar_target(
@@ -1136,39 +1049,6 @@ list(
     )
   ),
 
-  tar_target(
-    plot.chic.input.anova_H3K4_Germline,
-    plot_chic_anova(
-      chic.smooth_125_mod_H3K4_Germline %>%
-        set_attr("standard_deviation", chic.sd_125_mod_H3K4_Germline),
-      list(
-        H3K4=chic.smooth_125_input_H3K4_Germline %>%
-          set_attr("standard_deviation", chic.sd_125_input_H3K4_Germline),
-        H3K27=chic.smooth_125_input_H3K27_Germline %>%
-          set_attr("standard_deviation", chic.sd_125_input_H3K27_Germline),
-        H3K9=chic.smooth_125_input_H3K9_Germline %>%
-          set_attr("standard_deviation", chic.sd_125_input_H3K9_Germline)
-      ),
-      bin_size = 50
-    )
-  ),
-  tar_target(
-    plot.chic.input.anova_H3K4_Somatic,
-    plot_chic_anova(
-      chic.smooth_125_mod_H3K4_Somatic %>%
-        set_attr("standard_deviation", chic.sd_125_mod_H3K4_Somatic),
-      list(
-        H3K4=chic.smooth_125_input_H3K4_Somatic %>%
-          set_attr("standard_deviation", chic.sd_125_input_H3K4_Somatic),
-        H3K27=chic.smooth_125_input_H3K27_Somatic %>%
-          set_attr("standard_deviation", chic.sd_125_input_H3K27_Somatic),
-        H3K9=chic.smooth_125_input_H3K9_Somatic %>%
-          set_attr("standard_deviation", chic.sd_125_input_H3K9_Somatic)
-      ),
-      bin_size = 50
-    )
-  ),
-
   tar_map(
     data.frame(extension=c(".png", ".pdf")),
     tar_target(
@@ -1276,71 +1156,9 @@ list(
               as.numeric
           ),
           4,
-          4,
-          "CHIC-H3-TJ",
-          chic.h3.tj.track.plot,
-          6,
-          2,
-          "CHIC-F-Test-Gaussian",
-          plot.chic.input.anova_H3K4_Germline
-          + theme(aspect.ratio = 1),
-          6, 4,
-          "F-Statistic",
-          (demo.f.distribution
-          + annotate(
-            "text", -3, 0.5, label = bquote(s[X]^2*"  = SSB"), color = "red"
-          )
-          + annotate(
-            "text", 3, -6.5, label = bquote(s[Y]^2*"  = SSB"), color = "red"
-          )
-          + annotate(
-            "text", -3, -6.5, label = bquote("F =  "*s[Y]^2*"/"*s[X]^2)
-          )
-          )
-          ,
-          3, 3,
-          "F-Scaled-Distribution",
-          plot.scaled.f.distribution,
-          8, 6
+          4
         )
       )
-    ),
-    tar_target(
-      chic_poisson_illustration_somatic,
-      save_figures(
-        "figure/Somatic", extension,
-        tribble(
-          ~name, ~figure, ~width, ~height,
-          "CHIC-F-Test-Gaussian",
-          plot.chic.input.anova_H3K4_Somatic
-          + theme(aspect.ratio = 1),
-          6, 4
-        )
-      )
-    ),
-    tar_target(
-      supplemental_chic_model,
-      save_figures(
-        "chic/Model-Selection", extension,
-        tribble(
-          ~name, ~figure, ~width, ~height,
-          "Germline-F-Var",
-          plot.chic.input.anova_H3K4_Germline
-          + labs(
-            title = "ChIC Germline Equality of Variance",
-            subtitle = "H3K4 variance following null hypothesis is uncertain (dotted)"
-          ) + theme(aspect.ratio = 1),
-          6, 4,
-          "Somatic-F-Var",
-          plot.chic.input.anova_H3K4_Somatic
-          + labs(
-            title = "ChIC Somatic Equality of Variance",
-            subtitle = "H3K4 variance following null hypothesis is uncertain (dotted)"
-          ) + theme(aspect.ratio = 1),
-          6, 4
-        )
-      ),
-      format = "file"
     )
   ),
 
@@ -1754,7 +1572,6 @@ list(
 
   # Repli-Seq
   tar_file(run_fastqc_sh, "scripts/run_fastqc.sh"),
-  repli_targets,
 
   targets.bulk.samples,
   targets.chic,
