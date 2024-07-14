@@ -1286,8 +1286,8 @@ list(
   tar_map(
     mutate(
       chic.fpkm.data,
-      tss_sc_chr_quartile_data = rlang::syms(str_glue("tss_sc_chr_quartile_data_{name}")),
-      tss_sc_chr_active_data = rlang::syms(str_glue("tss_sc_chr_active_data_{name}"))
+      sc_chr_quartile_data_TSS = rlang::syms(str_glue("sc_chr_quartile_data_{name}_TSS")),
+      sc_chr_active_data_TSS = rlang::syms(str_glue("sc_chr_active_data_{name}_TSS"))
     ),
     names = name,
     tar_file(
@@ -1299,7 +1299,7 @@ list(
           ~rowname, ~figure, ~width, ~height,
           "CHIC-TSS-Chr-AllMarks-RNAseq-Quartile", 
           chic_plot_average_profiles_facet_grid(
-            dplyr::rename(tss_sc_chr_quartile_data, genes=quant),
+            dplyr::rename(sc_chr_quartile_data_TSS, genes=quant),
             "CPM Quartile",
             setNames(sc_quartile_colors, NULL)
           ),
@@ -1307,7 +1307,7 @@ list(
           12,
           "CHIC-TSS-Chr-AllMarks-RNAseq",
           chic_plot_average_profiles_facet_grid(
-            dplyr::rename(tss_sc_chr_active_data, genes=activity),
+            dplyr::rename(sc_chr_active_data_TSS, genes=activity),
             "CPM Quartile",
             rep(chic_line_track_colors[[tolower(name)]], 2)
           )
@@ -1320,9 +1320,9 @@ list(
   ),
   tar_map(
     tribble(
-      ~celltype, ~tss_sc_chr_nucleosome_data, ~granges,
-      "Germline", rlang::sym("tss_sc_chr_nucleosome_data_Germline"), rlang::sym("chic.experiment.quantify_H3K4_Germline_CN_chr"),
-      "Somatic", rlang::sym("tss_sc_chr_nucleosome_data_Somatic"), rlang::sym("chic.experiment.quantify_H3K4_Somatic_CN_chr")
+      ~celltype, ~sc_chr_nucleosome_data_TSS, ~granges,
+      "Germline", rlang::sym("sc_chr_nucleosome_data_Germline_TSS"), rlang::sym("chic.experiment.quantify_H3K4_Germline_CN_chr"),
+      "Somatic", rlang::sym("sc_chr_nucleosome_data_Somatic_TSS"), rlang::sym("chic.experiment.quantify_H3K4_Somatic_CN_chr")
     ),
     names = celltype,
     tar_target(
@@ -1334,7 +1334,7 @@ list(
           rowname="CHIC-TSS-Chr-Nucleosome-Occupancy-RNAseq",
           figure=list(
             chic_plot_average_profiles_facet_grid(
-              dplyr::rename(tss_sc_chr_nucleosome_data, genes=activity),
+              dplyr::rename(sc_chr_nucleosome_data_TSS, genes=activity),
               "",
               rep(chic_line_track_colors[[tolower(celltype)]], 2),
               faceter = facet_wrap(vars(facet)),
@@ -1360,7 +1360,7 @@ list(
         figure=list(
           (
             chic_plot_average_profiles_facet_grid(
-              list(Germline=tss_sc_chr_nucleosome_data_Germline, Somatic=tss_sc_chr_nucleosome_data_Somatic) %>%
+              list(Germline=sc_chr_nucleosome_data_Germline_TSS, Somatic=sc_chr_nucleosome_data_Somatic_TSS) %>%
                 bind_rows(.id = "name") %>%
                 arrange(desc(row_number())) %>%
                 mutate(genes=interaction(activity, ordered(name)), facet=facet %>% ordered(c("X","2","3","4"))),

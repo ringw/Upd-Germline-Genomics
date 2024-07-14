@@ -1134,7 +1134,7 @@ targets.chic <- list(
   tar_target(
     sc_chr_nucleosome_data_Germline_TSS,
     tibble(
-      chic_heatmap_facet_genes(chic.heatmap.tss.nucleosome_H3K27_Germline_CN_chr, subset(facet_genes, select=c(facet,activity,gene))),
+      chic_heatmap_facet_genes(chic.heatmap.tss.nucleosome_H3K27_Germline_CN_chr, subset(facet_genes_Germline_TSS, select=c(facet,activity,gene))),
       mark = ""
     ),
     format = "parquet"
@@ -1142,7 +1142,7 @@ targets.chic <- list(
   tar_target(
     sc_chr_nucleosome_data_Somatic_TSS,
     tibble(
-      chic_heatmap_facet_genes(chic.heatmap.tss.nucleosome_H3K27_Somatic_CN_chr, subset(facet_genes, select=c(facet,activity,gene))),
+      chic_heatmap_facet_genes(chic.heatmap.tss.nucleosome_H3K27_Somatic_CN_chr, subset(facet_genes_Somatic_TSS, select=c(facet,activity,gene))),
       mark = ""
     ),
     format = "parquet"
