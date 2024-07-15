@@ -730,7 +730,7 @@ targets.chic <- list(
             elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
             / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
           ) %>%
-            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% granges_to_normalize_summarize_fn(na.rm=T)) %>%
+            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% median(na.rm=T)) %>%
             `[`(chic.tile.diameter_1000_lookup) %>%
             log2 %>%
             replace(is.na(.), 0)
