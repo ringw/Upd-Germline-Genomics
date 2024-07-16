@@ -1175,12 +1175,81 @@ targets.chic <- list(
       ),
     format = "parquet"
   ),
+  tar_target(
+    chic.gene.enrichment.broad,
+    tibble(
+      read.csv(assay.data.sc),
+      chr.test = chr %>%
+        replace(!(. %in% names(chr.lengths)) | is.na(start) | is.na(end), "*"),
+      windows.broad = findOverlaps(
+        GRanges(
+          chr.test,
+          IRanges(
+            start=start %>% replace(is.na(.), 1),
+            end=end %>% replace(is.na(.), 1)
+          ),
+          seqlengths = c(seqlengths(chic.tile.diameter_500_score_chr), `*`=1)
+        ),
+        chic.tile.diameter_500_score_chr
+      ) %>%
+        as("List") %>%
+        as.list,
+      as_tibble(
+        sapply(
+          list(
+            H3K4_Germline=chic.experiment.quantify_H3K4_Germline_peakcalling.broad_chr,
+            H3K27_Germline=chic.experiment.quantify_H3K27_Germline_peakcalling.broad_chr,
+            H3K9_Germline=chic.experiment.quantify_H3K9_Germline_peakcalling.broad_chr,
+            H3K4_Somatic=chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_chr,
+            H3K27_Somatic=chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_chr,
+            H3K9_Somatic=chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_chr
+          ),
+          \(gr) sapply(
+            windows.broad,
+            \(w) with(
+              elementMetadata(gr)[w, ],
+              mean(
+                p_peak < 0.001 & L2FC > 0,
+                na.rm=T
+              ) %>%
+                replace(!is.finite(.), NA)
+            )
+          ),
+          simplify=FALSE
+        )
+      )
+    ) %>%
+      reframe(
+        symbol = X,
+        flybase,
+        chr,
+        start,
+        end,
+        strand,
+        H3K4_Germline,
+        H3K27_Germline,
+        H3K9_Germline,
+        H3K4_Somatic,
+        H3K27_Somatic,
+        H3K9_Somatic
+      ),
+    format = "parquet"
+  ),
 
   tar_file(
     sd_chic_fragments,
     publish_chic_fragments(
       list(Germline=chic.nucleosome.fragment.stats_Germline, Somatic=chic.nucleosome.fragment.stats_Somatic),
       list(Germline=chic.h3.mapq.stats_Germline, Somatic=chic.h3.mapq.stats_Somatic),
+      peaks_publish = tibble(
+        chic.gene.enrichment,
+        H3K4_Germline_Broad = chic.gene.enrichment.broad$H3K4_Germline,
+        H3K27_Germline_Broad = chic.gene.enrichment.broad$H3K27_Germline,
+        H3K9_Germline_Broad = chic.gene.enrichment.broad$H3K9_Germline,
+        H3K4_Somatic_Broad = chic.gene.enrichment.broad$H3K4_Somatic,
+        H3K27_Somatic_Broad = chic.gene.enrichment.broad$H3K27_Somatic,
+        H3K9_Somatic_Broad = chic.gene.enrichment.broad$H3K9_Somatic
+      ),
       "Supplemental_Data/SD03_Bulk_Sequence_Stats.xlsx"
     )
   ),

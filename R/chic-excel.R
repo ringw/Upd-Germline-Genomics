@@ -1,6 +1,7 @@
 publish_chic_fragments <- function(
   frag_size_tables_publish,
   mapq_tables_publish,
+  peaks_publish,
   output_path
 ) {
   wb <- createWorkbook()
@@ -66,7 +67,166 @@ publish_chic_fragments <- function(
     start_row <- start_row + 1 + 1 + nrow(tbl) + 1
   }
 
+  publish_additional_data(
+    wb,
+    "ChIC Peak Calling",
+    peaks_publish
+  )
+
+  publish_peaks_contingency_tables(
+    wb,
+    "ChIC Mono&bivalency",
+    peaks_publish
+  )
+
   dir.create(dirname(output_path), showW=F, rec=F)
   saveWorkbook(wb, output_path, overwrite=T)
   output_path <- output_path
+}
+
+publish_additional_data <- function(
+  wb,
+  title,
+  df,
+  percent_columns = 13:18
+) {
+  addWorksheet(wb, title)
+  writeData(
+    wb,
+    title,
+    matrix(
+      "One-Tailed p-value"
+    ),
+    startCol = 7, startRow = 1,
+    colNames = F
+  )
+  writeData(
+    wb,
+    title,
+    matrix(
+      "Gene Body % Enriched (% of sliding windows p < 0.001)"
+    ),
+    startCol = 13, startRow = 1,
+    colNames = F
+  )
+  writeDataTable(
+    wb,
+    title,
+    df,
+    startCol = 1, startRow = 2,
+    withFilter=T,
+    tableStyle = excel_tables$deepgreen
+  )
+  # Write % number format.
+  addStyle(
+    wb,
+    title,
+    createStyle(numFmt = "0%"),
+    rows = seq(3, 2 + nrow(df)),
+    cols = percent_columns,
+    gridExpand=TRUE
+  )
+}
+
+publish_peaks_contingency_tables <- function(
+  wb,
+  title,
+  df
+) {
+  addWorksheet(wb, title)
+  writeData(
+    wb,
+    title,
+    matrix(
+      c(
+        "Germline Valency (p < 0.001)",
+        "no H3K4",
+        "enr H3K4"
+      )
+    ),
+    startCol = 1, startRow = 1,
+    colNames = F
+  )
+  tbl <- tribble(
+    ~`no H3K27`, ~`enr H3K27`,
+    sum(
+      df$H3K4_Germline >= 0.001
+      &
+      df$H3K27_Germline >= 0.001,
+      na.rm=T
+    ),
+    sum(
+      df$H3K4_Germline >= 0.001
+      &
+      df$H3K27_Germline < 0.001,
+      na.rm=T
+    ),
+    sum(
+      df$H3K4_Germline < 0.001
+      &
+      df$H3K27_Germline >= 0.001,
+      na.rm=T
+    ),
+    sum(
+      df$H3K4_Germline < 0.001
+      &
+      df$H3K27_Germline < 0.001,
+      na.rm=T
+    )
+  )
+  writeData(
+    wb,
+    title,
+    tbl,
+    startCol = 2, startRow = 2,
+    colNames = F
+  )
+
+  writeData(
+    wb,
+    title,
+    matrix(
+      c(
+        "Somatic Valency (p < 0.001)",
+        "no H3K4",
+        "enr H3K4"
+      )
+    ),
+    startCol = 5, startRow = 1,
+    colNames = F
+  )
+  tbl <- tribble(
+    ~`no H3K27`, ~`enr H3K27`,
+    sum(
+      df$H3K4_Somatic >= 0.001
+      &
+      df$H3K27_Somatic >= 0.001,
+      na.rm=T
+    ),
+    sum(
+      df$H3K4_Somatic >= 0.001
+      &
+      df$H3K27_Somatic < 0.001,
+      na.rm=T
+    ),
+    sum(
+      df$H3K4_Somatic < 0.001
+      &
+      df$H3K27_Somatic >= 0.001,
+      na.rm=T
+    ),
+    sum(
+      df$H3K4_Somatic < 0.001
+      &
+      df$H3K27_Somatic < 0.001,
+      na.rm=T
+    )
+  )
+  writeData(
+    wb,
+    title,
+    tbl,
+    startCol = 6, startRow = 2,
+    colNames = F
+  )
 }
