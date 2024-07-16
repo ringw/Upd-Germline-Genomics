@@ -723,7 +723,7 @@ targets.chic <- list(
     ),
     tar_file(
       chic.bw.track.wide,
-      if (bp_name != "peakcalling")
+      if (!grepl("peakcalling", bp_name))
         GRanges(
           chic.tile.diameter_1000,
           score = (
