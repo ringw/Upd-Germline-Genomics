@@ -112,7 +112,8 @@ targets.repli <- list(
         bulk_reads_shortrefs = if (name == "masked")
           list(call("rbind", bulk_reads_misc, rlang::sym(str_glue("bulk_reads_2L_Histone_Repeat_Unit_repli.bam_{repli_target}_masked"))))
         else
-          list(bulk_reads_misc)
+          list(bulk_reads_misc),
+        markdup = isTRUE(is_paired_end)
       ),
     names = suffix,
     tar_target(
@@ -124,7 +125,6 @@ targets.repli <- list(
           width = pull(bulk_reads_idxstats, "rlength", "rname")[levels(bulk_reads_misc$rname)]
         ),
         score = bulk_reads_shortrefs %>%
-          subset(between(mapq, 20, 254)) %>%
           split(.$rname) %>%
           sapply(\(df) sum(df$dc)),
         seqlengths = pull(bulk_reads_idxstats, "rlength", "rname")[levels(bulk_reads_misc$rname)]
@@ -137,7 +137,7 @@ targets.repli <- list(
             mapply(
               \(n, df) df %>%
                 mutate(rname = factor(rname, levels=n)) %>%
-                bam_cover_read_bp(min_mapq = 20, markdup = FALSE) %>%
+                bam_cover_read_bp(min_mapq = 0, markdup = markdup) %>%
                 count_overlaps_sparse_vectors(tile_width=1000L),
               names(.),
               .,
