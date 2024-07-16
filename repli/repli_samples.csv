@@ -1,11 +1,7 @@
 genotype,replication_value,rep,is_paired_end,filename
-nos,-0.75,1,,GSC_Early_Replicate_1_S12_L004_R1_001.fastq.gz
 nos,-0.75,2,,GSC_Early_Replicate_2_S10_L004_R1_001.fastq.gz
-nos,-0.25,1,,GSC_Early-Mid_Replicate_1_S6_L004_R1_001.fastq.gz
 nos,-0.25,2,,GSC_Early-Mid_Replicate_2_S13_L004_R1_001.fastq.gz
-nos,0.25,1,,GSC_Late-Mid_Replicate_1_S2_L004_R1_001.fastq.gz
 nos,0.25,2,,GSC_Late-Mid_Replicate_2_S1_L004_R1_001.fastq.gz
-nos,0.75,1,,GSC_Late_Replicate_1_S5_L004_R1_001.fastq.gz
 nos,0.75,2,,GSC_Late_Replicate_2_S14_L004_R1_001.fastq.gz
 tj,-0.75,1,,Tj_Early_Replicate_1_S4_L004_R1_001.fastq.gz
 tj,-0.75,2,,Tj_Early_Replicate_2_S3_L004_R1_001.fastq.gz
@@ -21,7 +17,5 @@ nos,-0.25,3,TRUE,KZ2851/GCJU03_S23_L002
 nos,-0.25,4,TRUE,KZ2851/GCJU04_S24_L002
 nos,0.25,3,TRUE,KZ2851/GCJU05_S25_L002
 nos,0.25,4,TRUE,KZ2851/GCJU06_S26_L002
-nos,0.25,5,TRUE,KZ2851/GCJU07_S27_L002
 nos,0.75,3,TRUE,KZ2851/GCJU08_S28_L002
 nos,0.75,4,TRUE,KZ2851/GCJU09_S29_L002
-nos,0.75,5,TRUE,KZ2851/GCJU10_S30_L002
