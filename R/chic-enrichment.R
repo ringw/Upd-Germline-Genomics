@@ -154,7 +154,7 @@ enrich_int_list <- function(p_peak_granges, int_list) {
       min(
         p_peak[L2FC > 0],
         if (length(p_peak) > 0) 1 else numeric(0),
-        na.rm=T
+        na.rm = T
       ) %>%
         replace(!is.finite(.), NA)
     )
@@ -165,7 +165,8 @@ write_chic_peaks <- function(peak_table_list, output_path) {
   dir.create(dirname(output_path), recursive = TRUE, showW = FALSE)
   peaks_bed <- peak_table_list %>%
     sapply(
-      \(tab) tab %>% subset(q < 0.1), simplify=F
+      \(tab) tab %>% subset(q < 0.1),
+      simplify = F
     ) %>%
     bind_rows(.id = "mark") %>%
     mutate(
@@ -177,21 +178,21 @@ write_chic_peaks <- function(peak_table_list, output_path) {
           c(0, 1e-4, 1e-3, 1e-2, 5e-2, 1e-1, Inf)
         ) %>%
           fct_recode(
-            `****`='(0,0.0001]',
-            `***`='(0.0001,0.001]',
-            `**`='(0.001,0.01]',
-            `*`='(0.01,0.05]',
-            `~`='(0.05,0.1]'
+            `****` = "(0,0.0001]",
+            `***` = "(0.0001,0.001]",
+            `**` = "(0.001,0.01]",
+            `*` = "(0.01,0.05]",
+            `~` = "(0.05,0.1]"
           ),
         ")"
       )
     ) %>%
-    subset(select=c(chr,start,end,mark)) %>%
+    subset(select = c(chr, start, end, mark)) %>%
     arrange(chr, start, mark)
   with_options(
-    list(scipen=100),
+    list(scipen = 100),
     peaks_bed %>%
-      write.table(output_path, sep="\t", quote = F, row.names = F, col.names = F)
+      write.table(output_path, sep = "\t", quote = F, row.names = F, col.names = F)
   )
   output_path
 }
@@ -199,7 +200,7 @@ write_chic_peaks <- function(peak_table_list, output_path) {
 chic_track_generate_table_by_enrichment <- function(chic_df_list, enrichment_threshold = 1.5) {
   enrichment_track <- chic_df_list %>%
     sapply(\(df) df %>% with(Rle(enrichment, length))) %>%
-    RleList
+    RleList()
   grouped_df <- (enrichment_track >= enrichment_threshold) %>%
     mapply(
       \(name, rle, p_values) tibble(
@@ -222,11 +223,11 @@ chic_track_generate_table_by_enrichment <- function(chic_df_list, enrichment_thr
               sapply(p, mean)
             )
           )
-          # sapply(min)
+        # sapply(min)
       ),
       names(chic_df_list),
       .,
-      chic_df_list %>% chic_df_list_to_pvalue_list,
+      chic_df_list %>% chic_df_list_to_pvalue_list(),
       SIMPLIFY = FALSE
     ) %>%
     bind_rows(.id = "chr") %>%
@@ -247,27 +248,28 @@ chic_squeeze_var <- function(rle_lists, sample_size = 50) {
   # For chr name, build the list of limma squeezeVar models.
   build_limma_model <- function(chr) {
     limma_chr <- tibble(
-      begin = seq(0, rle_lengths[chr], by=sample_size),
+      begin = seq(0, rle_lengths[chr], by = sample_size),
       end = pmin(begin + sample_size, rle_lengths[chr]),
       length = end - begin,
       x = ceiling((begin + end) / 2)
     )
     square <- \(x) x^2
-    chr_vars <- rle_lists %>% sapply(
-      \(rle_list) rle_list[[chr]][limma_chr$x] %>% as.numeric,
-      simplify=FALSE
-    ) %>%
+    chr_vars <- rle_lists %>%
+      sapply(
+        \(rle_list) rle_list[[chr]][limma_chr$x] %>% as.numeric(),
+        simplify = FALSE
+      ) %>%
       do.call(cbind, .) %>%
-      square
+      square()
     limma_chr$limma_model <- apply(
       chr_vars,
       1,
       \(vars) squeezeVar(vars, df),
-      simplify=FALSE
+      simplify = FALSE
     )
     limma_chr
   }
-  limma_models <- sapply(names(rle_lengths), build_limma_model, simplify=FALSE)
+  limma_models <- sapply(names(rle_lengths), build_limma_model, simplify = FALSE)
 
   var_post_tracks <- sapply(
     names(rle_lists) %>% setNames(seq_along(.), .),
@@ -280,7 +282,7 @@ chic_squeeze_var <- function(rle_lists, sample_size = 50) {
         ) %>%
         with(Rle(var.post, length))
     ) %>%
-      RleList
+      RleList()
   )
   df_track <- sapply(
     limma_models,
@@ -291,53 +293,52 @@ chic_squeeze_var <- function(rle_lists, sample_size = 50) {
       ) %>%
       with(Rle(df.prior, length))
   ) %>%
-    RleList
+    RleList()
   list(var = var_post_tracks, df = df_track)
 }
 
 chic_ttest <- function(
-  mod_track,
-  input_track,
-  sd_track,
-  df_track,
-  sample_size = 50
-) {
+    mod_track,
+    input_track,
+    sd_track,
+    df_track,
+    sample_size = 50) {
   rle_lengths <- sapply(mod_track, length)
   df_residual <- attr(input_track, "n") - 1
   t_test_results <- sapply(
     names(mod_track),
     \(chr)
-      tibble(
-        begin = seq(0, rle_lengths[chr], by=sample_size),
-        end = pmin(begin + sample_size, rle_lengths[chr]),
-        length = end - begin,
-        x = ceiling((begin + end) / 2),
-        enrichment = (mod_track[[chr]][x] / input_track[[chr]][x]) %>%
-          as.numeric %>%
-          replace(as.logical(input_track[[chr]][x] < 1), NA)
-      ) %>%
+    tibble(
+      begin = seq(0, rle_lengths[chr], by = sample_size),
+      end = pmin(begin + sample_size, rle_lengths[chr]),
+      length = end - begin,
+      x = ceiling((begin + end) / 2),
+      enrichment = (mod_track[[chr]][x] / input_track[[chr]][x]) %>%
+        as.numeric() %>%
+        replace(as.logical(input_track[[chr]][x] < 1), NA)
+    ) %>%
       mutate(
         p = pt(
           (
             as.numeric(mod_track[[chr]][x])
             - as.numeric(input_track[[chr]][x])
           ) / as.numeric(sd_track[[chr]][x])
-          / sqrt(
-            1 / attr(mod_track, "n")
-            + 1 / attr(input_track, "n")
-          ),
+            / sqrt(
+              1 / attr(mod_track, "n")
+                + 1 / attr(input_track, "n")
+            ),
           as.numeric(df_track[[chr]][x]) + df_residual,
           lower.tail = FALSE
         )
       ),
-    simplify=FALSE
+    simplify = FALSE
   )
 }
 
 chic_df_list_to_pvalue_list <- function(df_list) {
   df_list %>%
     sapply(\(df) df %>% with(Rle(p, length))) %>%
-    RleList
+    RleList()
 }
 
 chic_quantify_broad_peaks <- function(track, track_mask, features, enrichment = 1.5, resolution = 10) {
@@ -350,7 +351,7 @@ chic_quantify_broad_peaks <- function(track, track_mask, features, enrichment = 
         "Rle"
       )
     ) %>%
-      RleList
+      RleList()
   )
   feature_values <- features %>%
     filter(
@@ -364,8 +365,8 @@ chic_quantify_broad_peaks <- function(track, track_mask, features, enrichment = 
       \(chr_name, chr_features) {
         feature_names <- rownames(chr_features)
         chr_features <- chr_features %>%
-          rowwise %>%
-          mutate(all_pos = seq(min(start, end), max(start, end)) %>% list)
+          rowwise() %>%
+          mutate(all_pos = seq(min(start, end), max(start, end)) %>% list())
         feature_factor <- rep(
           rownames(chr_features),
           sapply(chr_features$all_pos, length)
@@ -382,7 +383,7 @@ chic_quantify_broad_peaks <- function(track, track_mask, features, enrichment = 
       },
       names(.),
       .,
-      SIMPLIFY=FALSE
+      SIMPLIFY = FALSE
     ) %>%
     setNames(NULL) %>%
     do.call(c, .)
@@ -391,22 +392,29 @@ chic_quantify_broad_peaks <- function(track, track_mask, features, enrichment = 
 display_peak_location_stats <- function(lst) {
   lst %>%
     sapply(
-      \(df) df$region %>% table %>% enframe, simplify=FALSE
+      \(df) df$region %>%
+        table() %>%
+        enframe(),
+      simplify = FALSE
     ) %>%
     bind_rows(.id = "mark") %>%
     mutate(
       mark = mark %>% factor(chic.mark.data$mark),
-      name = name %>% factor(lst[[1]]$region %>% levels)
+      name = name %>% factor(lst[[1]]$region %>% levels())
     ) %>%
     ggplot(
       aes(x = name, y = value, fill = mark)
-    ) + geom_bar(
+    ) +
+    geom_bar(
       stat = "identity", position = "dodge"
-    ) + scale_y_continuous(
+    ) +
+    scale_y_continuous(
       expand = expansion(mult = c(0, 0.05))
-    ) + scale_fill_viridis_d(
+    ) +
+    scale_fill_viridis_d(
       option = "turbo", begin = 0.3, end = 0.9
-    ) + labs(
+    ) +
+    labs(
       x = "Genomic Annotation",
       y = "Number of Peaks (q < 0.05)"
     )
