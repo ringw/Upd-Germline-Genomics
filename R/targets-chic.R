@@ -774,6 +774,194 @@ targets.chic <- list(
     )
   ),
 
+  tar_target(
+    chic.experiment.nucleosomes,
+    chic.tile.diameter_40_score_chr %>%
+      `elementMetadata<-`(
+        value = cbind(
+          elementMetadata(chic.experiment.granges_H3K27_Germline_CN_chr) %>%
+            subset(select=c(score.H3_Rep1, score.H3_Rep3, score.H3_Rep20240528)),
+          elementMetadata(chic.experiment.granges_H3K27_Somatic_CN_chr) %>%
+            subset(select=c(score.H3_Rep1, score.H3_Rep4, score.H3_Rep5))
+        ) %>%
+          `colnames<-`(
+            value = as.character(interaction(rep(c("GSC", "CySC"), each=3), 1:3))
+          )
+      )
+  ),
+  tar_target(
+    chic.experiment.nucleosomes.offset,
+    cbind(
+      chic.experiment.granges.offset.euchromatin_H3K27_Germline_CN_chr[
+        , c("score.H3_Rep1", "score.H3_Rep3", "score.H3_Rep20240528")
+      ],
+      chic.experiment.granges.offset.euchromatin_H3K27_Somatic_CN_chr[
+        , c("score.H3_Rep1", "score.H3_Rep4", "score.H3_Rep5")
+      ]
+    ) %>%
+      `colnames<-`(value = colnames(chic.experiment.nucleosomes))
+  ),
+  tar_target(
+    chic.experiment.quantify.nucleosomes,
+    chic_quantify(
+      chic.experiment.nucleosomes,
+      structure(
+        c(2L, 2L, 2L, 1L, 1L, 1L),
+        levels=c("H3.CySC", "H3.GSC"),
+        class = "factor"
+      ),
+      rep(1L, 6),
+      chic.experiment.nucleosomes.offset,
+      test_de = TRUE,
+      test_wald = TRUE
+    )
+  ),
+  tar_target(
+    chic.experiment.nuccall.background,
+    GRanges(
+      chic.tile.diameter_40_score_chr,
+      logMu_H3.CySC = log(chic.experiment.quantify_H3K27_Somatic_CN_chr$score.molH3),
+      logMu_H3.GSC = log(chic.experiment.quantify_H3K27_Germline_CN_chr$score.molH3)
+    ) %>%
+      split(seqnames(.)) %>%
+      sapply(
+        \(gr) if (length(gr) >= 50)
+          gr %>%
+            `elementMetadata<-`(
+              value = gr %>%
+                elementMetadata %>%
+                apply(
+                  2,
+                  \(v) v %>%
+                    list %>%
+                    mapply(
+                      \(v, k) rollapply(v, k, median, fill=0, align="center"),
+                      .,
+                      c(1000/20, 5000/20, 10000/20)
+                    ) %>%
+                    rowMaxs %>%
+                    pmax(0),
+                  simplify=FALSE
+                ) %>%
+                do.call(tibble, .)
+            )
+        else gr
+      ) %>%
+      GRangesList %>%
+      unlist
+  ),
+  tar_target(
+    chic.test.nucleosomes,
+    GRanges(
+      chic.tile.diameter_40_score_chr,
+      p_CySC_nuc = pnorm(
+        log(chic.experiment.quantify.nucleosomes$score.molH3.CySC),
+        chic.experiment.nuccall.background$logMu_H3.CySC,
+        sd = chic.experiment.quantify.nucleosomes$se_H3.CySC,
+        lower.tail = FALSE
+      ),
+      p_GSC_nuc = pnorm(
+        log(chic.experiment.quantify.nucleosomes$score.molH3.GSC),
+        chic.experiment.nuccall.background$logMu_H3.GSC,
+        sd = chic.experiment.quantify.nucleosomes$se_H3.GSC,
+        lower.tail = FALSE
+      ),
+      p_diff_two_tail = chic.experiment.quantify.nucleosomes$p_peak,
+      L2FC = chic.experiment.quantify.nucleosomes$L2FC
+    )
+  ),
+  tar_file(
+    chic.test.nucleosomes.bw.tracks,
+    tibble(
+      name = c("Somatic_Nucleosome", "Germline_Nucleosome", "Germline_Nuc_Diff_Depleted", "Germline_Nuc_Diff_Enriched"),
+      trck = list(
+        chic.test.nucleosomes$p_CySC_nuc,
+        chic.test.nucleosomes$p_GSC_nuc,
+        pmin(1, 2 * chic.test.nucleosomes$p_diff_two_tail) %>%
+          replace(which(chic.test.nucleosomes$p_CySC_nuc >= 0.05), NA) %>%
+          replace(which(is.na(chic.test.nucleosomes$p_CySC_nuc)), NA),
+        pmin(1, 2 * (1 - chic.test.nucleosomes$p_diff_two_tail)) %>%
+          replace(which(chic.test.nucleosomes$p_GSC_nuc >= 0.05), NA) %>%
+          replace(which(is.na(chic.test.nucleosomes$p_GSC_nuc)), NA)
+      )
+    ) %>%
+      rowwise %>%
+      reframe(
+        write_raw = GRanges(chic.tile.diameter_40_score_chr, score = trck %>% replace_na(1)) %>%
+          export(BigWigFile(str_glue("chic/chr/{name}_PValue.bw"))) %>%
+          as.character,
+        write_indicator = GRanges(chic.tile.diameter_40_score_chr, score = trck %>% `<=`(0.05) %>% as.numeric %>% replace_na(0)) %>%
+          export(BigWigFile(str_glue("chic/chr/{name}_Location.bw"))) %>%
+          as.character
+      ) %>%
+      unlist,
+    packages = tar_option_get("packages") %>% c("tidyr")
+  ),
+  tar_target(
+    chic.test.nucleosomes.fix_Germline,
+    nucleosomes_cleanup_tracks(
+      chic.tile.diameter_40_score_chr,
+      chic.test.nucleosomes$p_GSC_nuc,
+      pmin(1, 2 * (1 - chic.test.nucleosomes$p_diff_two_tail))
+    ),
+    packages = tar_option_get("packages") %>% c("tidyr")
+  ),
+  tar_target(
+    chic.test.nucleosomes.fix_Somatic,
+    nucleosomes_cleanup_tracks(
+      chic.tile.diameter_40_score_chr,
+      chic.test.nucleosomes$p_CySC_nuc,
+      pmin(1, 2 * chic.test.nucleosomes$p_diff_two_tail)
+    ),
+    packages = tar_option_get("packages") %>% c("tidyr")
+  ),
+  tar_file(
+    chic.test.nucleosomes.fix.bw.tracks,
+    tibble(
+      name = c("Somatic_Nucleosome", "Germline_Nucleosome", "Germline_Nuc_Diff_Depleted", "Germline_Nuc_Diff_Enriched"),
+      gr = list(
+        chic.test.nucleosomes.fix_Somatic$Nucleosomes,
+        chic.test.nucleosomes.fix_Germline$Nucleosomes,
+        chic.test.nucleosomes.fix_Somatic$Diff_Enriched,
+        chic.test.nucleosomes.fix_Germline$Diff_Enriched
+      )
+    ) %>%
+      rowwise %>%
+      reframe(
+        write_fix = gr %>%
+          split(seqnames(gr)) %>%
+          as.list %>%
+          enframe %>%
+          rowwise %>%
+          reframe(
+            value = coverage(value)[[name]] %>%
+              attributes %>%
+              with(
+                if (length(lengths) == 0)
+                  GRanges()
+                else GRanges(
+                  name,
+                  IRanges(
+                    cumsum(c(1, lengths[-length(lengths)])),
+                    width = lengths
+                  ),
+                  score = as.numeric(values)
+                )
+              ) %>%
+              list
+          ) %>%
+          unlist(use.names = F) %>%
+          GRangesList %>%
+          unlist(use.names = F) %>%
+          GRanges(
+            seqinfo = seqinfo(chic.tile.diameter_40_score_chr)
+          ) %>%
+          export(BigWigFile(str_glue("chic/chr/{name}_Fix.bw"))) %>%
+          as.character
+      ) %>%
+      unlist
+  ),
+
   # Binning of chic H3 fragments by length and by mapq.
   tar_target(
     chic.nucleosome.fragment.stats.cut.bounds,

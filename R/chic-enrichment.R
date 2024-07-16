@@ -1,12 +1,12 @@
 chic_quantify <- function(
-  chic_experiment,
-  molecule,
-  replicate_nums,
-  offset,
-  global_overdispersion=TRUE,
-  test_de=FALSE
-) {
-  if (length(unique(replicate_nums)) == 1)
+    chic_experiment,
+    molecule,
+    replicate_nums,
+    offset,
+    global_overdispersion = TRUE,
+    test_de = FALSE,
+    test_wald = FALSE) {
+  if (length(replicate_nums) <= 2) {
     return(
       GRanges(
         seqnames(chic_experiment),
@@ -18,31 +18,103 @@ chic_quantify <- function(
             / exp(offset)
           ) %>%
             replace(. < 1e-8, 0) %>%
-            as.data.frame %>%
+            as.data.frame() %>%
             cbind(
-              p_peak=1, L2FC=0
+              p_peak = 1, L2FC = 0
             )
         )
     )
+  }
+  # We put "molecule" and "rep" in our tar_map, so create new names. As
+  # "molecule" coefs come first, our p_peak contrast will be the log fold
+  # change between the two levels of "molecule".
+  if (length(unique(replicate_nums)) > 1)
+    R <- replicate_nums %>%
+      factor() %>%
+      `contrasts<-`(
+        value = contr.helmert(length(levels(.)))
+      )
+  else R <- NA
+  if (length(unique(replicate_nums)) > 1) fmla <- ~ 0 + mol + R
+  else fmla <- ~ 0 + mol
   fit <- glm_gp(
     as.matrix(chic_experiment@elementMetadata),
-    # We put "molecule" and "rep" in our tar_map, so create new names. As
-    # "molecule" coefs come first, our p_peak contrast will be the log fold
-    # change between the two levels of "molecule".
-    ~ 0 + mol + R,
+    fmla,
     tibble(
       mol = molecule,
-      R = replicate_nums %>%
-        factor %>%
-        `contrasts<-`(value = contr.helmert(length(levels(.))))
+      R
     ),
     size_factors = 1,
     offset = offset,
     overdispersion = list(TRUE, "global")[
-      c(isFALSE(global_overdispersion), isTRUE(global_overdispersion))][[1]],
+      c(isFALSE(global_overdispersion), isTRUE(global_overdispersion))
+    ][[1]],
     overdispersion_shrinkage = list(TRUE, FALSE)[
-      c(isFALSE(global_overdispersion), isTRUE(global_overdispersion))][[1]],
+      c(isFALSE(global_overdispersion), isTRUE(global_overdispersion))
+    ][[1]],
     verbose = TRUE
+  )
+  hypothesis_testing <- tibble(
+    if (test_de) {
+      test_de(
+        fit,
+        c(-1, 1) %>% c(rep(0, ncol(fit$Beta) - length(.))),
+        verbose = T
+      )
+    } else {
+      tibble(pval = 1, lfc = 0)
+    },
+    if (test_wald) {
+      with(
+        predict(
+          fit,
+          cbind(
+            diag(c(1, 1)),
+            matrix(0, nrow = 2, ncol = ncol(fit$Beta) - 2)
+          ),
+          offset = 0,
+          se.fit = T,
+          verbose = TRUE
+        ),
+        as_tibble(
+          cbind(
+            matrix(
+              fit,
+              nrow = nrow(fit),
+              ncol = ncol(fit),
+              dimnames = list(
+                NULL, paste0("logMu_", levels(as.factor(molecule)))
+              )
+            ),
+            matrix(
+              se.fit,
+              nrow = nrow(se.fit),
+              ncol = ncol(se.fit),
+              dimnames = list(
+                NULL, paste0("se_", levels(as.factor(molecule)))
+              )
+            )
+          )
+        )
+      )
+    } else {
+      as_tibble(
+        cbind(
+          matrix(
+            0,
+            nrow = nrow(fit$Beta),
+            ncol = 2,
+            dimnames = list(NULL, paste0("logMu_", levels(as.factor(molecule))))
+          ),
+          matrix(
+            0,
+            nrow = nrow(fit$Beta),
+            ncol = 2,
+            dimnames = list(NULL, paste0("se_", levels(as.factor(molecule))))
+          )
+        )
+      )
+    }
   )
   GRanges(
     seqnames(chic_experiment),
@@ -51,30 +123,25 @@ chic_quantify <- function(
   ) %>%
     `elementMetadata<-`(
       value = with(
-        if (test_de)
-          test_de(
-            fit,
-            c(-1, 1) %>% c(rep(0, ncol(fit$Beta) - length(.))),
-            verbose=T
-          )
-        else list(pval=1, lfc=0),
+        hypothesis_testing,
         tibble(
           as.data.frame(exp(fit$Beta)) %>%
             replace(. < 1e-8, 0) %>%
             rename_with(~ str_glue("score.{.}")),
-          p_peak=pval,
-          L2FC=lfc
+          p_peak = pval,
+          L2FC = lfc,
+          subset(hypothesis_testing, select=grep("logMu_|se_", colnames(hypothesis_testing)))
         )
       )
     ) %>%
     `metadata<-`(
       value = list(
-        overdispersions=fit$overdispersions,
-        overdispersion_shrinkage_list=fit$overdispersion_shrinkage_list,
-        deviances=fit$deviances,
-        ridge_penalty=fit$ridge_penalty,
-        model_matrix=fit$model_matrix,
-        design_formula=fit$design_formula
+        overdispersions = fit$overdispersions,
+        overdispersion_shrinkage_list = fit$overdispersion_shrinkage_list,
+        deviances = fit$deviances,
+        ridge_penalty = fit$ridge_penalty,
+        model_matrix = fit$model_matrix,
+        design_formula = fit$design_formula
       )
     )
 }
@@ -343,4 +410,75 @@ display_peak_location_stats <- function(lst) {
       x = "Genomic Annotation",
       y = "Number of Peaks (q < 0.05)"
     )
+}
+
+nucleosomes_cleanup_tracks <- function(granges, p_nuc, p_enriched, nuc_size=147, step_size=20) {
+  p_enriched <- p_enriched %>%
+    replace(which(p_nuc >= 0.05), 1) %>%
+    replace(is.na(p_nuc), 1)
+  peaks <- p_nuc %>%
+    split(seqnames(granges)) %>%
+    mapply(
+      \(n, p) as(
+        (p < 0.05) %>% replace_na(FALSE), "Rle"
+      ) %>%
+        attributes %>%
+        with(
+          GRanges(
+            n,
+            IRanges(
+              cumsum(c(1, lengths[-length(lengths)])),
+              width = lengths
+            )
+          )[values]
+        ),
+      seqlevels(granges),
+      .
+    ) %>%
+    GRangesList
+  peaks <- peaks %>%
+    sapply(
+      \(gr) gr[width(gr) <= floor(nuc_size/step_size)] %>%
+        resize(floor(nuc_size/step_size), fix="center") %>%
+        GenomicRanges::reduce()
+    ) %>%
+    GRangesList
+  diff_enriched_logical <- mapply(
+    \(pk, pdiff) mapply(
+      \(start, end) min(
+        pdiff[pmax(1, start):pmin(length(pdiff), end)], na.rm=T
+      ) < 0.05,
+      start(pk),
+      end(pk)
+    ) %>%
+      as.logical,
+    peaks,
+    p_enriched %>% split(seqnames(granges)),
+    SIMPLIFY=FALSE
+  ) %>%
+    do.call(c, .)
+  nucs <- mapply(
+    \(gr, pk) GRanges(
+      seqnames(pk),
+      ranges = IRanges(
+        start = start(gr)[pmax(1, as.numeric(start(pk)))],
+        end = end(gr)[pmin(length(gr), as.numeric(end(pk)))]
+      ),
+      seqlengths = seqlengths(pk)
+    ),
+    granges %>% split(seqnames(granges)),
+    peaks
+  ) %>%
+    GRangesList %>%
+    unlist(use.names = F) %>%
+    resize(pmax(nuc_size, width(.)), fix="center")
+  diffs <- nucs[diff_enriched_logical]
+  list(
+    Nucleosomes = nucs[width(nucs) <= 2*nuc_size] %>%
+      GenomicRanges::reduce() %>%
+      resize(nuc_size, fix="center"),
+    Diff_Enriched = diffs[width(diffs) <= 2*nuc_size] %>%
+      GenomicRanges::reduce() %>%
+      resize(nuc_size, fix="center")
+  )
 }
