@@ -363,15 +363,6 @@ list(
     fit_glm(Upd_exons, Upd_model_matrix, metadata),
   ),
   tar_target(
-    Upd_cpm_new,
-    with(
-      Upd_regression_somatic,
-      cbind(germline = map[,1] - 0.5*map[,2], somatic = map[,1] + 0.5*map[,2]) %>%
-        exp %>%
-        table_to_tpm
-    ) %>% as.data.frame %>% rownames_to_column %>% as_tibble
-  ),
-  tar_target(
     Upd_regression_somatic,
     # prior_var was determined by fitting Upd_glm with ident + batch and without
     # the decontX terms (which grow the coef of interest when there is a trend
