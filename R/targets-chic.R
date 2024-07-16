@@ -778,6 +778,36 @@ targets.chic <- list(
         )
     )
   ),
+  # Tracks which are once per experiment. No parameter options, those have been
+  # fixed to particular tracks now!
+  tar_map(
+    tibble(
+      dplyr::rename(chic.experiments, celltype="name"),
+      chic.experiment.quantify_peakcalling.sharp = rlang::syms(
+        str_glue("chic.experiment.quantify_{mark}_{celltype}_peakcalling.sharp_chr")
+      ),
+      chic.experiment.quantify_peakcalling.broad = rlang::syms(
+        str_glue("chic.experiment.quantify_{mark}_{celltype}_peakcalling.broad_chr")
+      )
+    ),
+    names = mark | celltype,
+    tar_file(
+      chic.bw.track.peaks,
+      reduce_peaks_2_tracks(
+        chic.experiment.quantify_peakcalling.broad,
+        chic.experiment.quantify_peakcalling.sharp
+      ) %>%
+        peaks_to_genome_coverage() %>%
+        export(BigWigFile(with(list(mark=mark, celltype=celltype), str_glue("chic/chr/{celltype}_{mark}_CN_Enrichment_Peaks.bw")))) %>%
+        as.character,
+      packages = c(
+        "dplyr",
+        "GenomicRanges",
+        "rtracklayer",
+        "S4Vectors"
+      )
+    )
+  ),
 
   tar_target(
     chic.experiment.nucleosomes,
@@ -933,34 +963,8 @@ targets.chic <- list(
     ) %>%
       rowwise %>%
       reframe(
-        write_fix = gr %>%
-          split(seqnames(gr)) %>%
-          as.list %>%
-          enframe %>%
-          rowwise %>%
-          reframe(
-            value = coverage(value)[[name]] %>%
-              attributes %>%
-              with(
-                if (length(lengths) == 0)
-                  GRanges()
-                else GRanges(
-                  name,
-                  IRanges(
-                    cumsum(c(1, lengths[-length(lengths)])),
-                    width = lengths
-                  ),
-                  score = as.numeric(values)
-                )
-              ) %>%
-              list
-          ) %>%
-          unlist(use.names = F) %>%
-          GRangesList %>%
-          unlist(use.names = F) %>%
-          GRanges(
-            seqinfo = seqinfo(chic.tile.diameter_40_score_chr)
-          ) %>%
+        write_fix = GRanges(gr, seqinfo=seqinfo(chic.tile.diameter_40_score_chr)) %>%
+          peaks_to_genome_coverage() %>%
           export(BigWigFile(str_glue("chic/chr/{name}_Fix.bw"))) %>%
           as.character
       ) %>%

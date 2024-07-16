@@ -146,6 +146,36 @@ chic_quantify <- function(
     )
 }
 
+reduce_peaks_2_tracks <- function(
+    broad_track,
+    rough_track,
+    broad_track_window_size = 500,
+    rough_track_window_size = 40,
+    p = 0.001) {
+  chrs <- GRanges(
+    seqlevels(broad_track),
+    IRanges(1, width = seqlengths(broad_track))
+  )
+  bpeak <- broad_track[
+    broad_track$p_peak < p & broad_track$L2FC > 0
+  ] %>%
+    resize(broad_track_window_size, fix = "center") %>%
+    GenomicRanges::reduce()
+  rpeak <- rough_track[
+    rough_track$p_peak < p & rough_track$L2FC > 0
+  ] %>%
+    resize(rough_track_window_size, fix = "center") %>%
+    GenomicRanges::reduce()
+  rpeak <- rpeak[width(rpeak) >= 1.5 * rough_track_window_size]
+  all_peaks <- GRangesList(list(bpeak, rpeak)) %>%
+    unlist() %>%
+    GenomicRanges::reduce()
+  all_peaks %>%
+    restrict(
+      start=1L, end=seqlengths(broad_track)[as.character(seqnames(all_peaks))]
+    )
+}
+
 enrich_int_list <- function(p_peak_granges, int_list) {
   sapply(
     int_list,
@@ -420,7 +450,42 @@ display_peak_location_stats <- function(lst) {
     )
 }
 
-nucleosomes_cleanup_tracks <- function(granges, p_nuc, p_enriched, nuc_size=147, step_size=20) {
+# Converts object GRanges to coverage GRanges.
+# The objects must already be reduced. We will create a new "score" which is 1
+# for these objects, and 0 for runs of 0 coverage across the genome. The new
+# track is suitable for export to BigWig.
+peaks_to_genome_coverage <- function(object_granges) {
+  object_granges %>%
+    split(seqnames(object_granges)) %>%
+    as.list() %>%
+    enframe() %>%
+    rowwise() %>%
+    reframe(
+      value = coverage(value)[[name]] %>%
+        attributes() %>%
+        with(
+          if (length(lengths) == 0) {
+            GRanges()
+          } else {
+            GRanges(
+              name,
+              IRanges(
+                cumsum(c(1, lengths[-length(lengths)])),
+                width = lengths
+              ),
+              score = as.numeric(values)
+            )
+          }
+        ) %>%
+        list()
+    ) %>%
+    unlist(use.names = F) %>%
+    GRangesList() %>%
+    unlist(use.names = F) %>%
+    GRanges(seqinfo = seqinfo(object_granges))
+}
+
+nucleosomes_cleanup_tracks <- function(granges, p_nuc, p_enriched, nuc_size = 147, step_size = 20) {
   p_enriched <- p_enriched %>%
     replace(which(p_nuc >= 0.05), 1) %>%
     replace(is.na(p_nuc), 1)
