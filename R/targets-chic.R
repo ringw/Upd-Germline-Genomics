@@ -634,7 +634,7 @@ targets.chic <- list(
 
     tar_map(
       tibble(
-        bw = c(40, 100000),
+        bw = c(40, 2000),
         bw_name = str_glue("bw{str_trim(format(bw, scientific=F))}")
       ),
       names = bw_name,
@@ -653,7 +653,7 @@ targets.chic <- list(
       generate_chic_tracks(
         chic.experiment.quantify = chic.experiment.quantify,
         chic.experiment.quantify.smooth_bw40 = chic.experiment.quantify.smooth_bw40,
-        chic.experiment.quantify.smooth_bw100000 = chic.experiment.quantify.smooth_bw100000,
+        chic.experiment.quantify.smooth_bw2000 = chic.experiment.quantify.smooth_bw2000,
         granges_to_normalize = granges_to_normalize
       ) %>%
         rowwise %>%
@@ -693,8 +693,8 @@ targets.chic <- list(
         GRanges(
           chic.tile.diameter_1000,
           score = (
-            elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-            / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
+            elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 2]
+            / elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 1]
           ) %>%
             `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% median(na.rm=T)) %>%
             `[`(chic.tile.diameter_1000_lookup) %>%

@@ -3,17 +3,17 @@ log2 <- function(n) (log(n) / log(2))
 generate_chic_tracks <- function(
   chic.experiment.quantify,
   chic.experiment.quantify.smooth_bw40,
-  chic.experiment.quantify.smooth_bw100000,
+  chic.experiment.quantify.smooth_bw2000,
   granges_to_normalize
 ) {
   tribble(
     ~filename, ~score, ~score_smooth,
     "Rough_Input",
     list(elementMetadata(chic.experiment.quantify)[, 1]),
-    list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
+    list(elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 1]),
     "Rough_Mark",
     list(elementMetadata(chic.experiment.quantify)[, 2]),
-    list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
+    list(elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 2]),
     "Rough_Mark_L2FC",
     list(
       (
@@ -27,8 +27,8 @@ generate_chic_tracks <- function(
     ),
     list(
       (
-        elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-        / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
+        elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 2]
+        / elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 1]
       ) %>%
         `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% median(na.rm=T)) %>%
         pmax(2^-10) %>%
@@ -37,10 +37,10 @@ generate_chic_tracks <- function(
     ),
     "Imputed_Input",
     list(elementMetadata(chic.experiment.quantify)[, 1]),
-    list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
+    list(elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 1]),
     "Imputed_Mark",
     list(elementMetadata(chic.experiment.quantify)[, 2]),
-    list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
+    list(elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 2]),
     "Imputed_Mark_L2FC",
     list(
       (
@@ -54,8 +54,8 @@ generate_chic_tracks <- function(
     ),
     list(
       (
-        elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-        / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
+        elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 2]
+        / elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 1]
       ) %>%
         `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% median(na.rm=T)) %>%
         pmax(2^-10) %>%
@@ -64,10 +64,10 @@ generate_chic_tracks <- function(
     ),
     "FSeq_Input",
     list(elementMetadata(chic.experiment.quantify.smooth_bw40)[, 1]),
-    list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]),
+    list(elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 1]),
     "FSeq_Mark",
     list(elementMetadata(chic.experiment.quantify.smooth_bw40)[, 2]),
-    list(elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]),
+    list(elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 2]),
     "FSeq_Mark_L2FC",
     list(
       (
@@ -81,8 +81,8 @@ generate_chic_tracks <- function(
     ),
     list(
       (
-        elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 2]
-        / elementMetadata(chic.experiment.quantify.smooth_bw100000)[, 1]
+        elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 2]
+        / elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 1]
       ) %>%
         `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% median(na.rm=T)) %>%
         pmax(2^-10) %>%
@@ -95,7 +95,7 @@ generate_chic_tracks <- function(
 generate_chic_tracks_peakcalling <- function(
   chic.experiment.quantify,
   chic.experiment.quantify.smooth_bw40,
-  chic.experiment.quantify.smooth_bw100000,
+  chic.experiment.quantify.smooth_bw2000,
   granges_to_normalize
 ) {
   if (is.null(chic.experiment.quantify))
