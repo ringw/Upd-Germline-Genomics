@@ -445,24 +445,6 @@ list(
     apeglm_coef_table_sample(Upd_glm, coef = 5, shrinkage_cutoff = 0, prior_var = 0.8935249)
   ),
   sce_targets,
-  tar_combine(
-    Upd_pseudobulk,
-    sce_targets[["pseudobulk.tx_germline"]],
-    sce_targets[["pseudobulk.tx_somatic"]],
-    sce_targets[["pseudobulk.tx_spermatocyte"]],
-    sce_targets[["pseudobulk.tx_somaticprecursor"]],
-    sce_targets[["pseudobulk.tx_muscle"]],
-    command = cbind(sce.data, tx_file = c(!!!.x))
-  ),
-  tar_combine(
-    Upd_pseudobulk_sf,
-    sce_targets[["pseudobulk.library.size_germline"]],
-    sce_targets[["pseudobulk.library.size_somatic"]],
-    sce_targets[["pseudobulk.library.size_spermatocyte"]],
-    sce_targets[["pseudobulk.library.size_somaticprecursor"]],
-    sce_targets[["pseudobulk.library.size_muscle"]],
-    command = cbind(sce.data, size_factor = c(!!!.x))
-  ),
   # Pseudobulk by the genotype (Nos-GAL4 or tj-GAL4).
   tar_target(
     supplemental_genes,
