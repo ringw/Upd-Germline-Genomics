@@ -71,23 +71,6 @@ targets.repli <- list(
         "processx",
         "stringr"
       )
-    ),
-    tar_target(
-      repli.readcount,
-      as.integer(
-        run(
-          "bash",
-          c(
-            "-c",
-            paste0(
-              "rclone cat sharepoint:'Bio Data'/Upd_Tumor/Repli/",
-              filename,
-              " | gunzip -c | wc -l"
-            )
-          )
-        )$stdout
-      ),
-      packages = "processx"
     )
   ),
 
