@@ -495,7 +495,7 @@ nucleosomes_cleanup_tracks <- function(granges, p_nuc, p_enriched, nuc_size = 14
       \(n, p) as(
         (p < 0.05) %>% replace_na(FALSE), "Rle"
       ) %>%
-        attributes %>%
+        attributes() %>%
         with(
           GRanges(
             n,
@@ -508,26 +508,27 @@ nucleosomes_cleanup_tracks <- function(granges, p_nuc, p_enriched, nuc_size = 14
       seqlevels(granges),
       .
     ) %>%
-    GRangesList
+    GRangesList()
   peaks <- peaks %>%
     sapply(
-      \(gr) gr[width(gr) <= floor(nuc_size/step_size)] %>%
-        resize(floor(nuc_size/step_size), fix="center") %>%
+      \(gr) gr[width(gr) <= floor(nuc_size / step_size)] %>%
+        resize(floor(nuc_size / step_size), fix = "center") %>%
         GenomicRanges::reduce()
     ) %>%
-    GRangesList
+    GRangesList()
   diff_enriched_logical <- mapply(
     \(pk, pdiff) mapply(
       \(start, end) min(
-        pdiff[pmax(1, start):pmin(length(pdiff), end)], na.rm=T
+        pdiff[pmax(1, start):pmin(length(pdiff), end)],
+        na.rm = T
       ) < 0.05,
       start(pk),
       end(pk)
     ) %>%
-      as.logical,
+      as.logical(),
     peaks,
     p_enriched %>% split(seqnames(granges)),
-    SIMPLIFY=FALSE
+    SIMPLIFY = FALSE
   ) %>%
     do.call(c, .)
   nucs <- mapply(
@@ -542,16 +543,16 @@ nucleosomes_cleanup_tracks <- function(granges, p_nuc, p_enriched, nuc_size = 14
     granges %>% split(seqnames(granges)),
     peaks
   ) %>%
-    GRangesList %>%
+    GRangesList() %>%
     unlist(use.names = F) %>%
-    resize(pmax(nuc_size, width(.)), fix="center")
+    resize(pmax(nuc_size, width(.)), fix = "center")
   diffs <- nucs[diff_enriched_logical]
   list(
-    Nucleosomes = nucs[width(nucs) <= 2*nuc_size] %>%
+    Nucleosomes = nucs[width(nucs) <= 2 * nuc_size] %>%
       GenomicRanges::reduce() %>%
-      resize(nuc_size, fix="center"),
-    Diff_Enriched = diffs[width(diffs) <= 2*nuc_size] %>%
+      resize(nuc_size, fix = "center"),
+    Diff_Enriched = diffs[width(diffs) <= 2 * nuc_size] %>%
       GenomicRanges::reduce() %>%
-      resize(nuc_size, fix="center")
+      resize(nuc_size, fix = "center")
   )
 }
