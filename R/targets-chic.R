@@ -710,67 +710,70 @@ targets.chic <- list(
     ),
     tar_target(
       chic.heatmap.tss,
-      track_to_heatmap(
-        grep(
-          str_glue(
-            if (grepl("H3K9", chic.bw.tracks[1])) "FSeq" else "Imputed",
-            "_Mark_L2FC"
-          ), chic.bw.tracks, val=T
-        ) %>% BigWigFile %>% import %>%
-          attributes %>%
-          with(
-            GRanges(
-              seqnames,
-              ranges,
-              seqinfo = seqinfo,
-              score = exp(elementMetadata$score * log(2))
-            )
-          ),
-        as_tibble(read.csv(assay.data.sc)),
-        grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
-        mask_threshold = 0
-      )
+      if (!grepl("peakcalling", bp_name))
+        track_to_heatmap(
+          grep(
+            str_glue(
+              if (grepl("H3K9", chic.bw.tracks[1])) "FSeq" else "Imputed",
+              "_Mark_L2FC"
+            ), chic.bw.tracks, val=T
+          ) %>% BigWigFile %>% import %>%
+            attributes %>%
+            with(
+              GRanges(
+                seqnames,
+                ranges,
+                seqinfo = seqinfo,
+                score = exp(elementMetadata$score * log(2))
+              )
+            ),
+          as_tibble(read.csv(assay.data.sc)),
+          grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+          mask_threshold = 0
+        )
     ),
     tar_target(
       chic.heatmap.tss.nucleosome,
-      track_to_heatmap(
-        grep("Imputed_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import %>%
-          attributes %>%
-          with(
-            GRanges(
-              seqnames,
-              ranges,
-              seqinfo = seqinfo,
-              score = exp(elementMetadata$score * log(2))
-            )
-          ),
-        as_tibble(read.csv(assay.data.sc)),
-        grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
-        mask_threshold = 0
-      )
+      if (!grepl("peakcalling", bp_name))
+        track_to_heatmap(
+          grep("Imputed_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import %>%
+            attributes %>%
+            with(
+              GRanges(
+                seqnames,
+                ranges,
+                seqinfo = seqinfo,
+                score = exp(elementMetadata$score * log(2))
+              )
+            ),
+          as_tibble(read.csv(assay.data.sc)),
+          grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+          mask_threshold = 0
+        )
     ),
     tar_target(
       chic.heatmap.paneled,
-      track_to_heatmap_with_panels(
-        grep(
-          str_glue(
-            if (grepl("H3K9", chic.bw.tracks[1])) "FSeq" else "Imputed",
-            "_Mark_L2FC"
-          ), chic.bw.tracks, val=T
-        ) %>% BigWigFile %>% import %>%
-          attributes %>%
-          with(
-            GRanges(
-              seqnames,
-              ranges,
-              seqinfo = seqinfo,
-              score = exp(elementMetadata$score * log(2))
-            )
-          ),
-        as_tibble(read.csv(assay.data.sc)),
-        mask_track = grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
-        mask_threshold = 0
-      )
+      if (!grepl("peakcalling", bp_name))
+        track_to_heatmap_with_panels(
+          grep(
+            str_glue(
+              if (grepl("H3K9", chic.bw.tracks[1])) "FSeq" else "Imputed",
+              "_Mark_L2FC"
+            ), chic.bw.tracks, val=T
+          ) %>% BigWigFile %>% import %>%
+            attributes %>%
+            with(
+              GRanges(
+                seqnames,
+                ranges,
+                seqinfo = seqinfo,
+                score = exp(elementMetadata$score * log(2))
+              )
+            ),
+          as_tibble(read.csv(assay.data.sc)),
+          mask_track = grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
+          mask_threshold = 0
+        )
     )
   ),
 
