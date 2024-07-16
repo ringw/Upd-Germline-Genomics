@@ -13,8 +13,15 @@ repli.contrasts <- repli.samples %>%
   within(replication_value <- as.numeric(as.character(replication_value))) %>%
   as_tibble
 
-repli.exp.contrast.numerator <- c(0.875, 0.625, 0.375, 0.125)
+repli.exp.contrast.numerator <- c(-0.75, -0.25, 0.25, 0.75)
 repli.exp.contrast.denominator <- c(1, 1, 1, 1)
+
+chic_fseq_l2fc <- function(chic.bw.tracks) {
+  lst <- as.list(
+    grep("FSeq_Mark_L2FC", chic.bw.tracks, val=T)
+  )
+  lst[[1]]
+}
 
 targets.repli <- list(
   # FASTQ files: Align to BAM and count lines in FASTQ.
@@ -159,10 +166,17 @@ targets.repli <- list(
         )
       ) %>%
         list,
-      chic.track = rlang::syms(str_glue("chic.track_{reference}")),
-      chic.results = rlang::syms(str_glue("chic.results_{driver}_{reference}")),
+      chic.track = rlang::syms(str_glue("chic.tile.diameter_40_score_{reference}")),
+      chic.results = list(
+        call(
+          "c",
+          H3K4=call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K4_{celltype}_CN_{reference}"))),
+          H3K27=call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K27_{celltype}_CN_{reference}"))),
+          H3K9=call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K9_{celltype}_CN_{reference}")))
+        )
+      )
     ),
-    names = driver | reference,
+    names = celltype | reference,
     tar_target(
       repli.experiment,
       as_bulk_summarized_experiment(
@@ -192,28 +206,6 @@ targets.repli <- list(
       repli.tracks,
       tiles_to_fseq(repli.glm, "full", levels(repli.experiment$full), repli.experiment@metadata$granges, bw=2000)
     ),
-    # tar_target(
-    #   repli.exp.contrast.numerator,
-    #   left_join(
-    #     tibble(coef = colnames(repli.glm$Beta)),
-    #     reframe(repli.contrasts, coef = str_glue("full{full}"), replication_value),
-    #     "coef"
-    #   ) %>%
-    #     deframe %>%
-    #     replace_na(0.),
-    #   packages = c("dplyr", "stringr", "tibble", "tidyr")
-    # ),
-    # tar_target(
-    #   repli.exp.contrast.denominator,
-    #   left_join(
-    #     tibble(coef = colnames(repli.glm$Beta)),
-    #     reframe(repli.contrasts, coef = str_glue("full{full}"), value = 1),
-    #     "coef"
-    #   ) %>%
-    #     deframe %>%
-    #     replace_na(0.),
-    #   packages = c("dplyr", "stringr", "tibble", "tidyr")
-    # ),
     tar_file(
       repli.bw,
       export(
@@ -232,7 +224,7 @@ targets.repli <- list(
               0
             )
         ),
-        with(list(driver=driver, reference=reference), BigWigFile(str_glue("repli/Replication_Value_{driver}_{reference}.bw")))
+        with(list(celltype=celltype, reference=reference), BigWigFile(str_glue("repli/Replication_Value_{celltype}_{reference}.bw")))
       ) %>%
         as.character,
       packages = c("dplyr", "rtracklayer", "stringr", "tibble", "tidyr")
@@ -277,7 +269,9 @@ targets.repli <- list(
               elementMetadata %>%
                 subset(as.logical(seqnames %in% seqlevels(chic.track))) %>%
                 as.data.frame %>%
-                pull(score)
+                pull(score) %>%
+                `*`(log(2)) %>%
+                exp
             ) %>%
             GRanges(chic.track, score = .) %>%
             apply_granges_projection(repli.value.projection, .)
