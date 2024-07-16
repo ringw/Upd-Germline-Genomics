@@ -198,7 +198,6 @@ targets.repli <- list(
         ~ 0 + full + as.factor(rep),
         offset = repli.experiment@metadata$offset,
         size_factors = 1,
-        overdispersion = "global",
         verbose = TRUE
       )
     ),
