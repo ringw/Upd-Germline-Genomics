@@ -319,9 +319,7 @@ targets.chic <- list(
           SIMPLIFY=F
         ),
         chic.tile.diameter_40 = rlang::syms(str_glue("chic.tile.diameter_40_{name}")),
-        chic.tile.diameter_500 = rlang::syms(str_glue("chic.tile.diameter_500_{name}")),
-        max_fragment_length = c(`20240628`=500)[as.character(rep)] %>%
-          replace(is.na(.), 200)
+        chic.tile.diameter_500 = rlang::syms(str_glue("chic.tile.diameter_500_{name}"))
       ),
     names = suffix,
 
@@ -332,7 +330,7 @@ targets.chic <- list(
           sapply(
             \(df) df %>%
               pos_fixer_callable %>%
-              filter(between(length, 100, max_fragment_length), mapq >= 20),
+              filter(between(length, 100, 200), mapq >= 20),
             simplify=F
           ) %>%
           setNames(NULL),
@@ -366,7 +364,7 @@ targets.chic <- list(
           sapply(
             \(df) df %>%
               paired_end_reads_to_fragment_lengths %>%
-              filter(between(length, 100, max_fragment_length), mapq >= 20),
+              filter(between(length, 100, 200), mapq >= 20),
             simplify=F
           ) %>%
           setNames(NULL),
@@ -408,7 +406,7 @@ targets.chic <- list(
           sapply(
             \(df) df %>%
               paired_end_reads_to_fragment_lengths %>%
-              filter(between(length, 100, max_fragment_length), mapq >= 20),
+              filter(between(length, 100, 200), mapq >= 20),
             simplify=F
           ) %>%
           setNames(NULL),
