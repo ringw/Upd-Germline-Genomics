@@ -240,59 +240,9 @@ sce_targets <- tar_map(
     batch_umap,
     run_umap_on_batch(obj, metadata),
     packages = c(tar_option_get("packages"), "tidyr")
-  ),
+  )
+)
 
-  # Consider that all of these targets can be replaced with one call to a new
-  # perl script per batch. We are intentionally streaming down the bam file as
-  # that may be faster than the disk, and we only need to do that once and split
-  # the outputs. Or instead of a single-threaded script, we can generate a tee
-  # command-line that uses process substitution to read the SAM output in
-  # several processes.
-  tar_map(
-    unlist = FALSE,
-    sce.clusters,
-    names = cluster,
-    tar_target(
-      pseudobulk.tx,
-      download_bam_transcripts(
-        download_bam_tx_sh,
-        metadata,
-        batch,
-        cluster,
-        paste0('scRNA-seq-Regression/pseudobulk_', batch, '_', cluster, '.txt')
-      ),
-      format = 'file',
-      # Remove tar_cue if the Upd_sc object changes. WHY do these targets keep
-      # re-running so often when we expect no real changes to the Upd_sc and its
-      # metadata csv?
-      cue = tar_cue("never")
-    ),
-    tar_target(
-      pseudobulk.library.size,
-      system2(
-        c(
-          estimate_library_size_bam_tx_sh,
-          metadata,
-          batch,
-          cluster
-        ),
-        stdout=TRUE
-      ) %>%
-        as.numeric,
-      # Remove tar_cue if the Upd_sc object changes. WHY do these targets keep
-      # re-running so often when we expect no real changes to the Upd_sc and its
-      # metadata csv?
-      cue = tar_cue("never")
-    )
-  )
-) %>%
-  append(
-    list(
-      # Map over clusters (below, from metadata) and extract pseudobulk counts.
-      tar_file(download_bam_tx_sh, "scripts/download_bam_tx.sh"),
-      tar_file(estimate_library_size_bam_tx_sh, "scripts/estimate_library_size_bam_tx.sh")
-    )
-  )
 
 list(
   tar_file(
