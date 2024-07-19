@@ -13,7 +13,7 @@ repli.contrasts <- repli.samples %>%
   within(replication_value <- as.numeric(as.character(replication_value))) %>%
   as_tibble
 
-repli.exp.contrast.numerator <- c(-0.75, -0.25, 0.25, 0.75)
+repli.exp.contrast.numerator <- c(0.75, 0.25, -0.25, -0.75)
 repli.exp.contrast.denominator <- c(1, 1, 1, 1)
 
 chic_fseq_l2fc <- function(chic.bw.tracks) {
