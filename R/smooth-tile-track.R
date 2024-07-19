@@ -27,7 +27,7 @@ ksmooth_sliding_windows <- function(granges, bw = 25) {
         .,
         # Do not smooth "R" factor (replicate) as log-link batch effect can be
         # a -Infinity or Infinity.
-        select = grep("^score.[^R]", colnames(.), val=T)
+        select = grep("^score(.[^R]|$)", colnames(.), val=T)
       ) %>%
       do.call(subset, .),
     2,
