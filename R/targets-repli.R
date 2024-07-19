@@ -1,24 +1,24 @@
-repli.samples = read.csv('repli/repli_samples.csv')
-repli.samples$replication_value = repli.samples$replication_value %>% factor(unique(.))
-repli.samples$full = repli.samples$replication_value
+repli.samples <- read.csv("repli/repli_samples.csv")
+repli.samples$replication_value <- repli.samples$replication_value %>% factor(unique(.))
+repli.samples$full <- repli.samples$replication_value
 levels(repli.samples$full) <- c("Early", "Early-Mid", "Mid-Late", "Late")
-repli.samples$abbrev = repli.samples$replication_value
+repli.samples$abbrev <- repli.samples$replication_value
 levels(repli.samples$abbrev) <- c("E", "G", "J", "L")
 repli.samples <- repli.samples %>%
   mutate(name = paste0(genotype, "_", abbrev, rep))
 
 repli.contrasts <- repli.samples %>%
-  subset(select=c(full, replication_value)) %>%
+  subset(select = c(full, replication_value)) %>%
   subset(!duplicated(.)) %>%
   within(replication_value <- as.numeric(as.character(replication_value))) %>%
-  as_tibble
+  as_tibble()
 
 repli.exp.contrast.numerator <- c(0.75, 0.25, -0.25, -0.75)
 repli.exp.contrast.denominator <- c(1, 1, 1, 1)
 
 chic_fseq_l2fc <- function(chic.bw.tracks) {
   lst <- as.list(
-    grep("FSeq_Mark_L2FC", chic.bw.tracks, val=T)
+    grep("FSeq_Mark_L2FC", chic.bw.tracks, val = T)
   )
   lst[[1]]
 }
@@ -28,39 +28,40 @@ targets.repli <- list(
   tar_map(
     cross_join(
       bowtie.refs,
-      dplyr::rename(repli.samples, repli_target="name")
+      dplyr::rename(repli.samples, repli_target = "name")
     ) %>%
-      rowwise %>%
+      rowwise() %>%
       mutate(
-        command_line = if (isTRUE(is_paired_end))
-            list(
-              call(
-                "c",
-                "-i",
-                quote(align_chic_lightfiltering),
-                substitute(str_replace(ref_paths[1], "\\..*", ""), list(ref_paths=bowtie)),
-                str_glue("{filename}_R1_001.fastq.gz"),
-                str_glue("{filename}_R2_001.fastq.gz"),
-                quote(output_path)
-              )
+        command_line = if (isTRUE(is_paired_end)) {
+          list(
+            call(
+              "c",
+              "-i",
+              quote(align_chic_lightfiltering),
+              substitute(str_replace(ref_paths[1], "\\..*", ""), list(ref_paths = bowtie)),
+              str_glue("{filename}_R1_001.fastq.gz"),
+              str_glue("{filename}_R2_001.fastq.gz"),
+              quote(output_path)
             )
-          else
-            list(
-              call(
-                "c",
-                "-i",
-                quote(align_repli_lightfiltering),
-                substitute(str_replace(ref_paths[1], "\\..*", ""), list(ref_paths=bowtie)),
-                str_glue("Upd_Tumor/Repli/{filename}"),
-                quote(output_path)
-              )
+          )
+        } else {
+          list(
+            call(
+              "c",
+              "-i",
+              quote(align_repli_lightfiltering),
+              substitute(str_replace(ref_paths[1], "\\..*", ""), list(ref_paths = bowtie)),
+              str_glue("Upd_Tumor/Repli/{filename}"),
+              quote(output_path)
             )
-        ),
+          )
+        }
+      ),
     names = repli_target | name,
     tar_file(
       repli.bam,
       with(
-        list(name=name, repli_target=repli_target) %>%
+        list(name = name, repli_target = repli_target) %>%
           with(
             list(output_path = str_glue("repli/{name}/{repli_target}.bam"))
           ),
@@ -86,7 +87,7 @@ targets.repli <- list(
   tar_map(
     cross_join(
       bowtie.refs,
-      dplyr::rename(repli.samples, repli_target="name")
+      dplyr::rename(repli.samples, repli_target = "name")
     ) %>%
       mutate(
         suffix = str_glue("{repli_target}_{name}"),
@@ -100,19 +101,20 @@ targets.repli <- list(
           ) %>%
             setNames(names(chr.lengths)) %>%
             append(list("list"), .) %>%
-            do.call(call, ., quote=T),
+            do.call(call, ., quote = T),
           name,
           str_glue("repli.bam_{repli_target}_{name}"),
-          SIMPLIFY=F
+          SIMPLIFY = F
         )
       ) %>%
-      rowwise %>%
+      rowwise() %>%
       # Include 2L_Histone_Repeat_Unit - split refs and sum up - when splitting by rname and summing.
       mutate(
-        bulk_reads_shortrefs = if (name == "masked")
+        bulk_reads_shortrefs = if (name == "masked") {
           list(call("rbind", bulk_reads_misc, rlang::sym(str_glue("bulk_reads_2L_Histone_Repeat_Unit_repli.bam_{repli_target}_masked"))))
-        else
-          list(bulk_reads_misc),
+        } else {
+          list(bulk_reads_misc)
+        },
         markdup = isTRUE(is_paired_end)
       ),
     names = suffix,
@@ -134,16 +136,16 @@ targets.repli <- list(
           match(names(bulk_reads_split), names(.)),
           GRangesList(
             bulk_reads_split %>%
-            mapply(
-              \(n, df) df %>%
-                mutate(rname = factor(rname, levels=n)) %>%
-                bam_cover_read_bp(min_mapq = 0, markdup = markdup) %>%
-                count_overlaps_sparse_vectors(tile_width=1000L),
-              names(.),
-              .,
-              SIMPLIFY=F
-            ) %>%
-              unlist
+              mapply(
+                \(n, df) df %>%
+                  mutate(rname = factor(rname, levels = n)) %>%
+                  bam_cover_read_bp(min_mapq = 0, markdup = markdup) %>%
+                  count_overlaps_sparse_vectors(tile_width = 1000L),
+                names(.),
+                .,
+                SIMPLIFY = F
+              ) %>%
+              unlist()
           )
         )
     )
@@ -165,14 +167,14 @@ targets.repli <- list(
           paste0(str_glue("repli.granges_{name}_{reference}"))
         )
       ) %>%
-        list,
+        list(),
       chic.track = rlang::syms(str_glue("chic.tile.diameter_40_score_{reference}")),
       chic.results = list(
         call(
           "c",
-          H3K4=call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K4_{celltype}_CN_{reference}"))),
-          H3K27=call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K27_{celltype}_CN_{reference}"))),
-          H3K9=call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K9_{celltype}_CN_{reference}")))
+          H3K4 = call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K4_{celltype}_CN_{reference}"))),
+          H3K27 = call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K27_{celltype}_CN_{reference}"))),
+          H3K9 = call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K9_{celltype}_CN_{reference}")))
         )
       )
     ),
@@ -203,7 +205,7 @@ targets.repli <- list(
     ),
     tar_target(
       repli.tracks,
-      tiles_to_fseq(repli.glm, "full", levels(repli.experiment$full), repli.experiment@metadata$granges, bw=2000)
+      tiles_to_fseq(repli.glm, "full", levels(repli.experiment$full), repli.experiment@metadata$granges, bw = 2000)
     ),
     tar_file(
       repli.bw,
@@ -212,9 +214,9 @@ targets.repli <- list(
           unlist(repli.tracks),
           score = (
             as.matrix(unlist(repli.tracks)@elementMetadata) %*% repli.exp.contrast.numerator
-            / as.matrix(unlist(repli.tracks)@elementMetadata) %*% repli.exp.contrast.denominator
+              / as.matrix(unlist(repli.tracks)@elementMetadata) %*% repli.exp.contrast.denominator
           ) %>%
-            as.numeric %>%
+            as.numeric() %>%
             replace(
               which(
                 as.matrix(unlist(repli.tracks)@elementMetadata) %*% repli.exp.contrast.denominator
@@ -223,9 +225,9 @@ targets.repli <- list(
               0
             )
         ),
-        with(list(celltype=celltype, reference=reference), BigWigFile(str_glue("repli/Replication_Value_{celltype}_{reference}.bw")))
+        with(list(celltype = celltype, reference = reference), BigWigFile(str_glue("repli/Replication_Value_{celltype}_{reference}.bw")))
       ) %>%
-        as.character,
+        as.character(),
       packages = c("dplyr", "rtracklayer", "stringr", "tibble", "tidyr")
     ),
 
@@ -234,9 +236,9 @@ targets.repli <- list(
       repli.value.rank,
       rtracklayer::import(rtracklayer::BigWigFile(repli.bw)) %>%
         approx_track(chic.track) %>%
-        rank_track %>%
-        elementMetadata %>%
-        as.data.frame,
+        rank_track() %>%
+        elementMetadata() %>%
+        as.data.frame(),
       packages = tar_option_get("packages") %>% c("S4Vectors"),
       format = "parquet"
     ),
@@ -244,12 +246,12 @@ targets.repli <- list(
       repli.value.bindata,
       append(
         list(chic.track),
-        repli.value.rank %>% as.list
+        repli.value.rank %>% as.list()
       ) %>%
         do.call(GRanges, .) %>%
         bin_track_by_rank(250) %>%
-        elementMetadata %>%
-        as.data.frame,
+        elementMetadata() %>%
+        as.data.frame(),
       format = "parquet"
     ),
     tar_target(
@@ -263,14 +265,17 @@ targets.repli <- list(
         repli = apply_granges_projection(repli.value.projection, GRanges(chic.track, score = repli.value.rank$score)),
         sapply(
           chic.results,
-          \(f) f %>% BigWigFile %>% rtracklayer::import() %>% attributes %>%
+          \(f) f %>%
+            BigWigFile() %>%
+            rtracklayer::import() %>%
+            attributes() %>%
             with(
               elementMetadata %>%
                 subset(as.logical(seqnames %in% seqlevels(chic.track))) %>%
-                as.data.frame %>%
+                as.data.frame() %>%
                 pull(score) %>%
                 `*`(log(2)) %>%
-                exp
+                exp()
             ) %>%
             GRanges(chic.track, score = .) %>%
             apply_granges_projection(repli.value.projection, .)
