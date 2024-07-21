@@ -1,0 +1,141 @@
+\documentclass{article}
+
+\usepackage{amsmath}
+\usepackage{amssymb}
+\usepackage{nicefrac}
+
+\begin{document}
+\section*{Bayesian Regression Model}
+
+\section*{Beta Mode-Concentration Bayesian Estimator}
+
+We will apply polar coordinates $(r,t)$ on a shifted origin:
+$\mathbf{1}=\left[\begin{matrix}1\\1\end{matrix}\right]$.
+First, all random variables in the formula will be translated by the origin
+$\mathbf{1}$, but importantly, the origin does not need to match
+$E[\mathbf{v}]$ (the likelihood is not centered).
+The rays extending from the origin $\mathbf{1}$ each have a unique value for the Beta
+distribution mode (denoted $\omega$) in the positive quarter-plane where the
+mode is defined.
+Integrating $r$ and $t$ provides one method to calculate the following normal
+CDF for the positive quarter-plane region: $P(\alpha\ge 1, \beta\ge 1)$.
+However, sophisticated numerical integration methods already exist.
+The benefit of this method is that for any origin, the inner integral for one
+ray has an analytical solution.
+Therefore, for the custom inference here, only a single (rather than double)
+numerical integration is required.
+
+\begin{equation*}
+  \begin{aligned}
+    \mathbf{v} &= \theta \left[ \begin{matrix} \sin t \\ \cos t \end{matrix} \right] \\
+    \omega &= \frac{\sin t}{\sin t+\cos t} \\
+  \end{aligned}
+\end{equation*}
+\begin{equation*}
+  \begin{aligned}
+    & E\left[ \omega | \alpha\ge 1, \beta\ge 1 \right] \cdot P(\alpha\ge 1, \beta\ge 1) \\
+    &=
+    \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
+    \int_0^{\nicefrac{\pi}{2}}
+    \omega
+    \int_0^\infty
+    e^{-(\mathbf{v}-(\mathbf{\mu}-\mathbf{1}))^\intercal \Sigma^{-1} (\mathbf{v}-(\mathbf{\mu}-\mathbf{1}))}
+    \theta
+    \text{d}\theta
+    \text{d}t
+    \\
+    &=
+    \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
+    \int_0^{\nicefrac{\pi}{2}}
+    \omega
+    \int_0^\infty
+    e^{
+      -\mathbf{v}^\intercal \Sigma^{-1} \mathbf{v}
+      + 2 \mathbf{v}^\intercal \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
+      - (\mathbf{\mu}-\mathbf{1})^\intercal \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
+    }
+    \theta
+    \text{d}\theta
+    \text{d}t
+    \\
+    &=
+    \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
+    \int_0^{\nicefrac{\pi}{2}}
+    \omega
+    \int_0^\infty
+    e^{
+      -\omega^2 \left[\begin{matrix} \sin t \\ \cos t \end{matrix}\right]^\intercal
+      \Sigma^{-1}
+      \left[\begin{matrix} \sin t \\ \cos t \end{matrix}\right]
+      + 2 \omega \left[\begin{matrix} \sin t \\ \cos t \end{matrix}\right]^\intercal
+      \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
+      - (\mathbf{\mu}-\mathbf{1})^\intercal \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
+    }
+    \theta
+    \text{d}\theta
+    \text{d}t
+    \\
+    &=
+    \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
+    \int_0^{\nicefrac{\pi}{2}}
+    \omega
+    \int_0^\infty
+    e^{
+      -a \theta^2
+      + 2b \theta
+      -c
+    }
+    \theta
+    \text{d}\theta
+    \text{d}t
+    \\
+    &=
+    \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
+    \int_0^{\nicefrac{\pi}{2}}
+    \omega
+    e^{\frac{b^2}{a}-c}
+    \int_0^\infty
+    e^{
+      -a \theta^2
+      + 2b \theta
+      - \frac{b^2}{a}
+    }
+    \theta
+    \text{d}\theta
+    \text{d}t
+    \\
+    &=
+    \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
+    \int_0^{\nicefrac{\pi}{2}}
+    \omega
+    e^{\frac{b^2}{a}-c}
+    \int_0^\infty
+    e^{-(\theta-\nicefrac{b}{\sqrt{a}})^2}
+    \left(\theta - \nicefrac{b}{\sqrt{a}}\right)
+    +
+    \frac{b}{\sqrt{a}} e^{-(\theta-\nicefrac{b}{\sqrt{a}})^2}
+    \text{d}\theta
+    \text{d}t
+    \\
+    &=
+    \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
+    \int_0^{\nicefrac{\pi}{2}}
+    \omega
+    e^{\frac{b^2}{a}-c}
+    \left(
+      \frac{1}{2} e^{-\nicefrac{b^2}{a}}
+      +
+      \frac{b\sqrt{\pi}}{\sqrt{a}}
+      F_{\mathcal{N}}\left(b \sqrt{\nicefrac{2}{a}}\right)
+    \right)
+    \text{d}t
+  \end{aligned}
+\end{equation*}
+
+This is an efficient numerical method for calculating the expectation (with
+normal likelihood) of an arbitrary random variable $\omega$, which, conditioned
+on the angle formed by $\mathbf{v}$ and an arbitrary origin (e.g. $\mathbf{1}$),
+is constant. If not an integral from $0$ to $2\pi$, then the result needs to be
+divided by the total probability in the region being integrated.
+
+\end{document}
