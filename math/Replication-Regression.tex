@@ -34,99 +34,110 @@ numerical integration is required.
 \begin{equation*}
   \begin{aligned}
     & E\left[ \omega | \alpha\ge 1, \beta\ge 1 \right] \cdot P(\alpha\ge 1, \beta\ge 1) \\
+    % Line 2: vector v
     &=
     \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
     \int_0^{\nicefrac{\pi}{2}}
     \omega
     \int_0^\infty
-    e^{-(\mathbf{v}-(\mathbf{\mu}-\mathbf{1}))^\intercal \Sigma^{-1} (\mathbf{v}-(\mathbf{\mu}-\mathbf{1}))}
+    e^{-\frac{1}{2}(\mathbf{v}-(\mathbf{\mu}-\mathbf{1}))^\intercal \Sigma^{-1} (\mathbf{v}-(\mathbf{\mu}-\mathbf{1}))}
     \theta
     \text{d}\theta
     \text{d}t
     \\
     &=
+    % Line 3: Expand the subtraction in the quadratic form.
     \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
     \int_0^{\nicefrac{\pi}{2}}
     \omega
     \int_0^\infty
     e^{
-      -\mathbf{v}^\intercal \Sigma^{-1} \mathbf{v}
-      + 2 \mathbf{v}^\intercal \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
-      - (\mathbf{\mu}-\mathbf{1})^\intercal \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
+      -\frac{1}{2} \mathbf{v}^\intercal \Sigma^{-1} \mathbf{v}
+      + \mathbf{v}^\intercal \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
+      -\frac{1}{2}(\mathbf{\mu}-\mathbf{1})^\intercal \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
     }
     \theta
     \text{d}\theta
     \text{d}t
     \\
+    % Line 4: Substitute theta [sin t cos t] for vector v
     &=
     \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
     \int_0^{\nicefrac{\pi}{2}}
     \omega
     \int_0^\infty
     e^{
-      -\omega^2 \left[\begin{matrix} \sin t \\ \cos t \end{matrix}\right]^\intercal
+      -\frac{1}{2}\theta^2 \left[\begin{matrix} \sin t \\ \cos t \end{matrix}\right]^\intercal
       \Sigma^{-1}
       \left[\begin{matrix} \sin t \\ \cos t \end{matrix}\right]
-      + 2 \omega \left[\begin{matrix} \sin t \\ \cos t \end{matrix}\right]^\intercal
+      + \theta \left[\begin{matrix} \sin t \\ \cos t \end{matrix}\right]^\intercal
       \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
-      - (\mathbf{\mu}-\mathbf{1})^\intercal \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
+      -\frac{1}{2} (\mathbf{\mu}-\mathbf{1})^\intercal \Sigma^{-1} (\mathbf{\mu}-\mathbf{1})
     }
     \theta
     \text{d}\theta
     \text{d}t
     \\
+    % Line 5: Substitute a, b, c (coefficients that do not depend on theta)
     &=
     \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
     \int_0^{\nicefrac{\pi}{2}}
     \omega
     \int_0^\infty
     e^{
-      -a \theta^2
-      + 2b \theta
-      -c
+      -\frac{1}{2}\left(a \theta^2
+      - 2b \theta
+      +c\right)
     }
     \theta
     \text{d}\theta
     \text{d}t
     \\
+    % Line 6: Complete the square with a and b.
     &=
     \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
     \int_0^{\nicefrac{\pi}{2}}
     \omega
-    e^{\frac{b^2}{a}-c}
+    e^{\frac{b^2}{2a}-\frac{1}{2}c}
     \int_0^\infty
     e^{
-      -a \theta^2
-      + 2b \theta
-      - \frac{b^2}{a}
+      -\frac{a}{2}\left(\theta^2
+      - 2\frac{b}{a} \theta
+      + \frac{b^2}{a^2}\right)
     }
     \theta
     \text{d}\theta
     \text{d}t
     \\
+    % Line 7: Get ready for u-substitution (translating variable theta by a constant)
     &=
     \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
     \int_0^{\nicefrac{\pi}{2}}
     \omega
-    e^{\frac{b^2}{a}-c}
+    e^{\frac{b^2}{2a}-\frac{1}{2}c}
     \int_0^\infty
-    e^{-(\theta-\nicefrac{b}{\sqrt{a}})^2}
-    \left(\theta - \nicefrac{b}{\sqrt{a}}\right)
+    e^{-\frac{a}{2}(\theta-\nicefrac{b}{a})^2}
+    \left(\theta - \nicefrac{b}{a}\right)
     +
-    \frac{b}{\sqrt{a}} e^{-(\theta-\nicefrac{b}{\sqrt{a}})^2}
+    \frac{b}{a} e^{-\frac{a}{2}(\theta-\nicefrac{b}{a})^2}
     \text{d}\theta
     \text{d}t
     \\
+    % Line 8: Apply the known antiderivatives for x exp(-x^2/2) and exp(-x^2/2).
     &=
     \frac{1}{2\pi \sqrt{\text{det }\Sigma}}
     \int_0^{\nicefrac{\pi}{2}}
     \omega
-    e^{\frac{b^2}{a}-c}
+    e^{\frac{b^2}{2a}-\frac{1}{2}c}
     \left(
-      \frac{1}{2} e^{-\nicefrac{b^2}{a}}
+      \frac{1}{a}
+      e^{-\nicefrac{b^2}{2a^3}}
       +
-      \frac{b\sqrt{\pi}}{\sqrt{a}}
-      F_{\mathcal{N}}\left(b \sqrt{\nicefrac{2}{a}}\right)
+      \frac{b}{a}
+      \sqrt{
+      \frac{2\pi}{a}
+      }
+      F_{\mathcal{N}}\left(\nicefrac{b}{\sqrt{a}}\right)
     \right)
     \text{d}t
   \end{aligned}
