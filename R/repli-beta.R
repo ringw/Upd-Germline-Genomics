@@ -20,6 +20,29 @@ beta_prior_draws <- function(n = 200, shape = 4, rate = 0.5) {
     coord_cartesian(c(0, 1), c(-0.01, 7.5), expand = F)
 }
 
+init_beta_dm_experiment <- function(sce) {
+  sf <- sizeFactors(sce)
+  if (is.null(sf))
+    sf <- colSums(assay(sce, "counts")) / 1000 / 1000
+  num_fractions <- length(levels(sce$replication_value))
+  sce@metadata$beta_regression_cuts <- seq(
+    0, 1, length.out=num_fractions
+  )
+  sce@metadata$beta_regression_emissions <- as.matrix(
+    sparseMatrix(
+      i = seq(ncol(sce)),
+      j = as.integer(sce$replication_value),
+      x = sf
+    )
+  ) %>%
+    `dimnames<-`(
+      value = list(
+        colnames(sce),
+        levels(sce$replication_value)
+      )
+    )
+}
+
 beta_dm_regression <- function(exper, i, rolling=FALSE, solve=TRUE) {
   sf <- colSums(assay(exper, "counts"))[order(exper$name)]
   sf <- matrix(
