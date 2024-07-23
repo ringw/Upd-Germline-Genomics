@@ -21,91 +21,87 @@ beta_prior_draws <- function(n = 200, shape = 4, rate = 0.5) {
 }
 
 init_beta_dm_experiment <- function(sce) {
-  sf <- sizeFactors(sce)
+  # We will pretend that the SummarizedExperiment is a SingleCellExperiment
+  # - having an optional colData entry named sizeFactor.
+  sf <- sce$sizeFactor
   if (is.null(sf))
     sf <- colSums(assay(sce, "counts")) / 1000 / 1000
   num_fractions <- length(levels(sce$replication_value))
   sce@metadata$beta_regression_cuts <- seq(
-    0, 1, length.out=num_fractions
+    0, 1, length.out=1+num_fractions
   )
-  sce@metadata$beta_regression_emissions <- as.matrix(
-    sparseMatrix(
-      i = seq(ncol(sce)),
-      j = as.integer(sce$replication_value),
-      x = sf
-    )
-  ) %>%
-    `dimnames<-`(
-      value = list(
-        colnames(sce),
-        levels(sce$replication_value)
-      )
-    )
+  # Zero is not allowed in extraDistr Dirichlet! (For an entry which is observed
+  # to always be zero). Infinitesimal value works well, and is so small that it
+  # does not influence the optimization process.
+  beta_regression_size_factors <- matrix(
+    1e-40,
+    nrow = length(levels(sce$rep)),
+    ncol = num_fractions,
+    dimnames = list(levels(sce$rep), levels(sce$replication_value))
+  )
+  beta_regression_feed_y <- matrix(
+    0,
+    nrow = ncol(sce),
+    ncol = length(beta_regression_size_factors),
+    dimnames = list(colnames(sce), NULL)
+  )
+  for (i in seq(ncol(sce))) {
+    rep <- sce$rep[i]
+    replication_value <- sce$replication_value[i]
+    beta_regression_size_factors[
+      as.numeric(rep),
+      as.numeric(replication_value)
+    ] <- sf[i]
+    beta_regression_feed_y[
+      i,
+      as.numeric(rep)
+      + length(levels(sce$rep)) * (as.numeric(replication_value) - 1)
+    ] <- 1
+  }
+  sce@metadata$beta_regression_size_factors <- beta_regression_size_factors
+  sce@metadata$beta_regression_feed_y <- beta_regression_feed_y
+  sce
 }
 
-beta_dm_regression <- function(exper, i, rolling=FALSE, solve=TRUE) {
-  sf <- colSums(assay(exper, "counts"))[order(exper$name)]
-  sf <- matrix(
-    sf,
-    ncol = 4
-  )
-  if (rolling && i %in% c("2L", "2R", "3L", "3R", "4", "X", "Y")) {
-    final_chr_y <- -1 + findInterval(8, as.numeric(rowData(exper)$seqnames))
-    blk <- assay(exper, "counts")[
-      seq(max(1, i - 3), min(final_chr_y, i + 3)),
-      order(exper$name)
-    ]
-    obs <- matrix(
-      blk,
-      ncol = 4
+beta_dm_regression <- function(exper, i) {
+  beta_regression_cuts <- exper@metadata[["beta_regression_cuts"]]
+  beta_regression_size_factors <- exper@metadata[["beta_regression_size_factors"]]
+  Y <- dot(
+    exper@metadata[["beta_regression_feed_y"]],
+    assay(exper, "counts")[i, ]
+  ) %>%
+    matrix(
+      nrow = length(levels(exper$rep)),
+      ncol = length(levels(exper$replication_value)),
+      dimnames = list(
+        levels(exper$rep),
+        levels(exper$replication_value)
+      )
     )
-    sfExtend <- sparseMatrix(
-      i = seq(nrow(obs)),
-      j = rep(seq(nrow(sf)), each = nrow(obs) / nrow(sf))
-    )
-    sf <- as.matrix(sfExtend %*% sf)
-  } else {
-    matrix_row <- assay(exper, "counts")[i, ]
-    obs <- matrix(
-      matrix_row[order(exper$name)],
-      ncol = 4
-    )
-  }
-  n <- rowSums(obs)
-  obs <- obs[n > 0, ]
-  n <- n[n > 0]
+  n <- rowSums(Y)
   ll_post <- function(v, theta) {
-    pb <- diff(pbeta(c(0, 0.25, 0.5, 0.75, 1), v[1], v[2]))
     log_prior <- sum(dgamma(v, 4, scale=0.5, log = TRUE))
-    expected_value_shape <- sf %*% diag(pb)
-    expected_value_shape <- expected_value_shape / rowSums(expected_value_shape)
-    dir_shape <- expected_value_shape / theta
-    log_lik <- sum(ddirmnom(obs, n, dir_shape, log = TRUE))
+    pb <- diff(pbeta(beta_regression_cuts, v[1], v[2]))
+    mu_unnorm <- beta_regression_size_factors %*% diag(x = pb)
+    dirparam <- (
+      mu_unnorm
+      /
+      rowSums(mu_unnorm)
+      /
+      theta
+    )
+    log_lik <- sum(ddirmnom(Y, n, dirparam, log = TRUE))
     -log_prior - log_lik
   }
   # Start with a typical value of theta (err on the low side).
-  theta <- 0.05
+  theta <- 0.01
   # Initial parameter value is the expected value of alpha and beta in the
   # prior.
   par <- optim(c(2, 2), ll_post, theta = theta, method = "L-BFGS-B", control = list(maxit = 1000), lower = c(0.01, 0.01))$par
   theta <- optim(theta, ll_post, v = par, method = "L-BFGS-B", control = list(maxit = 1000), lower = 1e-4)$par
   par <- optim(par, ll_post, theta = theta, method = "L-BFGS-B", control = list(maxit = 1000), lower = c(0.01, 0.01))$par
   precision <- optimHess(par, ll_post, theta = theta)
-  if (solve) {
-    sigma <- solve(precision)
-    moment <- \(x, y) matrix(as.numeric((x - 1) / (x + y - 2)) * dmvnorm(cbind(as.numeric(x), as.numeric(y)), par, sigma), nrow = nrow(x))
-    mydens <- \(x, y) matrix(dmvnorm(cbind(as.numeric(x), as.numeric(y)), par, sigma), nrow = nrow(x))
-    est <- integral2(
-      moment, 1, 20, 1, 20,
-      abstol = 1e-3
-    )$Q / integral2(
-      mydens, 1, 20, 1, 20,
-      abstol = 1e-3
-    )$Q
-    list(est = est, par = par, theta = theta, fisher_information = precision)
-  } else {
-    list(par = par, theta = theta, fisher_information = precision)
-  }
+  list(par = par, theta = theta, fisher_information = precision)
 }
 
 beta_dm_regression_calculate_prior <- function() {
@@ -165,18 +161,6 @@ laplace_approx_sliding_transform <- function(lst, bw=2) {
     apply(muHat, 2, identity, simplify=FALSE),
     SIMPLIFY=FALSE
   )
-}
-
-laplace_approx_expectation_ratio_old_integral2 <- function(elem) {
-  par <- elem$par
-  sigma <- solve(elem$fisher_information)
-  moment <- \(x, y) matrix(as.numeric((x - 1) / (x + y - 2)) * dmvnorm(cbind(as.numeric(x), as.numeric(y)), par, sigma), nrow = nrow(x))
-  mydens <- \(x, y) matrix(dmvnorm(cbind(as.numeric(x), as.numeric(y)), par, sigma), nrow = nrow(x))
-  est <- integral2(
-    moment, 1, 100, 1, 100
-  )$Q / integral2(
-    mydens, 1, 100, 1, 100
-  )$Q
 }
 
 laplace_approx_expectation_ratio <- function(elem) {

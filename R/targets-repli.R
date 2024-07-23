@@ -191,7 +191,10 @@ targets.repli <- list(
             rep
           }
         )
-      )
+      ) %>%
+        # As we will use Beta dist Bayesian Inference, create the metadata ahead
+        # of time.
+        init_beta_dm_experiment
     ),
     tar_target(
       repli.glm,
@@ -244,10 +247,10 @@ targets.repli <- list(
       repli.beta,
       future_sapply(
         seq(nrow(repli.experiment)),
-        \(i) tryCatch(beta_dm_regression(repli.experiment, i, solve=F), error=\(e) beta_dm_regression_calculate_prior()),
+        \(i) tryCatch(beta_dm_regression(repli.experiment, i), error=\(e) beta_dm_regression_calculate_prior()),
         simplify=FALSE
       ),
-      packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
+      packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
     ),
     tar_target(
       repli.beta.2,
@@ -269,6 +272,12 @@ targets.repli <- list(
           score=.
         ),
       packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
+    ),
+    tar_file(
+      repli.beta.bw,
+      repli.beta.2 %>%
+        export(BigWigFile(str_glue("repli/Replication_Bayes_", celltype, "_", reference, ".bw"))) %>%
+        as.character
     ),
 
     # Repli ChIC heatmap
