@@ -240,6 +240,37 @@ targets.repli <- list(
       packages = c("dplyr", "rtracklayer", "stringr", "tibble", "tidyr")
     ),
 
+    tar_target(
+      repli.beta,
+      future_sapply(
+        seq(nrow(repli.experiment)),
+        \(i) tryCatch(beta_dm_regression(repli.experiment, i, solve=F), error=\(e) beta_dm_regression_calculate_prior()),
+        simplify=FALSE
+      ),
+      packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
+    ),
+    tar_target(
+      repli.beta.2,
+      repli.beta %>%
+        split(rowData(repli.experiment)$seqnames) %>%
+        sapply(
+          \(lst) if (length(lst) > 1) laplace_approx_sliding_transform(lst) else lst,
+          simplify=FALSE
+        ) %>%
+        unlist(rec=FALSE, use.names=FALSE) %>%
+        future_sapply(\(elem) tryCatch(laplace_approx_expectation_ratio(elem), error=\(e) NA)) %>%
+        `*`(-2) %>%
+        `+`(1) %>%
+        plogistanh() %>%
+        `-`(median(., na.rm = T)) %>%
+        qlogistanh() %>%
+        GRanges(
+          unlist(repli.granges_nos_E3_chr, use.names=FALSE),
+          score=.
+        ),
+      packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
+    ),
+
     # Repli ChIC heatmap
     tar_target(
       repli.value.rank,
@@ -312,5 +343,9 @@ targets.repli <- list(
         )
       )
     )
+  ),
+  tar_target(
+    repli.beta.prior.draws,
+    beta_prior_draws()
   )
 )
