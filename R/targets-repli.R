@@ -217,6 +217,15 @@ targets.repli <- list(
               / as.matrix(unlist(repli.tracks)@elementMetadata) %*% repli.exp.contrast.denominator
           ) %>%
             as.numeric() %>%
+            plogistanh() %>%
+            # Correct the timing values so that half of positions are in Q1&Q2
+            # (very close to achieving this outcome, when we consider that not
+            # every range has the same width - as 2Cen and 3Cen ref seqs do not
+            # need sliding windows at all). These are a necessary post-hoc
+            # offset applied to the regression models so that our GSC and CySC
+            # experiments are comparable.
+            `-`(median(., na.rm = T)) %>%
+            qlogistanh() %>%
             replace(
               which(
                 as.matrix(unlist(repli.tracks)@elementMetadata) %*% repli.exp.contrast.denominator
