@@ -156,8 +156,8 @@ targets.repli <- list(
     mutate(
       rowwise(
         cross_join(
-          experiment.driver,
-          dplyr::rename(bowtie.refs, reference="name")
+          rbind(experiment.driver, tibble(driver = "Kc167", celltype = "Kc167")),
+          dplyr::rename(bowtie.refs, reference = "name")
         )
       ),
       samples = list(parse(text = deparse(subset(repli.samples, genotype == driver)))),
