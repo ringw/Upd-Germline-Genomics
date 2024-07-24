@@ -114,7 +114,7 @@ beta_dm_regression_calculate_prior <- function() {
   list(par = par, theta = 0, fisher_information = precision)
 }
 
-laplace_approx_sliding_transform <- function(lst, bw=2) {
+laplace_approx_sliding_transform <- function(lst, x, xout=x, bw=1500) {
   sigmaMu <- sapply(lst, \(elem) solve(elem$fisher_information, elem$par))
   # Laplace posterior s.d. sliding estimate. An element-wise sliding filter on
   # the posterior covariance mats.
@@ -122,30 +122,35 @@ laplace_approx_sliding_transform <- function(lst, bw=2) {
     sapply(lst, \(elem) solve(elem$fisher_information)),
     c(2, 2, length(lst))
   )
-  covHat <- array(dim=c(2, 2, length(lst)))
+  covHat <- array(dim=c(2, 2, length(xout)))
   for (i in 1:2)
     for (j in 1:2)
       covHat[i, j, ] <- density(
-        seq_along(lst),
+        x,
         bw = bw,
         weights = covPoint[i, j, ],
-        n = length(lst),
-        from = 1,
-        to = length(lst)
-      )$y
+        n = length(xout),
+        from = min(xout),
+        to = max(xout)
+      ) %>%
+        with(
+          approx(x, y, xout)$y
+        )
   
   sigmaMuEst <- apply(
     sigmaMu,
     1,
     \(v) density(
-      seq_along(lst),
+      x,
       bw = bw,
       weights = v,
-      n = length(lst),
-      from = 1
-      ,
-      to = length(lst)
-    )$y
+      n = length(xout),
+      from = min(xout),
+      to = max(xout)
+    ) %>%
+      with(
+        approx(x, y, xout)$y
+      )
   ) %>%
     t
   muHat <- mapply(
@@ -153,13 +158,18 @@ laplace_approx_sliding_transform <- function(lst, bw=2) {
     apply(covHat, 3, identity, simplify=FALSE),
     apply(sigmaMuEst, 2, identity, simplify=FALSE)
   )
+  theta <- approx(
+    x,
+    sapply(lst, \(elem) elem$theta),
+    xout
+  )$y
   mapply(
-    \(elem, cov, mu) list(
+    \(theta, cov, mu) list(
       par = mu,
-      theta = elem$theta,
+      theta = theta,
       fisher_information = solve(cov)
     ),
-    lst,
+    theta,
     apply(covHat, 3, identity, simplify=FALSE),
     apply(muHat, 2, identity, simplify=FALSE),
     SIMPLIFY=FALSE
