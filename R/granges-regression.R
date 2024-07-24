@@ -1,16 +1,16 @@
 as_bulk_summarized_experiment <- function(granges, colData, sample_name = "name") {
   # For extracting row data about the samples.
-  unl <- unlist(granges[[1]])
+  anyGranges <- granges[[1]]
   # Counts assay.
   samples <- granges %>%
-    sapply(\(gr) unlist(gr)$score, simplify=FALSE) %>%
+    sapply(\(gr) gr$score, simplify=FALSE) %>%
     setNames(pull(colData, sample_name))
   mat <- do.call(cbind, samples)
 
   # ln-offset in order to get from RPKM parameters to counts.
   omat <- matrix(1, nrow=nrow(mat), ncol=ncol(mat), dimnames=dimnames(mat))
   offsets <- as.matrix(
-    Diagonal(x = log(unl@ranges@width) - log(1000))
+    Diagonal(x = log(anyGranges@ranges@width) - log(1000))
     %*%
     omat
     +
@@ -19,17 +19,16 @@ as_bulk_summarized_experiment <- function(granges, colData, sample_name = "name"
     Diagonal(x = log(colSums2(mat)) - log(1000) * 2, names=T)
   )
 
-  rowData <- tibble(seqnames = as.factor(unl@seqnames), start = unl@ranges@start, width = unl@ranges@width)
+  rowData <- tibble(seqnames = as.factor(anyGranges@seqnames), start = anyGranges@ranges@start, width = anyGranges@ranges@width)
   SummarizedExperiment(
     list(counts = mat),
     colData = colData,
     rowData = rowData,
     metadata = list(
-      grangesList = GRangesList(
-        # GRanges constructor creates a new GRanges from the first sample
-        # without including the track metadata on the windows (which is now
-        # stored in assay).
-        sapply(granges[[1]], \(gr) GRanges(gr@seqnames, gr@ranges, seqlengths=seqlengths(gr)))
+      # Create a GRanges without the elementMetadata (track value) which is now
+      # stored in the assay.
+      granges = GRanges(
+        granges[[1]]@seqnames, granges[[1]]@ranges, seqlengths=seqlengths(granges[[1]])
       ),
       offset = offsets
     )

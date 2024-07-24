@@ -148,6 +148,16 @@ paired_end_pos_to_midpoint <- function(df) {
     mutate(pos = pos + round((fragment_end_crick - pos) / 2))
 }
 
+single_end_pos_to_midpoint <- function(df) {
+  df %>%
+    bam_reference_coords() %>%
+    mutate(pos = mid(IRanges(pos, width=width)))
+}
+
+bulk_reads_apply_markdup <- function(df) {
+  df %>% mutate(dc=1)
+}
+
 bam_cover_paired_end_fragments_bp <- function(df, min_mapq, min_fl, max_fl, markdup=FALSE) {
   stopifnot(all(df$rname %in% names(masked.lengths)))
   df$rname <- df$rname %>% droplevels()
@@ -176,29 +186,15 @@ bam_cover_paired_end_fragments_bp <- function(df, min_mapq, min_fl, max_fl, mark
   )
 }
 
-count_overlaps_sparse_vectors <- function(sparse_vectors, tile_width) {
-  tiles <- mapply(
-    \(n, v) str_glue("{n}:1-{length(v)}"),
-    names(sparse_vectors),
-    sparse_vectors
-  ) %>%
-    GRanges %>%
-    slidingWindows(width = as.integer(tile_width), step = as.integer(tile_width)) %>%
-    unlist
-  counts <- mapply(
-    \(n, v) GRanges(seqnames = if (length(v@i)) n, ranges = if (length(v@i)) IRanges(v@i, width = 1) else IRanges(), score = v@x),
-    names(sparse_vectors),
-    sparse_vectors,
-    SIMPLIFY=FALSE
-  ) %>%
-    GRangesList %>%
-    unlist
-  hits = findOverlaps(tiles, counts) %>% as("List")
-  GRanges(tiles, score = sum(extractList(counts$score, hits)), seqlengths=sapply(sparse_vectors, length))
-}
-
 count_overlaps_bases <- function(windows, bases_df) {
   bases_df <- bases_df %>% group_by(rname, pos) %>% summarise(count = length(pos), .groups="drop")
+  gcts <- bases_df %>% with(GRanges(rname, IRanges(pos, width = 1), score = count))
+  hits <- findOverlaps(windows, gcts)
+  GRanges(windows, score = sum(extractList(gcts$score, hits)))
+}
+
+count_overlaps_bases_no_markdup <- function(windows, bases_df) {
+  bases_df <- bases_df %>% group_by(rname, pos) %>% summarise(count = sum(dc), .groups="drop")
   gcts <- bases_df %>% with(GRanges(rname, IRanges(pos, width = 1), score = count))
   hits <- findOverlaps(windows, gcts)
   GRanges(windows, score = sum(extractList(gcts$score, hits)))

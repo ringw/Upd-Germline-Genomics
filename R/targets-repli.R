@@ -105,7 +105,9 @@ targets.repli <- list(
           name,
           str_glue("repli.bam_{repli_target}_{name}"),
           SIMPLIFY = F
-        )
+        ),
+        chic.tile.diameter_1000 = str_glue("chic.tile.diameter_1000_{name}") %>%
+          rlang::syms()
       ) %>%
       rowwise() %>%
       # Include 2L_Histone_Repeat_Unit - split refs and sum up - when splitting by rname and summing.
@@ -115,38 +117,46 @@ targets.repli <- list(
         } else {
           list(bulk_reads_misc)
         },
-        markdup = isTRUE(is_paired_end)
+        markdup = isTRUE(is_paired_end),
+        df_pos_midpoint_callable = list(
+          if (isTRUE(is_paired_end)) quote(paired_end_pos_to_midpoint()) else quote(single_end_pos_to_midpoint())
+        ),
+        count_overlaps_bases_callable = list(
+          if (markdup) quote(count_overlaps_bases) else quote(count_overlaps_bases_no_markdup)
+        )
       ),
     names = suffix,
     tar_target(
       repli.granges,
-      GRanges(
-        seqnames = levels(bulk_reads_misc$rname),
-        IRanges(
-          start = 1,
-          width = pull(bulk_reads_idxstats, "rlength", "rname")[levels(bulk_reads_misc$rname)]
-        ),
-        score = bulk_reads_shortrefs %>%
-          split(.$rname) %>%
-          sapply(\(df) sum(df$dc)),
-        seqlengths = pull(bulk_reads_idxstats, "rlength", "rname")[levels(bulk_reads_misc$rname)]
+      tibble(
+        reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
+          sapply(
+            \(df) df %>%
+              df_pos_midpoint_callable,
+            simplify=F
+          ) %>%
+          setNames(NULL),
+        tile_granges = reads %>%
+          sapply(
+            \(df) chic.tile.diameter_1000[
+              if (!nrow(df))
+                integer(0)
+              else if (df$rname[1] %in% names(masked.lengths))
+                seqnames(chic.tile.diameter_1000) == df$rname[1]
+              else
+                !(seqnames(chic.tile.diameter_1000) %in% names(masked.lengths))
+            ]
+          ),
+        partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_1000)),
+        granges = mapply(
+          count_overlaps_bases_callable, tile_granges, reads
+        )
       ) %>%
-        split(seqnames(.)) %>%
-        replace(
-          match(names(bulk_reads_split), names(.)),
-          GRangesList(
-            bulk_reads_split %>%
-              mapply(
-                \(n, df) df %>%
-                  mutate(rname = factor(rname, levels = n)) %>%
-                  bam_cover_read_bp(min_mapq = 0, markdup = markdup) %>%
-                  count_overlaps_sparse_vectors(tile_width = 1000L),
-                names(.),
-                .,
-                SIMPLIFY = F
-              ) %>%
-              unlist()
-          )
+        with(
+          granges %>%
+            GRangesList %>%
+            unlist %>%
+            `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
         )
     )
   ),
