@@ -179,17 +179,41 @@ laplace_approx_sliding_transform <- function(lst, x, xout=x, bw=1500) {
 laplace_approx_expectation_ratio <- function(elem) {
   par <- elem$par
   sigma <- solve(elem$fisher_information)
-  moment <- \(x, y) matrix(as.numeric((x - 1) / (x + y - 2)) * dmvnorm(cbind(as.numeric(x), as.numeric(y)), par, sigma), nrow = nrow(x))
-  mydens <- \(x, y) matrix(dmvnorm(cbind(as.numeric(x), as.numeric(y)), par, sigma), nrow = nrow(x))
-  numer <- integral(
-    # Vectorize(purrr::partial(integrate_gauss2d_arc, origin=c(1,1), mean=par, sigma=sigma)),
-    Vectorize(\(angle) sin(angle)/(sin(angle)+cos(angle)) * integrate_gauss2d_arc(c(1,1), angle, par, sigma)),
-    0, pi/2
-  )
   denom <- pmvnorm(
     lower=c(1, 1),
     mean = elem$par,
     sigma = sigma
+  )
+  if (denom < 1e-10) {
+    # There is not much probability mass inside the quadrant. Then because it is
+    # a convex distribution, almost all of the probability mass inside the
+    # quadrant (closed lower bound indices) is on the x-intercept or the
+    # y-intercept.
+    if (par[1] > 1) return(1) # Our Late draw from the Beta distribution.
+    else if (par[2] > 1) return(0) # Our Early draw from the Beta distribution.
+
+    mean <- par - 1
+    v <- eigen(sigma, sym=T)$vectors[, 1]
+    if (all(v < 0)) v <- -v
+    par.update <- mean + v / max(-v / mean)
+    angle.update <- atan2(par.update[1], par.update[2])
+    if (angle.update > pi/2)
+      # We hit the alpha = 1-intercept, while the beta parameter is < 1. So
+      # there is a great amount of probability mass with the mode at alpha,
+      # conditioned on alpha >= 1, beta >= 1.
+      return(1)
+    else if (angle.update < 0)
+      return(0)
+  }
+  # Now we are interested in the moment of sin(a)/(sin(a)+cos(a)) in our
+  # quadrant. We didn't actually check that the MAP (par) is in the >1-quadrant,
+  # but we are able to compute probabilities in this quadrant regardless,
+  # because the values are not infinitesimally small.
+  numer <- integral(
+    # Vectorize(purrr::partial(integrate_gauss2d_arc, origin=c(1,1), mean=par, sigma=sigma)),
+    Vectorize(\(angle) sin(angle)/(sin(angle)+cos(angle)) * integrate_gauss2d_arc(c(1,1), angle, par, sigma)),
+    0, pi/2,
+    reltol = 1e-3
   )
   res <- numer / as.numeric(denom)
 }
