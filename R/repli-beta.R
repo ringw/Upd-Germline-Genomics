@@ -82,9 +82,10 @@ beta_dm_regression <- function(exper, i) {
   ll_post <- function(v, theta) {
     log_prior <- (
       sum(dgamma(v, 4, scale=0.5, log = TRUE))
-      + dgamma(theta, 1, scale=0.1, log = TRUE)
+      + dgamma(theta, 1, scale=0.5, log = TRUE)
     )
     pb <- diff(pbeta(beta_regression_cuts, v[1], v[2]))
+    pb <- pmax(pb, 1e-40)
     mu_unnorm <- beta_regression_size_factors %*% diag(x = pb)
     dirparam <- (
       mu_unnorm
