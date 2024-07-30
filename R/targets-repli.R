@@ -119,7 +119,7 @@ targets.repli <- list(
         },
         markdup = isTRUE(is_paired_end),
         df_pos_midpoint_callable = list(
-          if (isTRUE(is_paired_end)) quote(paired_end_pos_to_midpoint()) else quote(single_end_pos_to_midpoint())
+          if (isTRUE(is_paired_end)) quote(paired_end_pos_to_midpoint) else quote(single_end_pos_to_midpoint)
         ),
         count_overlaps_bases_callable = list(
           if (markdup) quote(count_overlaps_bases) else quote(count_overlaps_bases_no_markdup)
@@ -132,19 +132,20 @@ targets.repli <- list(
         reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
           sapply(
             \(df) df %>%
-              df_pos_midpoint_callable,
-            simplify=F
+              df_pos_midpoint_callable(),
+            simplify = F
           ) %>%
           setNames(NULL),
         tile_granges = reads %>%
           sapply(
             \(df) chic.tile.diameter_1000[
-              if (!nrow(df))
+              if (!nrow(df)) {
                 integer(0)
-              else if (df$rname[1] %in% names(masked.lengths))
+              } else if (df$rname[1] %in% names(masked.lengths)) {
                 seqnames(chic.tile.diameter_1000) == df$rname[1]
-              else
+              } else {
                 !(seqnames(chic.tile.diameter_1000) %in% names(masked.lengths))
+              }
             ]
           ),
         partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_1000)),
@@ -154,8 +155,8 @@ targets.repli <- list(
       ) %>%
         with(
           granges %>%
-            GRangesList %>%
-            unlist %>%
+            GRangesList() %>%
+            unlist() %>%
             `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
         )
     )
@@ -223,7 +224,7 @@ targets.repli <- list(
       ) %>%
         # As we will use Beta dist Bayesian Inference, create the metadata ahead
         # of time.
-        init_beta_dm_experiment
+        init_beta_dm_experiment()
     ),
     tar_target(
       repli.glm,
@@ -329,7 +330,7 @@ targets.repli <- list(
         replace(is.na(.) | !is.finite(.), 0) %>%
         GRanges(chic.tile.diameter_1000, score = .) %>%
         export(BigWigFile(str_glue("repli/Replication_Bayes_", celltype, "_", reference, ".bw"))) %>%
-        as.character
+        as.character()
     ),
 
     # Repli ChIC heatmap
