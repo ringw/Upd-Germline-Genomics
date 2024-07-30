@@ -970,6 +970,137 @@ targets.chic <- list(
       ) %>%
       unlist
   ),
+  tar_target(
+    chic.nucleosome.est.query,
+    bulk_reads_idxstats_chic.bam_GC2894001_S1_L001_chr %>%
+      subset(rname %in% c(names(chr.lengths), "rDNA")) %$%
+      GRanges(rname, IRanges(1, width=rlength)) %>%
+      slidingWindows(100000L, 100000L) %>%
+      sapply(
+        # Now extend each window to a good size for estimation.
+        \(gr) GRanges(
+          seqnames(gr),
+          gr %>%
+            ranges %>%
+            resize(200000L, fix="center") %>%
+            restrict(
+              1L,
+              if (length(gr))
+                seqlengths(gr)[as.character(seqnames(gr)[1])]
+              else
+                1L
+            ),
+          seqinfo = seqinfo(gr)
+        )
+      ) %>%
+      GRangesList() %>%
+      unlist()
+  ),
+  # Map over cell types for Nucleosome Spacing Estimation.
+  tar_map(
+    tribble(
+      ~celltype, ~p_value_column,
+      "Germline", "p_GSC_nuc",
+      "Somatic", "p_CySC_nuc"
+    ),
+    names = celltype,
+    # Reduced GRanges of the rough locations of every "nucleosome" (even ones
+    # that are actually improbably low-confidence).
+    tar_target(
+      chic.nucleosome.unprocessed.loc,
+      chic.test.nucleosomes[
+        which(
+          pull(as.data.frame(elementMetadata(chic.test.nucleosomes)), p_value_column) < 0.05
+        )
+      ] %>%
+        split(seqnames(.)) %>%
+        sapply(\(gr) if (length(gr)) GRanges(seqnames(gr)[1], IRanges::reduce(ranges(gr)), seqinfo=seqinfo(gr)) else GRanges(seqinfo=seqinfo(gr))) %>%
+        GRangesList %>%
+        unlist
+    ),
+    # Mode Nucleosome Spacing estimator using KDE.
+    tar_target(
+      chic.nucleosome.est,
+      GRanges(
+        chic.nucleosome.est.query,
+        score = findOverlaps(chic.nucleosome.est.query, chic.nucleosome.unprocessed.loc) %>%
+          as("List") %>%
+          mapply(
+            \(inds, nucloc) nucloc[inds] %>%
+              diff %>%
+              subset(. < 1000) %>%
+              (
+                function(v) if (length(v) >= 10)
+                  density(v, n=16*1024, adjust=0.25) %$%
+                    x[which.max(y)]
+                else NA
+              ),
+            .,
+            list(mid(chic.nucleosome.unprocessed.loc))
+          )
+      )
+    )
+  ),
+  # Figure of nucleosome spacing estimate track.
+  tar_target(
+    gg.chic.nucleosome.est,
+    tibble(
+      celltype = rep(c("Germline", "Somatic"), each=length(chic.nucleosome.est.query)),
+      chr = rep(as.factor(seqnames(chic.nucleosome.est.query)), 2) %>%
+        fct_recode(`2`="2L", `2`="2R", `3`="3L", `3`="3R") %>%
+        relevel("X"),
+      pos = rep(
+        mid(chic.nucleosome.est.query) +
+          ifelse(
+            seqnames(chic.nucleosome.est.query) == "2R", chr.lengths["2L"],
+            ifelse(
+              seqnames(chic.nucleosome.est.query) == "3R", chr.lengths["3L"],
+              0
+            )
+          ),
+        2
+      ),
+      value = c(chic.nucleosome.est_Germline$score, chic.nucleosome.est_Somatic$score) %>%
+        replace(!between(., 150, 250), NA)
+    ) %>%
+      subset(chr != "rDNA") %>%
+      ggplot(
+        aes(pos, value, group=celltype, color=celltype, fill=celltype)
+      ) +
+        facet_wrap(vars(chr), scales = "free_x", nrow=1) +
+        geom_smooth() +
+        scale_color_manual(values=setNames(unlist(chic_line_track_colors), NULL)) +
+        scale_fill_manual(
+          values = setNames(unlist(chic_line_track_colors), NULL) %>%
+            muted(c = 50, l = 70)
+        ) +
+        scale_x_continuous(
+          breaks = c(1, seq(1, 80) * 2000000),
+          minor_breaks = 1000000 + seq(0, 80) * 2000000,
+          labels = NULL
+        ) +
+        coord_cartesian(NULL, c(160, 200), expand=F) +
+        labs(x = NULL, y = "Mode Nucleosome Spacing")
+  ),
+  tar_file(
+    fig.chic.nucleosome.est,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        rowname="Nucleosome-Spacing",
+        orig_fig=gg.chic.nucleosome.est %>% list,
+        figure={
+          gg <- as_grob(orig_fig[[1]])
+          gg$widths[c(5, 9, 13, 17, 21)] <- unit(c(0.8, 1, 1, 0.3, 0.5), "null")
+          gg
+        } %>%
+          list,
+        width=8,
+        height=3
+      )
+    )
+  ),
 
   # Binning of chic H3 fragments by length and by mapq.
   tar_target(
