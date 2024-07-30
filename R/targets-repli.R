@@ -160,6 +160,18 @@ targets.repli <- list(
         )
     )
   ),
+  # Sliding plate for explaining the observations using each fitted regression
+  # model. The weights for the observations will be given by a Gaussian kernel
+  # with the given bandwidth in bp. Observations will be taken in chunks of 1000
+  # bp, as this is a low-input assay, and reads aggregated by this window will
+  # be a robust observation. BW will probably be at least sigma = 1000 bp.
+  tar_target(repli.sliding.weight.bw, 1500 / 1000),
+  tar_target(
+    # Read 9 windows (independent draws of replication timing reads).
+    repli.sliding.weights,
+    diff(pnorm(seq(-4.5, 4.5), sd = repli.sliding.weight.bw)) %>%
+      `/`(max(.))
+  ),
 
   # From each sample GRanges: Apply regression.
   tar_map(
@@ -182,6 +194,9 @@ targets.repli <- list(
         )
       ) %>%
         list(),
+      chic.tile.diameter_1000 = rlang::syms(
+        str_glue("chic.tile.diameter_1000_", reference)
+      ),
       chic.track = rlang::syms(str_glue("chic.tile.diameter_40_score_{reference}")),
       chic.results = list(
         call(
@@ -256,40 +271,63 @@ targets.repli <- list(
         as.character(),
       packages = c("dplyr", "rtracklayer", "stringr", "tibble", "tidyr")
     ),
-
     tar_target(
-      repli.beta,
-      future_sapply(
-        seq(nrow(repli.experiment)),
-        \(i) tryCatch(beta_dm_regression(repli.experiment, i), error=\(e) beta_dm_regression_calculate_prior()),
-        simplify=FALSE
-      ),
+      repli.mse,
+      # For each set of indices into the experiment (each chromosome),
+      # parallel-apply the mse fitting function with smooth-weight plate.
+      sapply(
+        split(
+          seq(nrow(repli.experiment)),
+          rowData(repli.experiment)$seqnames
+        ),
+        \(inds) full_quantification_gaussian_plate(
+          list(Beta=repli.glm$Beta[inds,, drop=F]),
+          wts=repli.sliding.weights
+        ),
+        simplify = FALSE
+      ) %>%
+        unlist(rec = FALSE),
       packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
     ),
+    # Fit MAP and Fisher information (Bayesian Regression).
+    tar_target(
+      repli.beta,
+      # For each set of indices into the experiment (each chromosome),
+      # parallel-apply the beta fitting function with smooth-weight plate.
+      sapply(
+        split(
+          seq(nrow(repli.experiment)),
+          rowData(repli.experiment)$seqnames
+        ),
+        \(inds) future_lapply(
+          seq_along(inds),
+          \(...) beta_dm_regression_gaussian_plate(...) %>%
+            tryCatch(error = \(e) beta_dm_regression_calculate_prior()),
+          exper=repli.experiment[inds, ],
+          wts=repli.sliding.weights
+        ),
+        simplify = FALSE
+      ) %>%
+        unlist(rec = FALSE),
+      packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
+    ),
+    # Perform inference on the MAP parameters (Laplace) and create GRanges track.
     tar_target(
       repli.beta.2,
       repli.beta %>%
-        split(rowData(repli.experiment)$seqnames) %>%
-        sapply(
-          \(lst) if (length(lst) > 1) laplace_approx_sliding_transform(lst) else lst,
-          simplify=FALSE
-        ) %>%
-        unlist(rec=FALSE, use.names=FALSE) %>%
-        future_sapply(\(elem) tryCatch(laplace_approx_expectation_ratio(elem), error=\(e) NA)) %>%
-        `*`(-2) %>%
-        `+`(1) %>%
-        plogistanh() %>%
-        `-`(median(., na.rm = T)) %>%
-        qlogistanh() %>%
-        GRanges(
-          unlist(repli.granges_nos_E3_chr, use.names=FALSE),
-          score=.
+        future_sapply(laplace_approx_expectation_ratio) %>%
+        repli_logistic_beta_to_tanh() %>%
+        GRanges(chic.tile.diameter_1000, score = .) %>%
+        repli_logistic_link_apply_scale(
+          num_fractions = repli.experiment@metadata$beta_regression_num_fractions
         ),
       packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
     ),
     tar_file(
       repli.beta.bw,
-      repli.beta.2 %>%
+      repli.beta.2$score %>%
+        replace(is.na(.) | !is.finite(.), 0) %>%
+        GRanges(chic.tile.diameter_1000, score = .) %>%
         export(BigWigFile(str_glue("repli/Replication_Bayes_", celltype, "_", reference, ".bw"))) %>%
         as.character
     ),
