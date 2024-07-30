@@ -17,6 +17,14 @@ nos,-0.25,3,TRUE,KZ2851/GCJU05_S25_L002
 nos,-0.25,4,TRUE,KZ2851/GCJU06_S26_L002
 nos,-0.75,3,TRUE,KZ2851/GCJU08_S28_L002
 nos,-0.75,4,TRUE,KZ2851/GCJU09_S29_L002
+S2,0.75,1,,S2_WT_Repliseq/S2_Early_Replicate_1.fastq.gz
+S2,0.25,1,,S2_WT_Repliseq/S2_Mid-Early_Replicate_1.fastq.gz
+S2,-0.25,1,,S2_WT_Repliseq/S2_Mid-Late_Replicate_1.fastq.gz
+S2,-0.75,1,,S2_WT_Repliseq/S2_Late_Replicate_1.fastq.gz
+S2,0.75,2,,S2_WT_Repliseq/S2_Early_Replicate_2.fastq.gz
+S2,0.25,2,,S2_WT_Repliseq/S2_Mid-Early_Replicate_2.fastq.gz
+S2,-0.25,2,,S2_WT_Repliseq/S2_Mid-Late_Replicate_2.fastq.gz
+S2,-0.75,2,,S2_WT_Repliseq/S2_Late_Replicate_2.fastq.gz
 Kc167,0.75,1,,KC_WT_Repliseq/KC167_Early_Replicate_1.fastq.gz
 Kc167,0.25,1,,KC_WT_Repliseq/KC167_Mid-Early_Replicate_1.fastq.gz
 Kc167,-0.25,1,,KC_WT_Repliseq/KC167_Mid-Late_Replicate_1.fastq.gz

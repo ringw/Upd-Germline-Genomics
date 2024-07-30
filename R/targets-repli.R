@@ -166,7 +166,11 @@ targets.repli <- list(
     mutate(
       rowwise(
         cross_join(
-          rbind(experiment.driver, tibble(driver = "Kc167", celltype = "Kc167")),
+          rbind(
+            experiment.driver,
+            tibble(driver = c("Kc167", "S2")) %>%
+              mutate(celltype = driver)
+          ),
           dplyr::rename(bowtie.refs, reference = "name")
         )
       ),
