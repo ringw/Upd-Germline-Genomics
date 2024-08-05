@@ -360,6 +360,40 @@ targets.chic <- list(
         )
     ),
     tar_target(
+      chic.granges.dinucleosome.diameter_40,
+      tibble(
+        reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
+          sapply(
+            \(df) df %>%
+              pos_fixer_callable %>%
+              filter(between(length, 200, 500), mapq >= 20),
+            simplify=F
+          ) %>%
+          setNames(NULL),
+        tile_granges = reads %>%
+          sapply(
+            \(df) chic.tile.diameter_40[
+              if (!nrow(df))
+                integer(0)
+              else if (df$rname[1] %in% names(masked.lengths))
+                seqnames(chic.tile.diameter_40) == df$rname[1]
+              else
+                !(seqnames(chic.tile.diameter_40) %in% names(masked.lengths))
+            ]
+          ),
+        partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_40)),
+        granges = mapply(
+          count_overlaps_bases, tile_granges, reads
+        )
+      ) %>%
+        with(
+          granges %>%
+            GRangesList %>%
+            unlist %>%
+            `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
+        )
+    ),
+    tar_target(
       chic.granges.peakcalling.diameter_40,
       tibble(
         reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
@@ -566,8 +600,16 @@ targets.chic <- list(
               \(v) v %>% rollmean(50, fill=0, align="center") %>% median
             )
         ) %>%
-          rep(each = length(chic.experiment.granges))
-        + log(ranges(chic.experiment.granges)@width)
+          rep(each = length(chic.experiment.granges)) +
+        log(ranges(chic.experiment.granges)@width) +
+        # Update to the GLM offset for male sex. For female, we would probably
+        # not introduce an offset (2 X chromosomes). Negative offset will make
+        # us pull up the log-quantification by this amount.
+        ifelse(
+          grepl("[XY]", as.character(seqnames(chic.experiment.granges))),
+          -log(2),
+          0
+        )
         - log(
           median(
             ranges(chic.experiment.granges)@width[
@@ -825,6 +867,21 @@ targets.chic <- list(
       )
   ),
   tar_target(
+    chic.experiment.dinucleosomes,
+    chic.tile.diameter_40_score_chr %>%
+      `elementMetadata<-`(
+        # These sample ids must match the above target & rep number found in chic_samples.csv!
+        value = data.frame(
+          GSC.1 = chic.granges.dinucleosome.diameter_40_GC3768007_S7_L001_CN_chr$score,
+          GSC.2 = chic.granges.dinucleosome.diameter_40_GC3768009_S9_L001_CN_chr$score,
+          GSC.3 = chic.granges.dinucleosome.diameter_40_GC76045515_S5_L001_CN_chr$score,
+          CySC.1 = chic.granges.dinucleosome.diameter_40_GC3768010_S10_L001_CN_chr$score,
+          CySC.4 = chic.granges.dinucleosome.diameter_40_GC3768013_S13_L001_CN_chr$score,
+          CySC.5 = chic.granges.dinucleosome.diameter_40_GC3768014_S14_L001_CN_chr$score
+        )
+      )
+  ),
+  tar_target(
     chic.experiment.nucleosomes.offset,
     cbind(
       chic.experiment.granges.offset.euchromatin_H3K27_Germline_CN_chr[
@@ -840,6 +897,21 @@ targets.chic <- list(
     chic.experiment.quantify.nucleosomes,
     chic_quantify(
       chic.experiment.nucleosomes,
+      structure(
+        c(2L, 2L, 2L, 1L, 1L, 1L),
+        levels=c("H3.CySC", "H3.GSC"),
+        class = "factor"
+      ),
+      rep(1L, 6),
+      chic.experiment.nucleosomes.offset,
+      test_de = TRUE,
+      test_wald = TRUE
+    )
+  ),
+  tar_target(
+    chic.experiment.quantify.dinucleosomes,
+    chic_quantify(
+      chic.experiment.dinucleosomes,
       structure(
         c(2L, 2L, 2L, 1L, 1L, 1L),
         levels=c("H3.CySC", "H3.GSC"),
@@ -949,6 +1021,50 @@ targets.chic <- list(
       pmin(1, 2 * chic.test.nucleosomes$p_diff_two_tail)
     ),
     packages = tar_option_get("packages") %>% c("tidyr")
+  ),
+  tar_map(
+    tribble(
+      ~celltype, ~chic.test.nucleosomes.fix, ~score_column,
+      "Germline", rlang::sym("chic.test.nucleosomes.fix_Germline"), "score.molH3.GSC",
+      "Somatic", rlang::sym("chic.test.nucleosomes.fix_Somatic"), "score.molH3.CySC",
+    ),
+    names = celltype,
+    tar_target(
+      chic.fix.quantify.monosomes,
+      tibble(
+        findOverlaps(chic.test.nucleosomes.fix$Nucleosomes, chic.tile.diameter_40_chr) %>%
+          as_tibble,
+        score = elementMetadata(chic.experiment.quantify.nucleosomes)[
+          subjectHits,
+          score_column
+        ]
+      ) %>%
+        group_by(queryHits) %>%
+        summarise(score = max(score)) %>%
+        pull(score) %>%
+        GRanges(
+          chic.test.nucleosomes.fix$Nucleosomes,
+          score = .
+        )
+    ),
+    tar_target(
+      chic.fix.quantify.dinucleosomes,
+      tibble(
+        findOverlaps(chic.test.nucleosomes.fix$Nucleosomes, chic.tile.diameter_40_chr) %>%
+          as_tibble,
+        score = elementMetadata(chic.experiment.quantify.dinucleosomes)[
+          subjectHits,
+          score_column
+        ]
+      ) %>%
+        group_by(queryHits) %>%
+        summarise(score = max(score)) %>%
+        pull(score) %>%
+        GRanges(
+          chic.test.nucleosomes.fix$Nucleosomes,
+          score = .
+        )
+    )
   ),
   tar_file(
     chic.test.nucleosomes.fix.bw.tracks,
