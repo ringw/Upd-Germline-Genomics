@@ -856,13 +856,13 @@ targets.chic <- list(
     chic.tile.diameter_40_score_chr %>%
       `elementMetadata<-`(
         value = cbind(
-          elementMetadata(chic.experiment.granges_H3K27_Germline_CN_chr) %>%
-            subset(select=c(score.H3_Rep1, score.H3_Rep3, score.H3_Rep20240528)),
-          elementMetadata(chic.experiment.granges_H3K27_Somatic_CN_chr) %>%
-            subset(select=c(score.H3_Rep1, score.H3_Rep4, score.H3_Rep5))
+          elementMetadata(chic.experiment.granges_H3K4_Germline_CN_chr) %>%
+            subset(select=c(score.H3_Rep1, score.H3_Rep2)),
+          elementMetadata(chic.experiment.granges_H3K4_Somatic_CN_chr) %>%
+            subset(select=c(score.H3_Rep1, score.H3_Rep3))
         ) %>%
           `colnames<-`(
-            value = as.character(interaction(rep(c("GSC", "CySC"), each=3), 1:3))
+            value = as.character(interaction(rep(c("GSC", "CySC"), each=2), 1:2))
           )
       )
   ),
@@ -872,12 +872,10 @@ targets.chic <- list(
       `elementMetadata<-`(
         # These sample ids must match the above target & rep number found in chic_samples.csv!
         value = data.frame(
-          GSC.1 = chic.granges.dinucleosome.diameter_40_GC3768007_S7_L001_CN_chr$score,
-          GSC.2 = chic.granges.dinucleosome.diameter_40_GC3768009_S9_L001_CN_chr$score,
-          GSC.3 = chic.granges.dinucleosome.diameter_40_GC76045515_S5_L001_CN_chr$score,
-          CySC.1 = chic.granges.dinucleosome.diameter_40_GC3768010_S10_L001_CN_chr$score,
-          CySC.2 = chic.granges.dinucleosome.diameter_40_GC3768013_S13_L001_CN_chr$score,
-          CySC.3 = chic.granges.dinucleosome.diameter_40_GC3768014_S14_L001_CN_chr$score
+          GSC.1 = chic.granges.dinucleosome.diameter_40_GC2894001_S1_L001_CN_chr$score,
+          GSC.2 = chic.granges.dinucleosome.diameter_40_GC2894002_S2_L001_CN_chr$score,
+          CySC.1 = chic.granges.dinucleosome.diameter_40_GC3772016_S1_L002_CN_chr$score,
+          CySC.2 = chic.granges.dinucleosome.diameter_40_GC3772018_S3_L002_CN_chr$score
         )
       )
   ),
@@ -886,16 +884,14 @@ targets.chic <- list(
     matrix(
       -log(2) * as.numeric(grepl("[XY]", seqnames(chic.tile.diameter_40_chr))),
       nrow = length(chic.tile.diameter_40_chr),
-      ncol = 6,
+      ncol = 4,
       dimnames = list(NULL, colnames(elementMetadata(chic.experiment.nucleosomes)))
     ) +
       list(
-        GSC.1 = chic.granges.diameter_40_GC3768007_S7_L001_CN_chr$score,
-        GSC.2 = chic.granges.diameter_40_GC3768009_S9_L001_CN_chr$score,
-        GSC.3 = chic.granges.diameter_40_GC76045515_S5_L001_CN_chr$score,
-        CySC.1 = chic.granges.diameter_40_GC3768010_S10_L001_CN_chr$score,
-        CySC.2 = chic.granges.diameter_40_GC3768013_S13_L001_CN_chr$score,
-        CySC.3 = chic.granges.diameter_40_GC3768014_S14_L001_CN_chr$score
+        GSC.1 = chic.granges.diameter_40_GC2894001_S1_L001_CN_chr$score,
+        GSC.2 = chic.granges.diameter_40_GC2894002_S2_L001_CN_chr$score,
+        CySC.1 = chic.granges.diameter_40_GC3772016_S1_L002_CN_chr$score,
+        CySC.2 = chic.granges.diameter_40_GC3772018_S3_L002_CN_chr$score
       ) %>%
         sapply(
           \(tr) interp.median(
@@ -912,11 +908,11 @@ targets.chic <- list(
     chic_quantify(
       chic.experiment.nucleosomes,
       structure(
-        c(2L, 2L, 2L, 1L, 1L, 1L),
+        c(2L, 2L, 1L, 1L),
         levels=c("H3.CySC", "H3.GSC"),
         class = "factor"
       ),
-      rep(1L, 6),
+      rep(1L, 4),
       chic.experiment.nucleosomes.offset,
       test_de = TRUE,
       test_wald = TRUE
@@ -927,11 +923,11 @@ targets.chic <- list(
     chic_quantify(
       chic.experiment.dinucleosomes,
       structure(
-        c(2L, 2L, 2L, 1L, 1L, 1L),
+        c(2L, 2L, 1L, 1L),
         levels=c("H3.CySC", "H3.GSC"),
         class = "factor"
       ),
-      rep(1L, 6),
+      rep(1L, 4),
       chic.experiment.nucleosomes.offset,
       test_de = TRUE,
       test_wald = TRUE
