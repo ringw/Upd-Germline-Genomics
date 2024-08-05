@@ -876,22 +876,36 @@ targets.chic <- list(
           GSC.2 = chic.granges.dinucleosome.diameter_40_GC3768009_S9_L001_CN_chr$score,
           GSC.3 = chic.granges.dinucleosome.diameter_40_GC76045515_S5_L001_CN_chr$score,
           CySC.1 = chic.granges.dinucleosome.diameter_40_GC3768010_S10_L001_CN_chr$score,
-          CySC.4 = chic.granges.dinucleosome.diameter_40_GC3768013_S13_L001_CN_chr$score,
-          CySC.5 = chic.granges.dinucleosome.diameter_40_GC3768014_S14_L001_CN_chr$score
+          CySC.2 = chic.granges.dinucleosome.diameter_40_GC3768013_S13_L001_CN_chr$score,
+          CySC.3 = chic.granges.dinucleosome.diameter_40_GC3768014_S14_L001_CN_chr$score
         )
       )
   ),
   tar_target(
     chic.experiment.nucleosomes.offset,
-    cbind(
-      chic.experiment.granges.offset.euchromatin_H3K27_Germline_CN_chr[
-        , c("score.H3_Rep1", "score.H3_Rep3", "score.H3_Rep20240528")
-      ],
-      chic.experiment.granges.offset.euchromatin_H3K27_Somatic_CN_chr[
-        , c("score.H3_Rep1", "score.H3_Rep4", "score.H3_Rep5")
-      ]
-    ) %>%
-      `colnames<-`(value = colnames(chic.experiment.nucleosomes))
+    matrix(
+      -log(2) * as.numeric(grepl("[XY]", seqnames(chic.tile.diameter_40_chr))),
+      nrow = length(chic.tile.diameter_40_chr),
+      ncol = 6,
+      dimnames = list(NULL, colnames(elementMetadata(chic.experiment.nucleosomes)))
+    ) +
+      list(
+        GSC.1 = chic.granges.diameter_40_GC3768007_S7_L001_CN_chr$score,
+        GSC.2 = chic.granges.diameter_40_GC3768009_S9_L001_CN_chr$score,
+        GSC.3 = chic.granges.diameter_40_GC76045515_S5_L001_CN_chr$score,
+        CySC.1 = chic.granges.diameter_40_GC3768010_S10_L001_CN_chr$score,
+        CySC.2 = chic.granges.diameter_40_GC3768013_S13_L001_CN_chr$score,
+        CySC.3 = chic.granges.diameter_40_GC3768014_S14_L001_CN_chr$score
+      ) %>%
+        sapply(
+          \(tr) interp.median(
+            tr[as.logical(seqnames(chic.tile.diameter_40_chr) %in% c("2L", "2R", "3L", "3R", "4"))],
+            na.rm = T
+          )
+        ) %>%
+        log %>%
+        rep(each = length(chic.tile.diameter_40_chr)),
+    packages = tar_option_get("packages") %>% c("psych")
   ),
   tar_target(
     chic.experiment.quantify.nucleosomes,
@@ -1031,39 +1045,62 @@ targets.chic <- list(
     names = celltype,
     tar_target(
       chic.fix.quantify.monosomes,
-      tibble(
-        findOverlaps(chic.test.nucleosomes.fix$Nucleosomes, chic.tile.diameter_40_chr) %>%
-          as_tibble,
-        score = elementMetadata(chic.experiment.quantify.nucleosomes)[
-          subjectHits,
-          score_column
-        ]
-      ) %>%
-        group_by(queryHits) %>%
-        summarise(score = max(score)) %>%
-        pull(score) %>%
+      granges_approx(
+        chic.test.nucleosomes.fix$Nucleosomes,
         GRanges(
-          chic.test.nucleosomes.fix$Nucleosomes,
-          score = .
+          chic.tile.diameter_40_chr,
+          score = elementMetadata(chic.experiment.quantify.nucleosomes)[, score_column]
         )
+      )
     ),
     tar_target(
       chic.fix.quantify.dinucleosomes,
-      tibble(
-        findOverlaps(chic.test.nucleosomes.fix$Nucleosomes, chic.tile.diameter_40_chr) %>%
-          as_tibble,
-        score = elementMetadata(chic.experiment.quantify.dinucleosomes)[
-          subjectHits,
-          score_column
-        ]
-      ) %>%
-        group_by(queryHits) %>%
-        summarise(score = max(score)) %>%
-        pull(score) %>%
+      granges_approx(
+        chic.test.nucleosomes.fix$Nucleosomes,
         GRanges(
-          chic.test.nucleosomes.fix$Nucleosomes,
-          score = .
+          chic.tile.diameter_40_chr,
+          score = elementMetadata(chic.experiment.quantify.dinucleosomes)[, score_column]
         )
+      )
+    ),
+    tar_file(
+      fig.chic.nuc.boxplot,
+      save_figures(
+        str_glue("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          "CHIC-H3-Box-Plot",
+          plot_grid(
+            chic.fix.quantify.monosomes$score %>%
+              `/`(
+                chic.fix.quantify.monosomes$score[
+                  as.logical(seqnames(chic.fix.quantify.monosomes) %in% c("2L", "2R", "3L", "3R", "4"))
+                ] %>%
+                  median
+              ) %>%
+              GRanges(chic.test.nucleosomes.fix$Nucleosomes, score=.) %>%
+              chic_stats_boxplot() +
+              theme(aspect.ratio = 1/2) +
+              labs(title = "Monosomes"),
+            chic.fix.quantify.dinucleosomes$score %>%
+              `/`(
+                chic.fix.quantify.monosomes$score[
+                  as.logical(seqnames(chic.fix.quantify.monosomes) %in% c("2L", "2R", "3L", "3R", "4"))
+                ] %>%
+                  median
+              ) %>%
+              GRanges(chic.test.nucleosomes.fix$Nucleosomes, score=.) %>%
+              chic_stats_boxplot() +
+              theme(aspect.ratio = 1/2) +
+              labs(title = "Dinucleosomes"),
+            nrow = 2
+          ),
+          6,
+          6.75
+        )
+      ),
+      packages = tar_option_get("packages") %>% c("cowplot")
     )
   ),
   tar_file(
