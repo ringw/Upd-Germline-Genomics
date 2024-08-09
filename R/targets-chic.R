@@ -1641,6 +1641,93 @@ targets.chic <- list(
       ),
       pattern = map(cpm_gene_lists_extended),
       format = "parquet"
+    ),
+    tar_target(
+      sc_bivalency_data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        tibble(
+          activity = Upd_cpm[, tolower(celltype)] %>%
+            `>=`(5) %>%
+            as.factor %>%
+            fct_recode(off="FALSE", active="TRUE"),
+          H3K4 = pull(chic.gene.enrichment, str_glue("H3K4_", str_to_sentence(celltype))) %>%
+            `<`(0.001) %>%
+            as.factor %>%
+            fct_recode(`~`="FALSE", `+`="TRUE"),
+          H3K27 = pull(chic.gene.enrichment, str_glue("H3K27_", str_to_sentence(celltype))) %>%
+            `<`(0.001) %>%
+            as.factor %>%
+            fct_recode(`~`="FALSE", `+`="TRUE"),
+          gene = chic.gene.enrichment$symbol
+        ) %>%
+          filter(!is.na(H3K4), !is.na(H3K27)) %>%
+          list,
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, chic.mark.data$mark)),
+      format = "parquet"
+    ),
+    tar_target(
+      sc_chr_bivalency_data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        tibble(
+          facet = read.csv(assay.data.sc)$chr %>%
+            fct_recode(`2`="2L", `2`="2R", `3`="3L", `3`="3R") %>%
+            factor(c("X", "2", "3", "4")),
+          activity = Upd_cpm[, tolower(celltype)] %>%
+            `>=`(5) %>%
+            as.factor %>%
+            fct_recode(off="FALSE", active="TRUE"),
+          H3K4 = pull(chic.gene.enrichment, str_glue("H3K4_", str_to_sentence(celltype))) %>%
+            `<`(0.001) %>%
+            as.factor %>%
+            fct_recode(`~`="FALSE", `+`="TRUE"),
+          H3K27 = pull(chic.gene.enrichment, str_glue("H3K27_", str_to_sentence(celltype))) %>%
+            `<`(0.001) %>%
+            as.factor %>%
+            fct_recode(`~`="FALSE", `+`="TRUE"),
+          gene = chic.gene.enrichment$symbol
+        ) %>%
+          filter(!is.na(facet), !is.na(H3K4), !is.na(H3K27)) %>%
+          list,
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, chic.mark.data$mark)),
+      format = "parquet"
+    ),
+    tar_target(
+      sc_h3k4_data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        tibble(
+          activity = Upd_cpm[, tolower(celltype)] %>%
+            `>=`(5) %>%
+            as.factor %>%
+            fct_recode(off="FALSE", active="TRUE"),
+          GermlineH3K4 = chic.gene.enrichment$H3K4_Germline %>%
+            `<`(0.001) %>%
+            as.factor %>%
+            fct_recode(`~`="FALSE", `+`="TRUE"),
+          SomaticH3K4 = chic.gene.enrichment$H3K4_Somatic %>%
+            `<`(0.001) %>%
+            as.factor %>%
+            fct_recode(`~`="FALSE", `+`="TRUE"),
+          gene = chic.gene.enrichment$symbol
+        ) %>%
+          filter(!is.na(GermlineH3K4), !is.na(SomaticH3K4)) %>%
+          list,
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, chic.mark.data$mark)),
+      format = "parquet"
     )
   ),
   tar_target(
@@ -1658,6 +1745,72 @@ targets.chic <- list(
       mark = ""
     ),
     format = "parquet"
+  ),
+
+  # ChIC-seq Profile Graphics.
+  tar_file(
+    fig.bivalent,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "CHIC-TSS-AllMarks-Valency",
+        chic_panel_gtable_binary(
+          list(Germline=sc_bivalency_data_Germline_TSS, Somatic=sc_bivalency_data_Somatic_TSS) %>%
+            bind_rows(.id = "genes") %>%
+            rev %>%
+            tibble(facet = 1),
+          chic_plot_average_profiles_facet_grid,
+          c(CelltypeK4="H3K4", CelltypeK27="H3K27"),
+          6, 2.5,
+          unlist(chic_line_track_colors) %>% setNames(NULL),
+          linewidth = rep(0.66, 2)
+        ),
+        12.5,
+        6.25,
+        "CHIC-AllMarks-Valency",
+        chic_panel_gtable_binary(
+          list(Germline=sc_bivalency_data_Germline_Paneled, Somatic=sc_bivalency_data_Somatic_Paneled) %>%
+            bind_rows(.id = "genes") %>%
+            rev %>%
+            tibble(facet = 1),
+          chic_plot_paneled_profiles_facet_grid,
+          c(CelltypeK4="H3K4", CelltypeK27="H3K27"),
+          8.5, 3,
+          unlist(chic_line_track_colors) %>% setNames(NULL),
+          linewidth = rep(0.66, 2)
+        ),
+        18,
+        7
+      )
+    ),
+    packages = tar_option_get("packages") %>% c("grid", "gtable")
+  ),
+  tar_file(
+    fig.celltype.k4.tss,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "CHIC-TSS-H3K4-Compared",
+        chic_panel_gtable_binary(
+          list(Germline=sc_h3k4_data_Germline_TSS, Somatic=sc_h3k4_data_Somatic_TSS) %>%
+            bind_rows(.id = "genes") %>%
+            rev %>%
+            tibble(facet = 1),
+          chic_plot_average_profiles_facet_grid,
+          c(GermlineK4="GermlineH3K4", SomaticK4="SomaticH3K4"),
+          6, 2.5,
+          unlist(chic_line_track_colors) %>% setNames(NULL),
+          linewidth = rep(0.66, 2)
+        ),
+        12.5,
+        6.25
+      )
+    ),
+    packages = tar_option_get("packages") %>% c("grid", "gtable")
   ),
 
   # Temp targets for loading chic.bw.2 and producing repli graphics

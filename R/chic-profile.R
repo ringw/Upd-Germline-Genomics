@@ -21,6 +21,7 @@ chic_heatmap_facet_genes <- function(
   df <- facet_genes %>%
     group_by(subset(facet_genes, select=-gene)) %>%
     reframe(
+      n = length(gene),
       enrichment_mat[gene,, drop=F] %>%
         colMeans(na.rm=T) %>%
         enframe("pos")
@@ -33,8 +34,8 @@ chic_heatmap_facet_genes <- function(
 
 # Analysis with TSS profile as x-axis, with ChIC tracks.
 chic_average_profile_limits <- c(0.25, 5)
-chic_average_breaks <- c(1/2, 1, 2, 3, 4)
-chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2))
+chic_average_breaks <- c(1/2, 1, 2, 3, 4, 8)
+chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2), 4*sqrt(2))
 
 # TSS plot. Rows come from var named "facet". Cols come from "mark".
 # Grouping within the panel is always called "genes" because it normally
@@ -44,7 +45,9 @@ chic_average_minor_breaks <- c(1/sqrt(2), sqrt(2))
 chic_plot_average_profiles_facet_grid <- function(
   facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1),
   faceter = facet_grid(rows = vars(mark), cols = vars(facet)),
-  x_intercept_red = 0
+  x_intercept_red = NA,
+  chic_average_profile_limits = get("chic_average_profile_limits", envir=globalenv()),
+  chic_average_breaks = get("chic_average_breaks", envir=globalenv())
 ) {
   break_labels <- tibble(
     pos = seq(head(levels(facet_data$pos), 1), tail(levels(facet_data$pos), 1)),
@@ -93,7 +96,9 @@ chic_plot_average_profiles_facet_grid <- function(
 chic_plot_paneled_profiles_facet_grid <- function(
   facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1),
   faceter = facet_grid(rows = vars(mark), cols = vars(facet)),
-  x_intercept_red = 1
+  x_intercept_red = 1,
+  chic_average_profile_limits = get("chic_average_profile_limits", envir=globalenv()),
+  chic_average_breaks = get("chic_average_breaks", envir=globalenv())
 ) {
   tss_left <- min(facet_data$x)
   # Infer flanking of TSS and TES.
@@ -187,6 +192,205 @@ chic_plot_paneled_profiles_facet_grid <- function(
     ) + theme(
       panel.margin = unit(25, "pt"),
       aspect.ratio = 1
+    )
+}
+
+chic_panel_gtable_binary <- function(
+  facet_data,
+  facet_fn,
+  facet_names,
+  column_width,
+  row_height,
+  quartile_color,
+  linewidth
+) {
+  facet_data <- facet_data %>% subset(activity == "active")
+  gr <- gtable(
+    unit(c(0.1, column_width, column_width), "in"),
+    unit(c(0.25, 0.25, row_height, 0.25, row_height), "in")
+  )
+  facet1 <- tribble(
+    ~level1, ~row,
+    1, 3,
+    2, 5
+  )
+  facet2 <- tribble(
+    ~level2, ~column,
+    1, 2,
+    2, 4
+  )
+  facets <- bind_rows(
+    setNames(
+      list(facet1, facet2),
+      names(facet_names)
+    ),
+    .id = "name"
+  )
+    gtable_add_grob(
+      textGrob(
+        str_glue(names(facet_names)[1], levels(pull(facet_data, facet_names[1]))[2]),
+        rot=90
+      ),
+      3, 1
+    ) %>%
+    gtable_add_grob(
+      textGrob(
+        str_glue(names(facet_names)[1], levels(pull(facet_data, facet_names[1]))[1]),
+        rot=90
+      ),
+      5, 1
+    ) %>%
+    gtable_add_grob(
+      textGrob(
+        str_glue(names(facet_names)[2], levels(pull(facet_data, facet_names[2]))[1])
+      ),
+      1, 2
+    ) %>%
+    gtable_add_grob(
+      textGrob(
+        str_glue(names(facet_names)[2], levels(pull(facet_data, facet_names[2]))[2])
+      ),
+      1, 3
+    ) %>%
+    gtable_add_grob(
+      textGrob(
+        apply(
+          filter(
+            facet_data,
+            pos == "TSS",
+            mark == "H3K4",
+            as.numeric(pull(facet_data, facet_names[1])) == 2,
+            as.numeric(pull(facet_data, facet_names[2])) == 1
+          ) %>%
+            arrange(genes),
+          1,
+          \(v) str_glue("{v['genes']}: {v['n']}")
+        ) %>%
+          as.list %>%
+          do.call(paste, .)
+      ),
+      2, 2
+    ) %>%
+    gtable_add_grob(
+      textGrob(
+        apply(
+          filter(
+            facet_data,
+            pos == "TSS",
+            mark == "H3K4",
+            as.numeric(pull(facet_data, facet_names[1])) == 2,
+            as.numeric(pull(facet_data, facet_names[2])) == 2
+          ) %>%
+            arrange(genes),
+          1,
+          \(v) str_glue("{v['genes']}: {v['n']}")
+        ) %>%
+          as.list %>%
+          do.call(paste, .)
+      ),
+      2, 3
+    ) %>%
+    gtable_add_grob(
+      textGrob(
+        apply(
+          filter(
+            facet_data,
+            pos == "TSS",
+            mark == "H3K4",
+            as.numeric(pull(facet_data, facet_names[1])) == 1,
+            as.numeric(pull(facet_data, facet_names[2])) == 1
+          ) %>%
+            arrange(genes),
+          1,
+          \(v) str_glue("{v['genes']}: {v['n']}")
+        ) %>%
+          as.list %>%
+          do.call(paste, .)
+      ),
+      4, 2
+    ) %>%
+    gtable_add_grob(
+      textGrob(
+        apply(
+          filter(
+            facet_data,
+            pos == "TSS",
+            mark == "H3K4",
+            as.numeric(pull(facet_data, facet_names[1])) == 1,
+            as.numeric(pull(facet_data, facet_names[2])) == 2
+          ) %>%
+            arrange(genes),
+          1,
+          \(v) str_glue("{v['genes']}: {v['n']}")
+        ) %>%
+          as.list %>%
+          do.call(paste, .)
+      ),
+      4, 3
+    ) %>%
+    gtable_add_grob(
+      as_grob(
+        facet_fn(
+          facet_data %>%
+            filter(as.numeric(pull(., facet_names[1])) == 2, as.numeric(pull(., facet_names[2])) == 1),
+          faceter=facet_wrap(vars(mark), nrow=1),
+          quartile_color=quartile_color,
+          linewidth=linewidth,
+          legend_title=NULL,
+          chic_average_profile_limits = c(0.5, 8.5)
+        ) +
+          theme(legend.position = "none")
+      ),
+      3,
+      2
+    ) %>%
+    gtable_add_grob(
+      as_grob(
+        facet_fn(
+          facet_data %>%
+            filter(as.numeric(pull(., facet_names[1])) == 2, as.numeric(pull(., facet_names[2])) == 2),
+          faceter=facet_wrap(vars(mark), nrow=1),
+          quartile_color=quartile_color,
+          linewidth=linewidth,
+          legend_title=NULL,
+          chic_average_profile_limits = c(0.5, 8.5)
+        ) +
+          theme(legend.position = "none")
+      ),
+      3,
+      3
+    ) %>%
+    gtable_add_grob(
+      as_grob(
+        facet_fn(
+          facet_data %>%
+            filter(as.numeric(pull(., facet_names[1])) == 1, as.numeric(pull(., facet_names[2])) == 1),
+          faceter=facet_wrap(vars(mark), nrow=1),
+          quartile_color=quartile_color,
+          linewidth=linewidth,
+          legend_title=NULL,
+          chic_average_profile_limits = c(0.5, 8.5)
+        ) +
+          theme(legend.position = "none")
+      ),
+      5,
+      2
+    ) %>%
+    gtable_add_grob(
+      as_grob(
+        facet_fn(
+          facet_data %>%
+            filter(as.numeric(pull(., facet_names[1])) == 1, as.numeric(pull(., facet_names[2])) == 2),
+          faceter=facet_wrap(vars(mark), nrow=1),
+          quartile_color=quartile_color,
+          linewidth=linewidth,
+          legend_title=NULL,
+          chic_average_profile_limits = c(0.5, 8.5)
+        ) +
+          theme(legend.position = "none")
+      ),
+      5,
+      3
     )
 }
 
