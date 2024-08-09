@@ -1,6 +1,8 @@
 library(dplyr)
 chic.samples = read.csv('chic/chic_samples.csv') %>%
   subset(sample != "" & !sapply(rejected, isTRUE))
+chic.samples.dimreduc <- chic.samples %>%
+  subset(!grepl("ChIP", group) & grepl("H3", molecule))
 
 chic.fpkm.data <- tribble(
   ~name, ~contrast, ~driver,
@@ -1770,23 +1772,87 @@ targets.chic <- list(
       nucleosome_analysis_bed %>% bed_to_mark_bigwig(str_glue("chic/NOrMAL/", celltype, "_Pos.bw"))
     )
   ),
+
+  # Dimension Reduction.
+  tar_target_raw(
+    "chic.dimension.reduction",
+    call(
+      "prcomp_irlba",
+      call(
+        "t",
+        call(
+          "devianceResiduals",
+          call(
+            "sapply",
+            do.call(
+              call,
+              append(
+                list("list"),
+                setNames(
+                  rlang::syms(str_glue("chic.granges.peakcalling.diameter_500_{chic.samples.dimreduc$sample}_CN_chr")),
+                  chic.samples.dimreduc$sample
+                )
+              ),
+              quote=T
+            ),
+            quote(\(granges) granges$score)
+          )
+        )
+      ),
+      n=10,
+      center=FALSE
+    )
+  ),
   tar_file(
-    plot.chic.nucleosome.median,
+    fig.chic.dimension.reduction,
     save_figures(
       "figure/Both-Cell-Types",
       ".pdf",
       tribble(
         ~rowname, ~figure, ~width, ~height,
-        "Median-Nucleosome-Phasing",
-        granges_plot_nuc_median_phasing(
-          c(
-            Germline=nucleosome_analysis_bed_Germline,
-            Somatic=nucleosome_analysis_bed_Somatic
-          ),
-          legend.position = "none"
+        "CHIC-PCA",
+        ggarrange(
+          ggplot(
+            tibble(
+              as.data.frame(chic.dimension.reduction$x),
+              mutate(
+                chic.samples.dimreduc,
+                group = relevel(factor(group), "H3K4"),
+                molecule = fct_relevel(factor(molecule), c("H3", "H3K4me3"))
+              )
+            ),
+            aes(-PC1, PC2, size=driver, color=molecule, shape=group)
+          ) +
+            geom_point() +
+            scale_size_manual(values=c(1.25, 1.75), guide=guide_legend(override.aes=list(size=c(1.25, 2), color=muted(unlist(chic_line_track_colors), c=80, l=65)))) +
+            scale_shape_manual(values=c(18, 19, 17), guide=guide_legend(override.aes=list(size=3))) +
+            scale_color_manual(values=c("#17d2d5", "#527a36", "#cfdc1d", "#d53840"), guide=guide_legend(override.aes=list(size=3, shape=15))) +
+            theme_bw() +
+            theme(aspect.ratio = 1) +
+            labs(x = "PC1"),
+          ggplot(
+            tibble(
+              as.data.frame(chic.dimension.reduction$x),
+              mutate(
+                chic.samples.dimreduc,
+                group = relevel(factor(group), "H3K4"),
+                molecule = fct_relevel(factor(molecule), c("H3", "H3K4me3"))
+              )
+            ),
+            aes(-PC1, PC3, size=driver, color=molecule, shape=group)
+          ) +
+            geom_point() +
+            scale_size_manual(values=c(1.25, 1.75)) +
+            scale_shape_manual(values=c(18, 19, 17), guide=guide_legend(override.aes=list(size=3))) +
+            scale_color_manual(values=c("#17d2d5", "#527a36", "#cfdc1d", "#d53840"), guide=guide_legend(override.aes=list(size=3))) +
+            theme_bw() +
+            theme(aspect.ratio = 1) +
+            labs(x = "PC1"),
+          common.legend = TRUE,
+          legend = "right"
         ),
-        6,
-        3
+        8,
+        3.75
       )
     )
   )
