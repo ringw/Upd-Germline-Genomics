@@ -1061,6 +1061,34 @@ targets.chic <- list(
         )
       )
     ),
+    tar_target(
+      plot.chic.nuc.boxplot.monosomes,
+      chic.fix.quantify.monosomes$score %>%
+        `/`(
+          chic.fix.quantify.monosomes$score[
+            as.logical(seqnames(chic.fix.quantify.monosomes) %in% c("2L", "2R", "3L", "3R", "4"))
+          ] %>%
+            median
+        ) %>%
+        GRanges(chic.test.nucleosomes.fix$Nucleosomes, score=.) %>%
+        chic_stats_boxplot() +
+        theme(aspect.ratio = 1/2) +
+        labs(title = "Monosomes")
+    ),
+    tar_target(
+      plot.chic.nuc.boxplot.dinucleosomes,
+      chic.fix.quantify.dinucleosomes$score %>%
+        `/`(
+          chic.fix.quantify.monosomes$score[
+            as.logical(seqnames(chic.fix.quantify.monosomes) %in% c("2L", "2R", "3L", "3R", "4"))
+          ] %>%
+            median
+        ) %>%
+        GRanges(chic.test.nucleosomes.fix$Nucleosomes, score=.) %>%
+        chic_stats_boxplot() +
+        theme(aspect.ratio = 1/2) +
+        labs(title = "Dinucleosomes")
+    ),
     tar_file(
       fig.chic.nuc.boxplot,
       save_figures(
@@ -1070,28 +1098,8 @@ targets.chic <- list(
           ~rowname, ~figure, ~width, ~height,
           "CHIC-H3-Box-Plot",
           plot_grid(
-            chic.fix.quantify.monosomes$score %>%
-              `/`(
-                chic.fix.quantify.monosomes$score[
-                  as.logical(seqnames(chic.fix.quantify.monosomes) %in% c("2L", "2R", "3L", "3R", "4"))
-                ] %>%
-                  median
-              ) %>%
-              GRanges(chic.test.nucleosomes.fix$Nucleosomes, score=.) %>%
-              chic_stats_boxplot() +
-              theme(aspect.ratio = 1/2) +
-              labs(title = "Monosomes"),
-            chic.fix.quantify.dinucleosomes$score %>%
-              `/`(
-                chic.fix.quantify.monosomes$score[
-                  as.logical(seqnames(chic.fix.quantify.monosomes) %in% c("2L", "2R", "3L", "3R", "4"))
-                ] %>%
-                  median
-              ) %>%
-              GRanges(chic.test.nucleosomes.fix$Nucleosomes, score=.) %>%
-              chic_stats_boxplot() +
-              theme(aspect.ratio = 1/2) +
-              labs(title = "Dinucleosomes"),
+            plot.chic.nuc.boxplot.monosomes,
+            plot.chic.nuc.boxplot.dinucleosomes,
             nrow = 2
           ),
           6,
@@ -1099,6 +1107,57 @@ targets.chic <- list(
         )
       ),
       packages = tar_option_get("packages") %>% c("cowplot")
+    )
+  ),
+  tar_file(
+    fig.chic.nuc.boxplot.both,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "CHIC-H3-Box-Plot",
+        plot_grid(
+          list(
+            Germline=plot.chic.nuc.boxplot.monosomes_Germline$data,
+            Somatic=plot.chic.nuc.boxplot.monosomes_Somatic$data
+          ) %>%
+            bind_rows(.id = "celltype") %>%
+            subset(x != "rDNA") %>%
+            ggplot(aes(x, y, fill=celltype)) +
+            geom_boxplot(fatten=3.5, outlier.size = 0.5) +
+            scale_y_continuous(
+              trans='log',
+              breaks=c(0.5, 1, 2, 4)
+            ) +
+            coord_cartesian(c(0.36, 5.64), c(0.25, 5), expand=F) +
+            scale_fill_manual(values=setNames(unlist(chic_line_track_colors), NULL)) +
+            theme_bw() +
+            theme(aspect.ratio=1/2) +
+            labs(title = "Monosomes", x = NULL, y = "Enrichment (vs Auto Monosome Median)"),
+          list(
+            Germline=plot.chic.nuc.boxplot.dinucleosomes_Germline$data,
+            Somatic=plot.chic.nuc.boxplot.dinucleosomes_Somatic$data
+          ) %>%
+            bind_rows(.id = "celltype") %>%
+            subset(x != "rDNA") %>%
+            ggplot(aes(x, y, fill=celltype)) +
+            geom_boxplot(fatten=3.5, outlier.size = 0.5) +
+            scale_y_continuous(
+              trans='log',
+              breaks=c(0.25, 0.5, 1, 2),
+              minor_breaks=0.125
+            ) +
+            coord_cartesian(c(0.36, 5.64), c(0.1, 3), expand=F) +
+            scale_fill_manual(values=setNames(unlist(chic_line_track_colors), NULL)) +
+            theme_bw() +
+            theme(aspect.ratio=1/2) +
+            labs(title = "Dinucleosomes", x = NULL, y = "Enrichment (vs Auto Monosome Median)"),
+          nrow = 2
+        ),
+        8,
+        6.75
+      )
     )
   ),
   tar_file(
