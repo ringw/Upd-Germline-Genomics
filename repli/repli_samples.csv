@@ -9,13 +9,9 @@ tj,0.25,2,,Tj_Early-Mid_Replicate_2_S7_L004_R1_001.fastq.gz
 tj,-0.25,2,,Tj_Late-Mid_Replicate_2_S9_L004_R1_001.fastq.gz
 tj,-0.75,1,,Tj_Late_Replicate_1_S8_L004_R1_001.fastq.gz
 tj,-0.75,2,,Tj_Late_Replicate_2_S15_L004_R1_001.fastq.gz
-nos,0.75,3,TRUE,KZ2851/GCJU01_S21_L002
 nos,0.75,4,TRUE,KZ2851/GCJU02_S22_L002
-nos,0.25,3,TRUE,KZ2851/GCJU03_S23_L002
 nos,0.25,4,TRUE,KZ2851/GCJU04_S24_L002
-nos,-0.25,3,TRUE,KZ2851/GCJU05_S25_L002
 nos,-0.25,4,TRUE,KZ2851/GCJU06_S26_L002
-nos,-0.75,3,TRUE,KZ2851/GCJU08_S28_L002
 nos,-0.75,4,TRUE,KZ2851/GCJU09_S29_L002
 S2,0.75,1,,S2_WT_Repliseq/S2_Early_Replicate_1.fastq.gz
 S2,0.25,1,,S2_WT_Repliseq/S2_Mid-Early_Replicate_1.fastq.gz
