@@ -406,6 +406,35 @@ targets.repli <- list(
       )
     )
   ),
+
+  # Repli graphic for dmel-all-chromosomes, not the masked bowtie reference.
+  tar_map(
+    tibble(
+      experiment.driver,
+      repli.beta.2 = rlang::syms(str_glue("repli.beta.2_{celltype}_chr"))
+    ),
+    names = celltype,
+    tar_file(
+      fig.repli.skew,
+      save_figures(
+        str_glue("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          "Repli-Skew-Chrs",
+          plot_track(repli.beta.2, repli_early_late_background$E, repli_early_late_background$L),
+          5.75,
+          4
+        )
+      ),
+      packages = tar_option_get("packages") %>% c("grid", "gtable"),
+      # We are going to edit the PDF and arrange the track line in front of the
+      # panel. In ggplot, to make the grid visible at all, it was placed in the
+      # foreground of the content.
+      cue = tar_cue("never")
+    )
+  ),
+
   # Repli-CHIC graphic for one CHIC track.
   tar_map(
     tibble(

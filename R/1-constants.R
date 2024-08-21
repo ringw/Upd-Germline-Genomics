@@ -29,3 +29,8 @@ repli_level_colors <- list(
   ML="#9F3B5C", # hcl(356, 65, 40)
   L="#650812" # hcl(10, 59, 20)
 )
+
+repli_early_late_background <- list(
+  E="#75E5EA", # hcl(196, 50, 85)
+  L="#F2A2B7" # hcl(356, 50, 75)
+)
