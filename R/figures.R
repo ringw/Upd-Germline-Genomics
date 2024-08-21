@@ -22,3 +22,10 @@ save_figures <- function(dir, extension, named_figures, dpi = 120) {
   }
   filenames
 }
+
+save_png <- function(filename, pl, width, height) {
+  png(filename, width=width, height=height)
+  print(pl)
+  dev.off()
+  filename
+}

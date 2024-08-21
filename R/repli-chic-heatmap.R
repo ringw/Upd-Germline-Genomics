@@ -39,6 +39,64 @@ approx_track <- function(score_track, fine_track) {
   unlist(fine_track %>% setNames(NULL))
 }
 
+plot_repli_chic_bin2d <- function(repli, chic, chic_step_size = 20) {
+  repli.timing <- approx_track(repli, GRanges(seqnames(chic), ranges(chic), seqinfo=seqinfo(chic)))$score
+  plt <- tibble(`Replication Timing`=repli.timing, Enrichment=chic$score) %>%
+    filter(between(Enrichment, -2, 2)) %>%
+    ggplot(aes(`Replication Timing`, Enrichment)) +
+    geom_bin2d(bins=c(120, 80)) +
+    scale_x_reverse(
+      breaks = c(-0.75, -0.375, 0, 0.375, 0.75),
+      labels = purrr::partial(format, drop0 = TRUE)
+    ) +
+    coord_cartesian(
+      c(1, -1),
+      c(-2, 2),
+      expand=F
+    ) +
+    theme_bw() +
+    theme(aspect.ratio = 2/3, panel.background = element_rect(fill=NA), panel.ontop = TRUE)
+  printable_plt <- ggplot_build(plt)
+  max_data <- min(tail(sort(printable_plt$data[[1]]$count), 2))
+  max_data <- max(printable_plt$data[[1]]$count)
+  scl <- scale_fill_gradientn(
+    name = "kb covered",
+    labels = \(n) n * chic_step_size / 1000,
+    colors = c(
+      "white",
+      rev(magma(101))
+    ),
+    values = c(
+      0,
+      seq(
+        median(printable_plt$data[[1]]$count) / max_data,
+        1,
+        length.out = 101
+      )
+    ),
+    limits = c(0, max_data),
+    na.value = "#CCCCCC"
+  )
+  plt + scl
+}
+
+violin_plot_repli_chic <- function(df) {
+  df <- df %>%
+    mutate(
+      timing = timing %>% fct_relabel(\(names) sapply(names, \(n) str_glue(n, " (", scales::percent(mean(df$timing == n)), ")")))
+    )
+  df %>%
+    ggplot(aes(timing, enrichment, fill=timing)) +
+    annotate("line", c(-Inf,Inf), 0) +
+    geom_violin() +
+    geom_boxplot(outlier.shape = NA, fill = "transparent") +
+    scale_x_discrete(labels = names(repli_level_colors)) +
+    scale_fill_manual(values = unlist(repli_level_colors, use.names=F)) +
+    coord_cartesian(NULL, c(-4, 4)) +
+    theme_cowplot() +
+    theme(aspect.ratio = 1.25)
+}
+
 rank_track <- function(track) {
   rnk <- track$score
   rnk[!is.na(rnk)] <- rank(rnk[!is.na(rnk)], ties="random")

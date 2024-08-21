@@ -406,6 +406,87 @@ targets.repli <- list(
       )
     )
   ),
+  # Repli-CHIC graphic for one CHIC track.
+  tar_map(
+    tibble(
+      chic.experiments,
+      celltype = name,
+      repli.beta = rlang::syms(str_glue("repli.beta.2_{celltype}_chr")),
+      chic.bw.tracks = rlang::syms(str_glue("chic.bw.tracks_{mark}_{celltype}_CN_chr")),
+      chic.experiment.quantify_peakcalling.broad_chr = rlang::syms(str_glue("chic.experiment.quantify_{mark}_{celltype}_peakcalling.broad_chr")),
+    ),
+    names = mark | celltype,
+    # CHIC broad track, currently used for Repli heatmap.
+    tar_target(
+      chic.enrich,
+      GRanges(
+        chic.tile.diameter_500_score_chr,
+        score = with(
+          elementMetadata(chic.experiment.quantify_peakcalling.broad_chr)[, 1:2] %>%
+            `colnames<-`(value = c("H3", "chromatinMark")),
+          (log(chromatinMark / H3) / log(2)) %>%
+            replace(!is.finite(.), NA) %>%
+            `-`(
+              median(subset(., as.logical(seqnames(chic.tile.diameter_500_chr) %in% c("2L", "2R", "3L", "3R", "4"))), na.rm=T)
+            )
+        )
+      )
+    ),
+    tar_file(
+      fig.repli.chic.raster,
+      save_png(
+        str_glue("figure/", celltype, "/Repli-CHIC-", mark, ".png"),
+        plot_grid(
+          # The name of grobs[[6]]$children[[3]] is "panel-1". It is the plot
+          # area of the ggplot data, which is exactly a 120x80 raster.
+          as_grob(plot_repli_chic_bin2d(repli.beta,
+          chic.enrich, chic_step_size = 100
+        ) +
+          theme(panel.ontop = FALSE))$grobs[[6]]$children[[3]]),
+        w=121,
+        h=81
+      )
+    ),
+    tar_file(
+      fig.repli.chic,
+      save_figures(
+        str_glue("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~filename, ~figure, ~width, ~height,
+          as.character(str_glue("Repli-CHIC-", mark)),
+          plot_repli_chic_bin2d(repli.beta,
+          chic.enrich,
+          chic_step_size = 100),
+          6,
+          4
+        )
+      )
+    ),
+    tar_file(
+      fig.violin.repli.chic,
+      save_figures(
+        str_glue("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          as.character(str_glue("Repli-CHIC-", mark, "-Violin")),
+          tibble(
+            repli = approx_track(repli.beta, chic.enrich)$score,
+            timing = structure(
+              4 - (as.numeric(cut(repli, c(-Inf, -0.375, 0, 0.375, Inf))) - 1),
+              levels = c("E", "EM", "ML", "L"),
+              class = "factor"
+            ),
+            enrichment = chic.enrich$score
+          ) %>%
+            violin_plot_repli_chic(),
+          5, 4.25
+        )
+      )
+    )
+  ),
+
   tar_target(
     repli.beta.prior.draws,
     beta_prior_draws()
