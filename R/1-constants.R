@@ -22,8 +22,6 @@ experiment.driver <- tribble(
 )
 
 repli_level_colors <- list(
-  # E="#9DE562", # hcl(115, 85, 84)
-  # EM="#DBA04F", # hcl(50, 72, 70)
   E="#2FEBF0", # hcl(196, 65, 85)
   EM="#AC7CDA", # hcl(284, 72, 60)
   ML="#9F3B5C", # hcl(356, 65, 40)
