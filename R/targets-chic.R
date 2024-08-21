@@ -481,6 +481,56 @@ targets.chic <- list(
     )
   ),
 
+  # H3-GFP ChIC experiment (extract some statistics - fragment size - from some
+  # H3 samples which are representative of all of the H3 samples overall).
+  tar_map(
+    tribble(
+      ~celltype, ~bulk_reads,
+      "Germline",
+      rlang::syms(
+        with(
+          expand.grid(
+            n = c(names(chr.lengths), "misc"),
+            sample = c("GC3768007_S7_L001", "GC3768009_S9_L001", "GC76045515_S5_L001")
+          ),
+          str_glue("bulk_reads_{n}_chic.bam_{sample}_chr")
+        )
+      ),
+      "Somatic",
+      rlang::syms(
+        with(
+          expand.grid(
+            n = c(names(chr.lengths), "misc"),
+            sample = c("GC3768010_S10_L001", "GC3768013_S13_L001", "GC3768014_S14_L001")
+          ),
+          str_glue("bulk_reads_{n}_chic.bam_{sample}_chr")
+        )
+      ),
+    ),
+    names = celltype,
+    tar_file(
+      fig.fragment.size,
+      save_figures(
+        str_glue("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          "CHIC-H3-Fragment-Size",
+          histogram_paired_end_fragment_size(bulk_reads),
+          4,
+          2.5,
+          "CHIC-H3-Fragment-Size-Chr",
+          histogram_paired_end_fragment_size(bulk_reads, faceted=TRUE),
+          4,
+          11,
+        )
+      )
+    )
+  ),
+
+  # Chromatin Mark Experiments (H3 and mark ChIP paired samples -> estimate
+  # effect i.e. chromatin mark L2FC and apply post-hoc processing i.e. quantify
+  # H3 and mark values at each window and then smooth).
   tar_map(
     chic.experiments %>%
       cross_join(dplyr::rename(bowtie.refs, reference="name")) %>%
