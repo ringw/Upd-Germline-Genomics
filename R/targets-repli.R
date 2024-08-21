@@ -333,6 +333,16 @@ targets.repli <- list(
         as.character()
     ),
 
+    tar_target(
+      repli.autocorrelation.mse,
+      GRanges(chic.tile.diameter_1000, score=scale(repli.mse)[, 1]) %>%
+       autocorrelate_centered_granges(1001)
+    ),
+    tar_target(
+      repli.autocorrelation.beta,
+      repli.beta.2 %>% autocorrelate_centered_granges(1001)
+    ),
+
     # Repli ChIC heatmap
     tar_target(
       repli.value.rank,
