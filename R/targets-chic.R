@@ -1839,8 +1839,10 @@ targets.chic <- list(
           list(Germline=sc_bivalency_data_Germline_TSS, Somatic=sc_bivalency_data_Somatic_TSS) %>%
             bind_rows(.id = "genes") %>%
             rev %>%
-            tibble(facet = 1),
-          chic_plot_average_profiles_facet_grid,
+            tibble(facet = 1) %>%
+            subset(between(as.numeric(pos), match("-500", levels(pos)), match("500", levels(pos)))),
+          \(...) chic_plot_average_profiles_facet_grid(...) +
+            theme(panel.spacing = unit(1.25, "lines"), plot.margin = margin(5.5, 10, 5.5, 5.5)),
           c(CelltypeK4="H3K4", CelltypeK27="H3K27"),
           6, 2.5,
           unlist(chic_line_track_colors) %>% setNames(NULL),
@@ -1878,8 +1880,10 @@ targets.chic <- list(
           list(Germline=sc_h3k4_data_Germline_TSS, Somatic=sc_h3k4_data_Somatic_TSS) %>%
             bind_rows(.id = "genes") %>%
             rev %>%
-            tibble(facet = 1),
-          chic_plot_average_profiles_facet_grid,
+            tibble(facet = 1) %>%
+            subset(between(as.numeric(pos), match("-500", levels(pos)), match("500", levels(pos)))),
+          \(...) chic_plot_average_profiles_facet_grid(...) +
+            theme(panel.spacing = unit(1.25, "lines"), plot.margin = margin(5.5, 10, 5.5, 5.5)),
           c(GermlineK4="GermlineH3K4", SomaticK4="SomaticH3K4"),
           6, 2.5,
           unlist(chic_line_track_colors) %>% setNames(NULL),
@@ -1890,6 +1894,38 @@ targets.chic <- list(
       )
     ),
     packages = tar_option_get("packages") %>% c("grid", "gtable")
+  ),
+  tar_map(
+    tribble(
+      ~celltype, ~sc_bivalency_data, ~plot_color,
+      "Germline", rlang::sym("sc_bivalency_data_Germline_TSS"), chic_line_track_colors$germline,
+      "Somatic", rlang::sym("sc_bivalency_data_Somatic_TSS"), chic_line_track_colors$somatic,
+    ),
+    names = celltype,
+    tar_file(
+      fig.bivalent,
+      save_figures(
+        str_glue("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          "CHIC-TSS-K4-K27-Valency",
+          sc_bivalency_data %>%
+            filter(
+              mark %in% c("H3K4", "H3K27"),
+              activity == "active",
+              between(
+                as.numeric(pos),
+                match("-500", levels(pos)),
+                match("500", levels(pos))
+              )
+            ) %>%
+            plot_valency_k4_k27(plot_color),
+          5.25,
+          4.5,
+        )
+      )
+    )
   ),
 
   # Temp targets for loading chic.bw.2 and producing repli graphics

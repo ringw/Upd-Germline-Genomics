@@ -93,6 +93,42 @@ chic_plot_average_profiles_facet_grid <- function(
   )
 }
 
+# Now an average profiles facet grid with "H3K4" and "H3K27" factors.
+plot_valency_k4_k27 <- function(facet_data, plot_color) {
+  chic_valency_profile_limits <- c(0.44, 8.5) %>%
+    log %>%
+    `+`(c(-0.02, 0.02) * diff(.)) %>%
+    exp
+  break_labels <- tibble(
+    pos = seq(head(levels(facet_data$pos), 1), tail(levels(facet_data$pos), 1)),
+    label = levels(facet_data$pos)
+  )
+  facet_data$pos.continuous <- break_labels$pos[match(facet_data$pos, break_labels$label)]
+  facet_data$genes <- interaction(facet_data$H3K4, facet_data$H3K27) %>%
+    `levels<-`(value = c("Neither", "H3K4me3 H3K27~", "H3K4~ H3K27me3", "Bivalent")) %>%
+    fct_relevel(c("H3K4me3 H3K27~", "Bivalent", "Neither", "H3K4~ H3K27me3"))
+  facet_data %>% ggplot(
+    aes(x=pos.continuous, y=value, group=mark, linetype=mark)
+  ) + facet_wrap(vars(genes), scales="free") +
+    geom_line(color=plot_color) +
+    scale_linetype_manual(
+      values = c("solid", "dashed")
+    ) + scale_x_continuous(
+      labels = \(n) break_labels$label[match(n, break_labels$pos)]
+    ) + scale_y_continuous(
+      trans = "log",
+      labels = \(v) round(log(v) / log(2), 1),
+      limits = chic_valency_profile_limits,
+      breaks = chic_average_breaks,
+      minor_breaks = chic_average_minor_breaks,
+      expand = c(0, 0)
+    ) + coord_cartesian(expand=FALSE) + labs(
+      x = "bp (from TSS)", y = "log2(mean(mark/input))"
+    ) + theme(
+      aspect.ratio = 1
+    )
+}
+
 chic_plot_paneled_profiles_facet_grid <- function(
   facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1),
   faceter = facet_grid(rows = vars(mark), cols = vars(facet)),
@@ -226,6 +262,7 @@ chic_panel_gtable_binary <- function(
     ),
     .id = "name"
   )
+  gr %>%
     gtable_add_grob(
       textGrob(
         str_glue(names(facet_names)[1], levels(pull(facet_data, facet_names[1]))[2]),
