@@ -1133,7 +1133,7 @@ targets.chic <- list(
             bind_rows(.id = "celltype") %>%
             subset(x != "rDNA") %>%
             ggplot(aes(x, y, fill=celltype)) +
-            geom_boxplot(fatten=3.5, outlier.size = 0.5) +
+            geom_boxplot(fatten=3.5, outlier.shape = NA) +
             scale_y_continuous(
               trans='log',
               breaks=c(0.5, 1, 2, 4)
@@ -1150,7 +1150,7 @@ targets.chic <- list(
             bind_rows(.id = "celltype") %>%
             subset(x != "rDNA") %>%
             ggplot(aes(x, y, fill=celltype)) +
-            geom_boxplot(fatten=3.5, outlier.size = 0.5) +
+            geom_boxplot(fatten=3.5, outlier.shape = NA) +
             scale_y_continuous(
               trans='log',
               breaks=c(0.25, 0.5, 1, 2),
