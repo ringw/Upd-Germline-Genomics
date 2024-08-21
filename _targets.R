@@ -1261,10 +1261,13 @@ list(
               "",
               rep(chic_line_track_colors[[tolower(celltype)]], 2),
               faceter = facet_wrap(vars(facet)),
-              x_intercept = 1000 * 1000 * 1000 / sum(seqlengths(granges))
+              x_intercept = NA
             ) + scale_y_continuous(
-              name = "H3 Monosome FPKM",
-              expand = c(0.05, 0.05)
+              name = 'Enrichment (vs Auto Monosome Median)',
+              trans = 'log',
+              limits = c(0.9, 32),
+              expand = c(0, 0),
+              breaks = c(1, 4, 16)
             ) + guides(linewidth = guide_none(), color = guide_none())
           ),
           width=6,
@@ -1291,10 +1294,13 @@ list(
               c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
               linewidth = c(0.33, 0.66, 0.33, 0.66),
               faceter = facet_wrap(vars(facet), ncol=4),
-              x_intercept = 1000 * 1000 * 1000 / sum(seqlengths(chic.tile.diameter_40_score_chr))
+              x_intercept = NA
             ) + scale_y_continuous(
-              name = "H3 Monosome FPKM",
-              expand = c(0.05, 0.05)
+              name = 'Enrichment (vs Auto Monosome Median)',
+              trans = 'log',
+              limits = c(0.9, 32),
+              expand = c(0, 0),
+              breaks = c(1, 4, 16)
             ) + theme(
               aspect.ratio = 1
             )
