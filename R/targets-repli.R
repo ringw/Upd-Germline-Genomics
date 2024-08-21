@@ -346,7 +346,7 @@ targets.repli <- list(
     # Repli ChIC heatmap
     tar_target(
       repli.value.rank,
-      rtracklayer::import(rtracklayer::BigWigFile(repli.bw)) %>%
+      rtracklayer::import(rtracklayer::BigWigFile(repli.beta.bw)) %>%
         approx_track(chic.track) %>%
         rank_track() %>%
         elementMetadata() %>%
