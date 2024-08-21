@@ -28,15 +28,20 @@ chic_quantify <- function(
   # We put "molecule" and "rep" in our tar_map, so create new names. As
   # "molecule" coefs come first, our p_peak contrast will be the log fold
   # change between the two levels of "molecule".
-  if (length(unique(replicate_nums)) > 1)
+  if (length(unique(replicate_nums)) > 1) {
     R <- replicate_nums %>%
       factor() %>%
       `contrasts<-`(
         value = contr.helmert(length(levels(.)))
       )
-  else R <- NA
-  if (length(unique(replicate_nums)) > 1) fmla <- ~ 0 + mol + R
-  else fmla <- ~ 0 + mol
+  } else {
+    R <- NA
+  }
+  if (length(unique(replicate_nums)) > 1) {
+    fmla <- ~ 0 + mol + R
+  } else {
+    fmla <- ~ 0 + mol
+  }
   fit <- glm_gp(
     as.matrix(chic_experiment@elementMetadata),
     fmla,
@@ -130,7 +135,7 @@ chic_quantify <- function(
             rename_with(~ str_glue("score.{.}")),
           p_peak = pval,
           L2FC = lfc,
-          subset(hypothesis_testing, select=grep("logMu_|se_", colnames(hypothesis_testing)))
+          subset(hypothesis_testing, select = grep("logMu_|se_", colnames(hypothesis_testing)))
         )
       )
     ) %>%
@@ -172,7 +177,7 @@ reduce_peaks_2_tracks <- function(
     GenomicRanges::reduce()
   all_peaks %>%
     restrict(
-      start=1L, end=seqlengths(broad_track)[as.character(seqnames(all_peaks))]
+      start = 1L, end = seqlengths(broad_track)[as.character(seqnames(all_peaks))]
     )
 }
 
