@@ -561,3 +561,31 @@ nucleosomes_cleanup_tracks <- function(granges, p_nuc, p_enriched, nuc_size = 14
       resize(nuc_size, fix = "center")
   )
 }
+
+gtf_granges_extended_from_tss <- function(granges, genes) {
+  seqlevels(granges) <- seqlevels(granges) %>% c("*")
+  overlaps <- GRanges(
+    genes$chr %>% replace(is.na(.), "*"),
+    IRanges(
+      ifelse(genes$strand == "+", genes$start, genes$end - 499) %>%
+        replace(is.na(.), -1),
+      width = 500
+    )
+  ) %>%
+    findOverlaps(granges) %>%
+    as.list()
+  mapply(
+    \(overlaps, start, end, strand) if (length(overlaps) == 0) {
+      0
+    } else if (strand == "+") {
+      min(end(granges)[overlaps], end) - start + 1
+    } else {
+      end - max(start(granges)[overlaps], start) + 1
+    },
+    overlaps,
+    genes$start,
+    genes$end,
+    genes$strand
+  ) %>%
+    setNames(pull(genes, 1))
+}

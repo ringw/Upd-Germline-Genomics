@@ -850,6 +850,14 @@ targets.chic <- list(
         "rtracklayer",
         "S4Vectors"
       )
+    ),
+    tar_target(
+      chic.gene.enrichment.head,
+      reduce_peaks_2_tracks(
+        chic.experiment.quantify_peakcalling.broad,
+        chic.experiment.quantify_peakcalling.sharp
+      ) %>%
+        gtf_granges_extended_from_tss(as_tibble(read.csv(assay.data.sc)))
     )
   ),
 
@@ -1595,7 +1603,13 @@ targets.chic <- list(
         H3K9_Germline_Broad = chic.gene.enrichment.broad$H3K9_Germline,
         H3K4_Somatic_Broad = chic.gene.enrichment.broad$H3K4_Somatic,
         H3K27_Somatic_Broad = chic.gene.enrichment.broad$H3K27_Somatic,
-        H3K9_Somatic_Broad = chic.gene.enrichment.broad$H3K9_Somatic
+        H3K9_Somatic_Broad = chic.gene.enrichment.broad$H3K9_Somatic,
+        H3K4_Germline_Head = chic.gene.enrichment.head_H3K4_Germline,
+        H3K27_Germline_Head = chic.gene.enrichment.head_H3K27_Germline,
+        H3K9_Germline_Head = chic.gene.enrichment.head_H3K9_Germline,
+        H3K4_Somatic_Head = chic.gene.enrichment.head_H3K4_Somatic,
+        H3K27_Somatic_Head = chic.gene.enrichment.head_H3K27_Somatic,
+        H3K9_Somatic_Head = chic.gene.enrichment.head_H3K9_Somatic,
       ),
       "Supplemental_Data/SD03_Bulk_Sequence_Stats.xlsx"
     )

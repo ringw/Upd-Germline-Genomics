@@ -109,6 +109,15 @@ publish_additional_data <- function(
     startCol = 13, startRow = 1,
     colNames = F
   )
+  writeData(
+    wb,
+    title,
+    matrix(
+      "CDS Head Enriched (bp from TSS along strand p < 0.001)"
+    ),
+    startCol = 19, startRow = 1,
+    colNames = F
+  )
   writeDataTable(
     wb,
     title,
