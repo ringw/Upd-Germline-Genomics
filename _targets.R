@@ -72,6 +72,8 @@ options(clustermq.scheduler = "multiprocess")
 
 Sys.setenv(BOWTIE_THREADS="12")
 
+future::plan(future::multicore, workers=8)
+
 # tar_make_future() is an older (pre-{crew}) way to do distributed computing
 # in {targets}, and its configuration for your machine is below.
 # Install packages {{future}}, {{future.callr}}, and {{future.batchtools}} to allow use_targets() to configure tar_make_future() options.
