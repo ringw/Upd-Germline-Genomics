@@ -375,55 +375,21 @@ integrate_gauss2d_arc <- function(origin, angle, mean, sigma) {
   )
 }
 
-# OLD approach to correcting the Beta regression parameter. In our Laplace
-# approximation and feature value (alpha-1)/(alpha+beta-2), then we would adjust
-# the angle of the ray extending from (1, 1).
-laplace_bayes_factor_logistic_correct_scale <- function(
-  theta,
-  scale,
-  center
-) {
-  negate <- \(x) -x
-  # Beta distribution Mode parameter (sin(t)/(sin(t) + cos(t))); the angle theta
-  # is about the origin (1, 1).
-  f <- \(t) (sin(t) / (sin(t) + cos(t)))
-  finv <- \(y) acot(1/y - 1)
-  # Angle to Beta distribution Mode parameter.
-  f(theta) %>%
-    # Mode parameter to Logit effect value.
-    qlogis() %>%
-    # Correct from Early-Negative to Early-Positive which is what we are working
-    # with when centering.
-    negate() %>%
-    `*`(scale) %>%
-    `+`(center) %>%
-    negate() %>%
-    # Logit effect value to Mode parameter response.
-    plogis() %>%
-    # Mode parameter response to Theta (origin (1, 1)).
-    finv()
-}
-
-laplace_bayes_factor_logistic_scaled <- function(
-  posterior_a,
-  posterior_b,
-  params
-) {
+# Calculate Bayes Factor of our Laplace approximation. A reciprocal of an "inner
+# product", of sorts, of our first integrated rays of probability density.
+# Analogous to a likelihood ratio test with a shared or independent Beta dist
+# location parameter, it scores two model fits for whether the Beta dist
+# location is likely to be significantly far apart.
+laplace_bayes_factor_polar_integral <- function(posterior_a, posterior_b) {
   integral_a <- sapply(
-    seq(0, pi/2, length.out=100) %>%
-      laplace_bayes_factor_logistic_correct_scale(
-        params$scale[1], params$center[1]
-      ),
+    seq(0, pi/2, length.out=100),
     integrate_gauss2d_arc,
     origin=c(1, 1),
     mean=posterior_a$par,
     sigma=solve(posterior_a$fisher_information)
   )
   integral_b <- sapply(
-    seq(0, pi/2, length.out=100) %>%
-      laplace_bayes_factor_logistic_correct_scale(
-        params$scale[2], params$center[2]
-      ),
+    seq(0, pi/2, length.out=100),
     integrate_gauss2d_arc,
     origin=c(1, 1),
     mean=posterior_b$par,

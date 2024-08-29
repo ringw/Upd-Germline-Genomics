@@ -480,12 +480,9 @@ targets.repli <- list(
         )
       ),
       bayes_factor = future_mapply(
-        laplace_bayes_factor_logistic_scaled,
+        laplace_bayes_factor_polar_integral,
         Germline,
-        Somatic,
-        MoreArgs = list(
-          params = tribble(~scale, ~center, 1, 0, 1, 0)
-        )
+        Somatic
       )
     ) %>%
       subset(select=-c(Germline, Somatic)),
