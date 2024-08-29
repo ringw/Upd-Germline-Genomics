@@ -165,12 +165,12 @@ targets.repli <- list(
   # model. The weights for the observations will be given by a Gaussian kernel
   # with the given bandwidth in bp. Observations will be taken in chunks of 1000
   # bp, as this is a low-input assay, and reads aggregated by this window will
-  # be a robust observation. BW will probably be at least sigma = 1000 bp.
-  tar_target(repli.sliding.weight.bw, 1500 / 1000),
+  # be a robust observation.
+  tar_target(repli.sliding.weight.bw, 750 / 1000),
   tar_target(
     # Read 9 windows (independent draws of replication timing reads).
     repli.sliding.weights,
-    diff(pnorm(seq(-4.5, 4.5), sd = repli.sliding.weight.bw)) %>%
+    diff(pnorm(seq(-2.5, 2.5), sd = repli.sliding.weight.bw)) %>%
       `/`(max(.))
   ),
 
@@ -283,8 +283,8 @@ targets.repli <- list(
           rowData(repli.experiment)$seqnames
         ),
         \(inds) full_quantification_gaussian_plate(
-          list(Beta=repli.glm$Beta[inds,, drop=F]),
-          wts=repli.sliding.weights
+          list(Beta = repli.glm$Beta[inds, , drop = F]),
+          wts = repli.sliding.weights
         ),
         simplify = FALSE
       ) %>%
@@ -305,8 +305,8 @@ targets.repli <- list(
           seq_along(inds),
           \(...) beta_dm_regression_gaussian_plate(...) %>%
             tryCatch(error = \(e) beta_dm_regression_calculate_prior()),
-          exper=repli.experiment[inds, ],
-          wts=repli.sliding.weights
+          exper = repli.experiment[inds, ],
+          wts = repli.sliding.weights
         ),
         simplify = FALSE
       ) %>%
@@ -336,8 +336,8 @@ targets.repli <- list(
           qlogistanh(repli.beta.2$score) * repli.beta.2@metadata$`scaled:scale` +
             repli.beta.2@metadata$`scaled:center`
         )^2 %>%
-          mean %>%
-          sqrt
+          mean() %>%
+          sqrt()
       )
     ),
     tar_target(
@@ -357,10 +357,10 @@ targets.repli <- list(
               seq_along(inds),
               \(...) beta_dm_regression_gaussian_plate(...) %>%
                 tryCatch(error = \(e) beta_dm_regression_calculate_prior()),
-              exper=repli.experiment[inds, ],
-              wts=repli.sliding.weights,
-              xform_scale=repli.beta.scales$scale,
-              xform_center=repli.beta.scales$center
+              exper = repli.experiment[inds, ],
+              wts = repli.sliding.weights,
+              xform_scale = repli.beta.scales$scale,
+              xform_center = repli.beta.scales$center
             ),
             simplify = FALSE
           ) %>%
@@ -368,7 +368,7 @@ targets.repli <- list(
         ) %>%
           do.call(tibble, .)
       ) %>%
-        as_tibble,
+        as_tibble(),
       pattern = map(repli.beta.scales),
       packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
     ),
@@ -380,11 +380,10 @@ targets.repli <- list(
         export(BigWigFile(str_glue("repli/Replication_Bayes_", celltype, "_", reference, ".bw"))) %>%
         as.character()
     ),
-
     tar_target(
       repli.autocorrelation.mse,
-      GRanges(chic.tile.diameter_1000, score=scale(repli.mse)[, 1]) %>%
-       autocorrelate_centered_granges(1001)
+      GRanges(chic.tile.diameter_1000, score = scale(repli.mse)[, 1]) %>%
+        autocorrelate_centered_granges(1001)
     ),
     tar_target(
       repli.autocorrelation.beta,
@@ -396,7 +395,7 @@ targets.repli <- list(
       repli.value.bindata,
       repli.beta.2 %>%
         approx_track(chic.track) %>%
-        cut_track(seq(-0.75, 0.75, by=0.002)) %>%
+        cut_track(seq(-0.75, 0.75, by = 0.002)) %>%
         elementMetadata() %>%
         as.data.frame(),
       format = "parquet"
@@ -408,14 +407,14 @@ targets.repli <- list(
     tar_target(
       repli.chic.projection.profile,
       cbind(
-        repli = seq(-0.75, 0.75, by=0.002),
+        repli = seq(-0.75, 0.75, by = 0.002),
         sapply(
           chic.results,
           \(f) f %>%
             attributes() %>%
             with(
               elementMetadata %>%
-                subset(as.logical(seqnames %in% seqlevels(chic.track)), select=c(1, 2)) %>%
+                subset(as.logical(seqnames %in% seqlevels(chic.track)), select = c(1, 2)) %>%
                 as.data.frame() %>%
                 `colnames<-`(value = c("H3", "mark")) %>%
                 with((mark / H3) %>% replace(!is.finite(.), 1))
@@ -451,12 +450,11 @@ targets.repli <- list(
       save_png(
         str_glue("figure/", celltype, "/Repli-CHIC-Whole-Genome-", reference, ".png"),
         plot_grid(as_grob(plot_repli_track_raster(repli.chic.projection.profile))$grobs[[6]]),
-        w=750,
-        h=5
+        w = 750,
+        h = 5
       )
     )
   ),
-
   tar_target(
     repli.bayes.factor_chr,
     tibble(
@@ -479,7 +477,7 @@ targets.repli <- list(
         Somatic
       )
     ) %>%
-      subset(select=-c(Germline, Somatic)),
+      subset(select = -c(Germline, Somatic)),
     format = "parquet"
   ),
 
@@ -532,7 +530,7 @@ targets.repli <- list(
           (log(chromatinMark / H3) / log(2)) %>%
             replace(!is.finite(.), NA) %>%
             `-`(
-              median(subset(., as.logical(seqnames(chic.tile.diameter_500_chr) %in% c("2L", "2R", "3L", "3R", "4"))), na.rm=T)
+              median(subset(., as.logical(seqnames(chic.tile.diameter_500_chr) %in% c("2L", "2R", "3L", "3R", "4"))), na.rm = T)
             )
         )
       )
@@ -545,11 +543,13 @@ targets.repli <- list(
           # The name of grobs[[6]]$children[[3]] is "panel-1". It is the plot
           # area of the ggplot data, which is exactly a 120x80 raster.
           as_grob(plot_repli_chic_bin2d(repli.beta,
-          chic.enrich, chic_step_size = 100
-        ) +
-          theme(panel.ontop = FALSE))$grobs[[6]]$children[[3]]),
-        w=121,
-        h=81
+            chic.enrich,
+            chic_step_size = 100
+          ) +
+            theme(panel.ontop = FALSE))$grobs[[6]]$children[[3]]
+        ),
+        w = 121,
+        h = 81
       )
     ),
     tar_file(
@@ -561,8 +561,9 @@ targets.repli <- list(
           ~filename, ~figure, ~width, ~height,
           as.character(str_glue("Repli-CHIC-", mark)),
           plot_repli_chic_bin2d(repli.beta,
-          chic.enrich,
-          chic_step_size = 100),
+            chic.enrich,
+            chic_step_size = 100
+          ),
           6,
           4
         )
@@ -591,7 +592,6 @@ targets.repli <- list(
       )
     )
   ),
-
   tar_target(
     repli.beta.prior.draws,
     beta_prior_draws()
