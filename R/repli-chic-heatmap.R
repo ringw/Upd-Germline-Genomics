@@ -130,6 +130,15 @@ bin_track_by_rank <- function(track, nbins = 1000) {
   GRanges(track, bin = bin, size_of_bin_bp = size_of_bin_bp)
 }
 
+cut_track <- function(track, breaks) {
+  result <- cut(track$score, breaks)
+  splt <- width(track) %>%
+    split(result) %>%
+    sapply(sum)
+  size_of_bin_bp <- setNames(splt[result], NULL)
+  GRanges(track, score = track$score, bin = as.numeric(result), size_of_bin_bp = size_of_bin_bp)
+}
+
 granges_bin_to_projection <- function(granges) {
   proj_nrow <- max(granges$bin, na.rm=T)
   granges %>%
@@ -138,7 +147,7 @@ granges_bin_to_projection <- function(granges) {
       \(gr) sparseMatrix(
         i = gr$bin[!is.na(gr$bin)],
         j = which(!is.na(gr$bin)),
-        x = gr@ranges@width / gr$size_of_bin_bp,
+        x = (gr@ranges@width / gr$size_of_bin_bp)[!is.na(gr$bin)],
         dims = c(proj_nrow, length(gr))
       ),
       simplify=F
@@ -171,20 +180,29 @@ plot_repli_track_raster <- function(data) {
   (
     ggplot(data, aes(x, series, fill=value))
     + geom_raster(aes(), subset(data, series == "Timing Est."))
-    + scale_fill_viridis_c(
-      option = "turbo", begin = 0.55, end = 1, direction = -1,
+    + scale_fill_gradientn(
+      # colors = c("red", "blue"),
+      colors = c(
+        hcl(30, 40, 10),
+        repli_level_colors$L,
+        repli_level_colors$ML,
+        repli_level_colors$EM,
+        repli_level_colors$E,
+        hcl(170, 55, 95)
+      ),
+      values = c(0, 0.125, 0.375, 0.625, 0.875, 1),
       guide = guide_colorbar(title = "timing"),
-      limits = c(0.125, 0.875)
+      limits = c(-0.75, 0.75)
     )
     + new_scale_fill()
     + geom_raster(
       aes(fill=q),
       tribble(
         ~x, ~series, ~q,
-        quantile(x_values, 0.125), "Quartile", "Q1",
-        quantile(x_values, 0.375), "Quartile", "Q2",
-        quantile(x_values, 0.625), "Quartile", "Q3",
-        quantile(x_values, 0.875), "Quartile", "Q4"
+        -9/16 - 7.5e-04, "Quartile", "Q1",
+        -3/16 - 2.5e-04, "Quartile", "Q2",
+        3/16 + 2.5e-04, "Quartile", "Q3",
+        9/16 + 7.5e-04, "Quartile", "Q4"
       ) %>%
         mutate(value = 0)
     )
@@ -198,7 +216,7 @@ plot_repli_track_raster <- function(data) {
       family = "Helvetica"
     )
     + scale_fill_manual(
-      values = turbo(101)[c(87, 82, 78, 72)],
+      values = unlist(rev(repli_level_colors), use.names = FALSE),
       guide = guide_none()
     )
     + new_scale_fill()
@@ -208,10 +226,14 @@ plot_repli_track_raster <- function(data) {
     #   guide = guide_colorbar(title = "mark/input")
     # )
     + create_direction_invert_tss_tile_matrix_gradient(limits = c(-0.5, 1.6), oob = squish)
-    + scale_x_continuous(labels=percent, name = str_glue("Sorted Timing Est ({sample_size_mb} Mb)"))
+    + scale_x_reverse(
+      breaks = c(-0.75, -0.375, 0, 0.375, 0.75),
+      labels = purrr::partial(format, drop0 = TRUE),
+      name = str_glue("Sorted Timing Est ({sample_size_mb} Mb)")
+    )
     + scale_y_discrete(limits=rev)
     + coord_cartesian(expand=F)
     + guides(fill = guide_colorbar(title = "log2(mark/input)"))
-    + theme(aspect.ratio = 1)
+    + theme(aspect.ratio = 2/3)
   )
 }

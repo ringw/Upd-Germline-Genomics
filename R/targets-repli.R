@@ -198,13 +198,14 @@ targets.repli <- list(
       chic.tile.diameter_1000 = rlang::syms(
         str_glue("chic.tile.diameter_1000_", reference)
       ),
-      chic.track = rlang::syms(str_glue("chic.tile.diameter_40_score_{reference}")),
+      chic.track = rlang::syms(str_glue("chic.tile.diameter_500_score_{reference}")),
       chic.results = list(
         call(
-          "c",
-          H3K4 = call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K4_{celltype}_CN_{reference}"))),
-          H3K27 = call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K27_{celltype}_CN_{reference}"))),
-          H3K9 = call("chic_fseq_l2fc", rlang::sym(str_glue("chic.bw.tracks_H3K9_{celltype}_CN_{reference}")))
+          "setNames",
+          rlang::syms(
+            str_glue("chic.experiment.quantify_H3K{c(4,27,9)}_{celltype}_peakcalling.broad_{reference}")
+          ),
+          as.character(str_glue("H3K{c(4,27,9)}"))
         )
       )
     ),
@@ -392,23 +393,10 @@ targets.repli <- list(
 
     # Repli ChIC heatmap
     tar_target(
-      repli.value.rank,
-      rtracklayer::import(rtracklayer::BigWigFile(repli.beta.bw)) %>%
-        approx_track(chic.track) %>%
-        rank_track() %>%
-        elementMetadata() %>%
-        as.data.frame(),
-      packages = tar_option_get("packages") %>% c("S4Vectors"),
-      format = "parquet"
-    ),
-    tar_target(
       repli.value.bindata,
-      append(
-        list(chic.track),
-        repli.value.rank %>% as.list()
-      ) %>%
-        do.call(GRanges, .) %>%
-        bin_track_by_rank(250) %>%
+      repli.beta.2 %>%
+        approx_track(chic.track) %>%
+        cut_track(seq(-0.75, 0.75, by=0.002)) %>%
         elementMetadata() %>%
         as.data.frame(),
       format = "parquet"
@@ -420,21 +408,17 @@ targets.repli <- list(
     tar_target(
       repli.chic.projection.profile,
       cbind(
-        ranking = seq(0, 1, length.out = nrow(repli.value.projection[[1]])),
-        repli = apply_granges_projection(repli.value.projection, GRanges(chic.track, score = repli.value.rank$score)),
+        repli = seq(-0.75, 0.75, by=0.002),
         sapply(
           chic.results,
           \(f) f %>%
-            BigWigFile() %>%
-            rtracklayer::import() %>%
             attributes() %>%
             with(
               elementMetadata %>%
-                subset(as.logical(seqnames %in% seqlevels(chic.track))) %>%
+                subset(as.logical(seqnames %in% seqlevels(chic.track)), select=c(1, 2)) %>%
                 as.data.frame() %>%
-                pull(score) %>%
-                `*`(log(2)) %>%
-                exp()
+                `colnames<-`(value = c("H3", "mark")) %>%
+                with((mark / H3) %>% replace(!is.finite(.), 1))
             ) %>%
             GRanges(chic.track, score = .) %>%
             apply_granges_projection(repli.value.projection, .)
@@ -461,6 +445,16 @@ targets.repli <- list(
           4.5
         )
       )
+    ),
+    tar_file(
+      fig.repli.chic.raster,
+      save_png(
+        str_glue("figure/", celltype, "/Repli-CHIC-Whole-Genome-", reference, ".png"),
+        plot_grid(as_grob(plot_repli_track_raster(repli.chic.projection.profile))$grobs[[6]]),
+        w=750,
+        h=5
+      )
+    )
   ),
 
   tar_target(
