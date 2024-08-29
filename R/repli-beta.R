@@ -109,20 +109,11 @@ beta_dm_regression <- function(exper, i) {
   list(par = par, theta = theta, fisher_information = precision)
 }
 
-beta_dm_regression_gaussian_plate <- function(exper, center_i, wts) {
-  beta_regression_cuts <- exper@metadata[["beta_regression_cuts"]]
-  beta_regression_size_factors <- exper@metadata[["beta_regression_size_factors"]]
-  i <- seq(
-    pmax(1, center_i - floor(length(wts) / 2)),
-    pmin(nrow(exper), center_i + floor(length(wts) / 2))
-  )
-  wts <- wts[
-    seq(
-      1 + floor(length(wts) / 2) + min(i) - center_i,
-      1 + floor(length(wts) / 2) + max(i) - center_i
-    )
-  ]
-  Y <- crossprod(
+# Pulls the "Y" matrix of DM-distributed data (tuples of sample counts). As we
+# are interested in a rolling view of "Y", then "i" is a numeric vector of the
+# features in the SummarizedExperiment to extract.
+beta_dm_pull_expr_plate <- function(exper, i)
+  crossprod(
     exper@metadata[["beta_regression_feed_y"]],
     t(assay(exper, "counts")[i,, drop=F])
   ) %>%
@@ -149,6 +140,34 @@ beta_dm_regression_gaussian_plate <- function(exper, center_i, wts) {
         )
       )
     )
+
+# Regression: In SummarizedExperiment, extract a view of the sequential
+# features, centered on the numeric index "center_i", according to "wts".
+# A logistic link function is applied. Then the predicted log-odds value can be
+# transformed, after producing a pseudotime value `(alpha-1)/(alpha+beta-2)`
+# (Beta distribution). The logit transform is applied, and the pseudotime value
+# is multiplied by scale and translated by center. Inverting the transformation,
+# we get an updated alpha and beta. The other degree of freedom of the Beta dist
+# is handled by keeping `alpha+beta` (concentration of the Beta) invariant. If
+# alpha <= 1 or beta <= 1, then the pseudotime value will be extreme and we
+# won't apply any translation to this predicted value.
+beta_dm_regression_gaussian_plate <- function(
+  exper, center_i, wts,
+  xform_scale = 1, xform_center = 0
+) {
+  beta_regression_cuts <- exper@metadata[["beta_regression_cuts"]]
+  beta_regression_size_factors <- exper@metadata[["beta_regression_size_factors"]]
+  i <- seq(
+    pmax(1, center_i - floor(length(wts) / 2)),
+    pmin(nrow(exper), center_i + floor(length(wts) / 2))
+  )
+  wts <- wts[
+    seq(
+      1 + floor(length(wts) / 2) + min(i) - center_i,
+      1 + floor(length(wts) / 2) + max(i) - center_i
+    )
+  ]
+  Y <- beta_dm_pull_expr_plate(exper, i)
   wts <- rep(wts, each=length(levels(exper$rep)))
   n <- rowSums(Y)
   ll_post <- function(v, theta) {
@@ -156,6 +175,12 @@ beta_dm_regression_gaussian_plate <- function(exper, center_i, wts) {
       sum(dgamma(v, 9*2, scale=1/6, log = TRUE))
       + dgamma(theta, 1, scale=0.5, log = TRUE)
     )
+    if (v[1] > 1 & v[2] > 1) {
+      pseudotime_value <- qlogis((v[1] - 1) / (v[1] + v[2] - 2))
+      pseudotime_value <- pseudotime_value * xform_scale + xform_center
+      updated_param_value <- plogis(pseudotime_value)
+      v <- c(1, 1) + (v[1] + v[2] - 2) * c(updated_param_value, 1 - updated_param_value)
+    }
     pb <- diff(pbeta(beta_regression_cuts, v[1], v[2]))
     pb <- pmax(pb, 1e-40)
     mu_unnorm <- beta_regression_size_factors %*% diag(x = pb)
@@ -183,9 +208,10 @@ beta_dm_regression_gaussian_plate <- function(exper, center_i, wts) {
   # prior.
   par <- optim(c(2, 2), ll_post, theta = theta, method = "L-BFGS-B", control = list(maxit = 1000), lower = c(0.01, 0.01))$par
   theta <- optim(theta, ll_post, v = par, method = "L-BFGS-B", control = list(maxit = 1000), lower = 1e-4)$par
-  par <- optim(par, ll_post, theta = theta, method = "L-BFGS-B", control = list(maxit = 1000), lower = c(0.01, 0.01))$par
+  optim_result <- optim(par, ll_post, theta = theta, method = "L-BFGS-B", control = list(maxit = 1000), lower = c(0.01, 0.01))
+  par <- optim_result$par
   precision <- optimHess(par, ll_post, theta = theta)
-  list(par = par, theta = theta, fisher_information = precision)
+  list(par = par, theta = theta, objective_value = -optim_result$value, fisher_information = precision)
 }
 
 full_quantification_gaussian_plate <- function(rpkm, wts, num_fractions=4) {
@@ -349,21 +375,59 @@ integrate_gauss2d_arc <- function(origin, angle, mean, sigma) {
   )
 }
 
-analyze_beta_repli.experiment_Germline_chr <- function(
-    repli.experiment_Germline_chr) {
-  library(future)
-  library(future.apply)
-  library(extraDistr)
-  library(pracma)
-  plan(multicore, workers=12)
+# OLD approach to correcting the Beta regression parameter. In our Laplace
+# approximation and feature value (alpha-1)/(alpha+beta-2), then we would adjust
+# the angle of the ray extending from (1, 1).
+laplace_bayes_factor_logistic_correct_scale <- function(
+  theta,
+  scale,
+  center
+) {
+  negate <- \(x) -x
+  # Beta distribution Mode parameter (sin(t)/(sin(t) + cos(t))); the angle theta
+  # is about the origin (1, 1).
+  f <- \(t) (sin(t) / (sin(t) + cos(t)))
+  finv <- \(y) acot(1/y - 1)
+  # Angle to Beta distribution Mode parameter.
+  f(theta) %>%
+    # Mode parameter to Logit effect value.
+    qlogis() %>%
+    # Correct from Early-Negative to Early-Positive which is what we are working
+    # with when centering.
+    negate() %>%
+    `*`(scale) %>%
+    `+`(center) %>%
+    negate() %>%
+    # Logit effect value to Mode parameter response.
+    plogis() %>%
+    # Mode parameter response to Theta (origin (1, 1)).
+    finv()
+}
 
-  fits <- future_sapply(
-    seq(nrow(repli.experiment_Germline_chr)),
-    \(i) tryCatch(beta_dm_regression(repli.experiment_Germline_chr, i, solve=F), error=\(c) NULL),
-    simplify=FALSE
+laplace_bayes_factor_logistic_scaled <- function(
+  posterior_a,
+  posterior_b,
+  params
+) {
+  integral_a <- sapply(
+    seq(0, pi/2, length.out=100) %>%
+      laplace_bayes_factor_logistic_correct_scale(
+        params$scale[1], params$center[1]
+      ),
+    integrate_gauss2d_arc,
+    origin=c(1, 1),
+    mean=posterior_a$par,
+    sigma=solve(posterior_a$fisher_information)
   )
-  gr <- tar_read(repli.granges_nos_E2_chr) %>% unlist
-  gr$score <- as.numeric(sapply(fits, \(l) if (is.null(l$est)) NA else (1-2*l$est))) %>%
-    replace(is.na(.), 0)
-  gr
+  integral_b <- sapply(
+    seq(0, pi/2, length.out=100) %>%
+      laplace_bayes_factor_logistic_correct_scale(
+        params$scale[2], params$center[2]
+      ),
+    integrate_gauss2d_arc,
+    origin=c(1, 1),
+    mean=posterior_b$par,
+    sigma=solve(posterior_b$fisher_information)
+  )
+  sum(integral_a) * sum(integral_b) / sum(integral_a * integral_b)
 }

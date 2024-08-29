@@ -324,6 +324,53 @@ targets.repli <- list(
         ),
       packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
     ),
+    tar_target(
+      repli.beta.scales,
+      tribble(
+        ~rowname, ~center, ~scale,
+        "Centered", -repli.beta.2@metadata$`scaled:center`, repli.beta.2@metadata$`scaled:scale`,
+        "SumSquares",
+        0,
+        (
+          qlogistanh(repli.beta.2$score) * repli.beta.2@metadata$`scaled:scale` +
+            repli.beta.2@metadata$`scaled:center`
+        )^2 %>%
+          mean %>%
+          sqrt
+      )
+    ),
+    tar_target(
+      repli.beta.fit.scaled,
+      # Do not put in a tibble constructor as it has its own error handling
+      # which is slowing down the target several-fold.
+      cbind(
+        repli.beta.scales,
+        list(
+          index = seq(length(chic.tile.diameter_1000)),
+          fit = sapply(
+            split(
+              seq(nrow(repli.experiment)),
+              rowData(repli.experiment)$seqnames
+            ),
+            \(inds) future_lapply(
+              seq_along(inds),
+              \(...) beta_dm_regression_gaussian_plate(...) %>%
+                tryCatch(error = \(e) beta_dm_regression_calculate_prior()),
+              exper=repli.experiment[inds, ],
+              wts=repli.sliding.weights,
+              xform_scale=repli.beta.scales$scale,
+              xform_center=repli.beta.scales$center
+            ),
+            simplify = FALSE
+          ) %>%
+            unlist(rec = FALSE)
+        ) %>%
+          do.call(tibble, .)
+      ) %>%
+        as_tibble,
+      pattern = map(repli.beta.scales),
+      packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
+    ),
     tar_file(
       repli.beta.bw,
       repli.beta.2$score %>%
@@ -414,7 +461,35 @@ targets.repli <- list(
           4.5
         )
       )
-    )
+  ),
+
+  tar_target(
+    repli.bayes.factor_chr,
+    tibble(
+      rbind(
+        tibble(
+          repli.beta.fit.scaled_Germline_chr[c("rowname", "index")],
+          Germline = repli.beta.fit.scaled_Germline_chr$fit,
+          Somatic = repli.beta.fit.scaled_Somatic_chr$fit,
+        ),
+        tibble(
+          rowname = "Raw",
+          index = seq_along(repli.beta_Germline_chr),
+          Germline = repli.beta_Germline_chr,
+          Somatic = repli.beta_Somatic_chr
+        )
+      ),
+      bayes_factor = future_mapply(
+        laplace_bayes_factor_logistic_scaled,
+        Germline,
+        Somatic,
+        MoreArgs = list(
+          params = tribble(~scale, ~center, 1, 0, 1, 0)
+        )
+      )
+    ) %>%
+      subset(select=-c(Germline, Somatic)),
+    format = "parquet"
   ),
 
   # Repli graphic for dmel-all-chromosomes, not the masked bowtie reference.
