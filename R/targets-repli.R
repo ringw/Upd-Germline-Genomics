@@ -238,42 +238,6 @@ targets.repli <- list(
       )
     ),
     tar_target(
-      repli.tracks,
-      tiles_to_fseq(repli.glm, "full", levels(repli.experiment$full), repli.experiment@metadata$granges, bw = 2000)
-    ),
-    tar_file(
-      repli.bw,
-      export(
-        GRanges(
-          unlist(repli.tracks),
-          score = (
-            as.matrix(unlist(repli.tracks)@elementMetadata) %*% repli.exp.contrast.numerator
-              / as.matrix(unlist(repli.tracks)@elementMetadata) %*% repli.exp.contrast.denominator
-          ) %>%
-            as.numeric() %>%
-            plogistanh() %>%
-            # Correct the timing values so that half of positions are in Q1&Q2
-            # (very close to achieving this outcome, when we consider that not
-            # every range has the same width - as 2Cen and 3Cen ref seqs do not
-            # need sliding windows at all). These are a necessary post-hoc
-            # offset applied to the regression models so that our GSC and CySC
-            # experiments are comparable.
-            `-`(median(., na.rm = T)) %>%
-            qlogistanh() %>%
-            replace(
-              which(
-                as.matrix(unlist(repli.tracks)@elementMetadata) %*% repli.exp.contrast.denominator
-                < 1
-              ),
-              0
-            )
-        ),
-        with(list(celltype = celltype, reference = reference), BigWigFile(str_glue("repli/Replication_Value_{celltype}_{reference}.bw")))
-      ) %>%
-        as.character(),
-      packages = c("dplyr", "rtracklayer", "stringr", "tibble", "tidyr")
-    ),
-    tar_target(
       repli.mse,
       # For each set of indices into the experiment (each chromosome),
       # parallel-apply the mse fitting function with smooth-weight plate.

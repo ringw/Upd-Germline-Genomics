@@ -181,21 +181,6 @@ reduce_peaks_2_tracks <- function(
     )
 }
 
-enrich_int_list <- function(p_peak_granges, int_list) {
-  sapply(
-    int_list,
-    \(w) with(
-      elementMetadata(gr)[w, ],
-      min(
-        p_peak[L2FC > 0],
-        if (length(p_peak) > 0) 1 else numeric(0),
-        na.rm = T
-      ) %>%
-        replace(!is.finite(.), NA)
-    )
-  )
-}
-
 write_chic_peaks <- function(peak_table_list, output_path) {
   dir.create(dirname(output_path), recursive = TRUE, showW = FALSE)
   peaks_bed <- peak_table_list %>%
@@ -374,54 +359,6 @@ chic_df_list_to_pvalue_list <- function(df_list) {
   df_list %>%
     sapply(\(df) df %>% with(Rle(p, length))) %>%
     RleList()
-}
-
-chic_quantify_broad_peaks <- function(track, track_mask, features, enrichment = 1.5, resolution = 10) {
-  track <- (track >= enrichment) * (
-    sapply(
-      track_mask,
-      \(track_mask) as(
-        as.logical(track_mask) %>%
-          ifelse(1, 0),
-        "Rle"
-      )
-    ) %>%
-      RleList()
-  )
-  feature_values <- features %>%
-    filter(
-      chr %in% names(chr.lengths),
-      !is.na(start),
-      !is.na(end),
-      transcript.length >= 2000
-    ) %>%
-    split(.$chr) %>%
-    mapply(
-      \(chr_name, chr_features) {
-        feature_names <- rownames(chr_features)
-        chr_features <- chr_features %>%
-          rowwise() %>%
-          mutate(all_pos = seq(min(start, end), max(start, end)) %>% list())
-        feature_factor <- rep(
-          rownames(chr_features),
-          sapply(chr_features$all_pos, length)
-        ) %>%
-          factor(rownames(chr_features))
-        feature_lookup <- track[[chr_name]][
-          chr_features$all_pos %>% do.call(c, .)
-        ]
-        sapply(
-          feature_lookup %>% split(feature_factor),
-          mean
-        ) %>%
-          setNames(feature_names)
-      },
-      names(.),
-      .,
-      SIMPLIFY = FALSE
-    ) %>%
-    setNames(NULL) %>%
-    do.call(c, .)
 }
 
 display_peak_location_stats <- function(lst) {

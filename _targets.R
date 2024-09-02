@@ -923,15 +923,6 @@ list(
       )
     ),
     tar_target(
-      chic.broad.peaks.stat,
-      chic_quantify_broad_peaks(
-        pmax(chic_smooth_125_mod_sym, chic_smooth_250_mod_sym)
-        / chic_smooth_250_input_sym,
-        track_mask = chic_smooth_250_input_sym >= 1,
-        features = read.csv(assay.data.sc, row.names = 1)
-      )
-    ),
-    tar_target(
       chic.test.limma.bed,
       chic.test.limma %>%
         chic_track_generate_table_by_enrichment %>%
@@ -1047,45 +1038,6 @@ list(
 
   tar_target(demo.f.distribution, demo_f_distribution()),
   tar_target(plot.scaled.f.distribution, plot_scaled_f()),
-
-  tar_map(
-    data.frame(extension = c(".pdf", ".png")),
-    tar_target(
-      chic_poisson_illustration,
-      save_figures(
-        "figure/Germline", extension,
-        tribble(
-          ~name, ~figure, ~width, ~height,
-          "CHIC-H3K4-Sample-Simulation-1", 
-          illustrate_coverage_poisson(
-            # Center on tj gene
-            chic.smooth_25_mod_H3K4_Germline$`2L`[seq(19463500,19466500,by=10)] %>%
-              # Square the track (shrinks the variations where the value is smaller)
-              `^`(2) %>%
-              # Subtract off the minimum value
-              `-`(min(.) * 0.75) %>%
-              # rle to vector
-              as.numeric
-          ),
-          4,
-          4,
-          "CHIC-H3K4-Sample-Simulation-2",
-          illustrate_poisson_variable(
-            # Center on tj gene
-            chic.smooth_25_mod_H3K4_Germline$`2L`[seq(19463500,19466500,by=10)] %>%
-              # Square the track (shrinks the variations where the value is smaller)
-              `^`(2) %>%
-              # Subtract off the minimum value
-              `-`(min(.) * 0.75) %>%
-              # rle to vector
-              as.numeric
-          ),
-          4,
-          4
-        )
-      )
-    )
-  ),
 
   tar_target(
     chic.peaks.bed_Germline,
