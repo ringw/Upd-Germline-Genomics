@@ -236,3 +236,64 @@ publish_peaks_contingency_tables <- function(
     colNames = F
   )
 }
+
+publish_repli_analysis <- function(
+    assay.data.sc, repli_Germline, repli_Somatic, repli_Bayes_Factor,
+    window_name, sc_Germline, sc_Somatic,
+    output_path) {
+  wb <- createWorkbook()
+
+  title <- "Repliseq"
+  addWorksheet(wb, title)
+
+  assay.data.sc <- assay.data.sc %>%
+    read.csv() %>%
+    dplyr::rename(symbol = "X")
+  seqlevels(repli_Germline) <- seqlevels(repli_Germline) %>% c("*")
+  gene_lookup <- findOverlaps(
+    with(
+      assay.data.sc,
+      GRanges(chr %>% replace_na("*"), IRanges(ifelse(strand == "+", start, end) %>% replace(is.na(chr), 1), width = 1), names = symbol)
+    ),
+    repli_Germline
+  ) %>%
+    sapply(\(v) if (length(v)) v[1] else NA)
+  df <- tibble(
+    assay.data.sc,
+    GSC = repli_Germline$score[gene_lookup],
+    CySC = repli_Somatic$score[gene_lookup],
+    `Bayes Factor` = repli_Bayes_Factor$score[gene_lookup],
+    `GSC Transcription` = sc_Germline,
+    `CySC Transcription` = sc_Somatic,
+    `Diff Rep Assay` = window_name,
+  )
+  writeData(
+    wb,
+    title,
+    matrix(
+      c(
+        "-1 Late to +1 Early",
+        NA,
+        "P(Alt. Hypot.) / P(Null Hypot.)",
+        "Transcriptome Class",
+        NA,
+        "Nested Peak Calling (*** signif) TSS in named region"
+      ),
+      nrow = 1
+    ),
+    startCol = 11, startRow = 1,
+    colNames = F
+  )
+  writeDataTable(
+    wb,
+    title,
+    df,
+    startCol = 1, startRow = 2,
+    withFilter = T,
+    tableStyle = excel_tables$deepgreen
+  )
+
+  dir.create(dirname(output_path), showW = F, rec = F)
+  saveWorkbook(wb, output_path, overwrite = T)
+  output_path <- output_path
+}

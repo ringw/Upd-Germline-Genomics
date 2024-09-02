@@ -482,21 +482,129 @@ targets.repli <- list(
     {
       peaks <- GenomicRanges::reduce(
         chic.tile.diameter_1000_chr[
-          with(repli.bayes.factor_chr, bayes_factor[rowname == "Centered"])
+          with(repli.bayes.factor_chr, which(
+            bayes_factor[rowname == "Centered"] >= 1000))
         ]
       )
+      seqlengths(peaks) <- NA
+      peaks <- peaks %>%
+        GenomicRanges::resize(width(.) + 8000, fix="center") %>%
+        GenomicRanges::reduce() %>%
+        GenomicRanges::resize(width(.) - 8000, fix="center")
+      diff_timing <- (repli.beta.2_Germline_chr$score - repli.beta.2_Somatic_chr$score)
       peaks_timing <- findOverlaps(
         peaks,
         chic.tile.diameter_1000_chr
       ) %>%
         sapply(
-          \(inds) (repli.beta.2_Germline_chr$score - repli.beta.2_Somatic_chr)[inds]
+          \(inds) diff_timing[inds]
         )
       peaks$NegDiff <- sapply(peaks_timing, min)
       peaks$PosDiff <- sapply(peaks_timing, max)
-      names(peaks) <- 1
+      names(peaks) <- str_replace(
+        make.unique(as.character(seqnames(peaks))),
+        "\\.|$",
+        paste0(
+          ".",
+          sign((peaks$NegDiff + peaks$PosDiff) / 2) %>%
+            factor %>%
+            fct_recode(
+              GermlineLater="-1",
+              GermlineEarlier="1"
+            ),
+          "."
+        )
+      ) %>%
+        str_replace(
+          "\\.$",
+          ""
+        )
       peaks
     }
+  ),
+  tar_target(
+    diff.replication.progression.gene,
+    with(
+      read.csv(assay.data.sc),
+      names(repli.peaks_chr)[
+        findOverlaps(
+          GRanges(
+            chr %>%
+              replace(
+                is.na(chr) | !(chr %in% levels(droplevels(seqnames(repli.peaks_chr)))),
+                "*"
+              ) %>%
+              factor(levels = c(seqlevels(repli.peaks_chr), "*")),
+            IRanges(
+              start = ifelse(
+                strand == "+", start, end
+              ) %>%
+                replace(is.na(chr), 1),
+              width = 1
+            )
+          ),
+          repli.peaks_chr
+        ) %>%
+          sapply(\(vec) vec[1])
+      ]
+    )
+  ),
+
+  # Repliseq dmel-all-chromosomes supplementary data
+  tar_file(
+    sd_repliseq,
+    publish_repli_analysis(
+      assay.data.sc,
+      repli.beta.2_Germline_chr,
+      repli.beta.2_Somatic_chr,
+      GRanges(
+        chic.tile.diameter_1000_chr,
+        score = with(
+          repli.bayes.factor_chr, bayes_factor[rowname == "Centered"]
+        ) %>%
+          replace(!is.finite(.), NA)
+      ),
+      diff.replication.progression.gene,
+      fct_recode(
+        quartile.factor_Germline,
+        Off="Q1", Low="Q2", Medium="Q3", High="Q4"
+      ),
+      fct_recode(
+        quartile.factor_Somatic,
+        Off="Q1", Low="Q2", Medium="Q3", High="Q4"
+      ),
+      "Supplemental_Data/SD04_Repliseq.xlsx"
+    ),
+    packages = tar_option_get("packages") %>% c("tidyr")
+  ),
+  tar_file(
+    repliseq_bed,
+    tibble(
+      output_file = "repli/Diff_Rep_Program_Assay.bed",
+      do_write = with_options(
+        list(scipen=100),
+        write.table(
+          reframe(
+            rownames_to_column(as.data.frame(repli.peaks_chr)),
+            seqnames,
+            start - 1,
+            end,
+            rowname,
+            score = ((NegDiff + PosDiff) / 2) %>%
+              max(-1) %>%
+              min(1) %>%
+              `+`(1) %>%
+              `*`(1000 / 2) %>%
+              round
+          ),
+          output_file,
+          quote = F,
+          sep = "\t",
+          row.names = F,
+          col.names = F
+        )
+      )
+    )$output_file
   ),
 
   # Repli graphic for dmel-all-chromosomes, not the masked bowtie reference.
