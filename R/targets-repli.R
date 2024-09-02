@@ -277,6 +277,28 @@ targets.repli <- list(
         unlist(rec = FALSE),
       packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
     ),
+    # As an alternative to the Beta quantiles regression, we will fit the %
+    # enrichment of each fraction using DM likelihood with no Beta function.
+    # Simple maximum a posteriori estimator with df = 4.
+    tar_target(
+      repli.dm,
+      sapply(
+        split(
+          seq(nrow(repli.experiment)),
+          rowData(repli.experiment)$seqnames
+        ),
+        \(inds) future_lapply(
+          seq_along(inds),
+          \(...) dm_regression_gaussian_plate(...) %>%
+            tryCatch(error = \(e) beta_dm_regression_calculate_prior()),
+          exper = repli.experiment[inds, ],
+          wts = repli.sliding.weights
+        ),
+        simplify = FALSE
+      ) %>%
+        unlist(rec = FALSE),
+      packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
+    ),
     # Perform inference on the MAP parameters (Laplace) and create GRanges track.
     tar_target(
       repli.beta.2,
