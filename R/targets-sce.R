@@ -251,23 +251,6 @@ targets.sce <- list(
     sc_sort_cells_dendrogram(Upd_sc, Upd_cells_dendrogram_raw),
     packages = tar_option_get("packages") %>% c("dendextend")
   ),
-  # Report genes with "medium" or "high" quantification in any cluster.
-  tar_target(
-    Upd_genes_dendrogram_loose_criteria,
-    sc_genes_dendrogram(Upd_sc, gene_ = rowAnys(Upd_cpm > 10)[rownames(Upd_sc[["RNA"]])]) %>%
-      sc_sort_genes_dendrogram(Upd_cpm, .),
-    packages = tar_option_get("packages") %>% c("dendextend")
-  ),
-  tar_file(
-    Upd_gene_clustering_report,
-    Upd_genes_dendrogram_loose_criteria %>%
-      cut(h = 165) %>%
-      with(lower) %>%
-      sapply(labels) %>%
-      setNames(str_glue("dendrogram_{seq_along(.)}")) %>%
-      report_cpm_in_gene_sets(Upd_cpm, ., "scRNA-seq-Regression/Report-Gene-CPM.html", "scRNA-seq-Regression/Report-Gene-CPM.pdf"),
-    packages = tar_option_get("packages") %>% c("gt")
-  ),
   tar_target(
     Upd_genes_dendrogram_raw,
     sc_genes_dendrogram(Upd_sc, gene_ = rowAnys(Upd_cpm > 50)[rownames(Upd_sc[["RNA"]])])
