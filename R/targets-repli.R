@@ -197,16 +197,6 @@ targets.repli <- list(
         list(),
       chic.tile.diameter_1000 = rlang::syms(
         str_glue("chic.tile.diameter_1000_", reference)
-      ),
-      chic.track = rlang::syms(str_glue("chic.tile.diameter_500_score_{reference}")),
-      chic.results = list(
-        call(
-          "setNames",
-          rlang::syms(
-            str_glue("chic.experiment.quantify_H3K{c(4,27,9)}_{celltype}_peakcalling.broad_{reference}")
-          ),
-          as.character(str_glue("H3K{c(4,27,9)}"))
-        )
       )
     ),
     names = celltype | reference,
@@ -374,9 +364,30 @@ targets.repli <- list(
     tar_target(
       repli.autocorrelation.beta,
       repli.beta.2 %>% autocorrelate_centered_granges(1001)
-    ),
+    )
+  ),
 
-    # Repli ChIC heatmap
+  # Repli ChIC heatmap
+  tar_map(
+    mutate(
+      rowwise(
+        cross_join(
+          experiment.driver, dplyr::rename(bowtie.refs, reference = "name")
+        )
+      ),
+      repli.beta.2 = rlang::syms(str_glue("repli.beta.2_{celltype}_{reference}")),
+      chic.track = rlang::syms(str_glue("chic.tile.diameter_500_score_{reference}")),
+      chic.results = list(
+        call(
+          "setNames",
+          rlang::syms(
+            str_glue("chic.experiment.quantify_H3K{c(4,27,9)}_{celltype}_peakcalling.broad_{reference}")
+          ),
+          as.character(str_glue("H3K{c(4,27,9)}"))
+        )
+      ),
+    ),
+    names = celltype | reference,
     tar_target(
       repli.value.bindata,
       repli.beta.2 %>%
