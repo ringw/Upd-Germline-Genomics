@@ -1,12 +1,3 @@
-make_frag_end_filter <- function(fft_length, filter_size, bw = 25) {
-  time_domain <- c(
-    dnorm(seq(0, filter_size), sd = bw),
-    rep(0, fft_length - (2 * filter_size + 1)),
-    dnorm(seq(-filter_size, -1), sd = bw)
-  )
-  fft(time_domain)
-}
-
 cigar_ref_length <- function(cigars) {
   cigars %>%
     sapply(
