@@ -466,6 +466,27 @@ targets.repli <- list(
       subset(select = -c(Germline, Somatic)),
     format = "parquet"
   ),
+  tar_target(
+    repli.peaks_chr,
+    {
+      peaks <- GenomicRanges::reduce(
+        chic.tile.diameter_1000_chr[
+          with(repli.bayes.factor_chr, bayes_factor[rowname == "Centered"])
+        ]
+      )
+      peaks_timing <- findOverlaps(
+        peaks,
+        chic.tile.diameter_1000_chr
+      ) %>%
+        sapply(
+          \(inds) (repli.beta.2_Germline_chr$score - repli.beta.2_Somatic_chr)[inds]
+        )
+      peaks$NegDiff <- sapply(peaks_timing, min)
+      peaks$PosDiff <- sapply(peaks_timing, max)
+      names(peaks) <- 1
+      peaks
+    }
+  ),
 
   # Repli graphic for dmel-all-chromosomes, not the masked bowtie reference.
   tar_map(
