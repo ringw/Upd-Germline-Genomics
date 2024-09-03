@@ -375,12 +375,28 @@ integrate_gauss2d_arc <- function(origin, angle, mean, sigma) {
   )
 }
 
+# Fix Bivariate Normal precision matrix using pseudo-count identity matrix. This
+# fixes cases where the Fisher information is not positive definite.
+beta_correct_fit_hessian_precision_matrix <- function(fit) {
+  eigs <- eigen(fit$fisher_information, sym=T)
+  if (eigs$values[2] < 0)
+    fit$fisher_information <- fit$fisher_information + c(
+      -eigs$values[2] + 0.0001,
+      0,
+      0,
+      -eigs$values[2] + 0.0001
+    )
+  fit <- fit
+}
+
 # Calculate Bayes Factor of our Laplace approximation. A reciprocal of an "inner
 # product", of sorts, of our first integrated rays of probability density.
 # Analogous to a likelihood ratio test with a shared or independent Beta dist
 # location parameter, it scores two model fits for whether the Beta dist
 # location is likely to be significantly far apart.
 laplace_bayes_factor_polar_integral <- function(posterior_a, posterior_b) {
+  posterior_a <- posterior_a %>% beta_correct_fit_hessian_precision_matrix()
+  posterior_b <- posterior_b %>% beta_correct_fit_hessian_precision_matrix()
   integral_a <- sapply(
     seq(0, pi/2, length.out=100),
     integrate_gauss2d_arc,
