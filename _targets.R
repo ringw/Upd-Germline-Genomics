@@ -724,7 +724,12 @@ list(
   ),
 
   tar_map(
-    chic.experiments,
+    tibble(
+      chic.experiments,
+      chic.heatmap.tss = rlang::syms(
+        str_glue("chic.heatmap.tss_{mark}_{name}_CN_chr")
+      )
+    ),
     names = experiment_name,
 
     # Molecule/input FPKM ratio track, in bigwig format.
@@ -749,16 +754,9 @@ list(
       format = 'file'
     ),
     tar_target(
-      tss_mark_matrix,
-      flybase_big_matrix(
-        load_flybase_bed(bed_sym),
-        chic.bw
-      )
-    ),
-    tar_target(
       tss_mark_heatmap,
       display_tss_tile_matrix(
-        tss_mark_matrix,
+        chic.heatmap.tss,
         paste0("figure/", name, "/FPKM-", mark, ".pdf"),
         scale_image_filter = rep(1/50, 50),
         fc_max = 4,
@@ -769,7 +767,7 @@ list(
     tar_target(
       tss_mark_heatmap_png,
       display_tss_tile_matrix(
-        tss_mark_matrix,
+        chic.heatmap.tss,
         paste0("figure/", name, "/FPKM-", mark, ".png"),
         scale_image_filter = rep(1/50, 50),
         fc_max = 4,
@@ -780,7 +778,7 @@ list(
     tar_target(
       inv_tss_mark_heatmap,
       display_tss_tile_matrix(
-        tss_mark_matrix,
+        chic.heatmap.tss,
         paste0("figure/", name, "/INV-FPKM-", mark, ".pdf"),
         scale_image_filter = rep(1/50, 50),
         fc_max = 4,
@@ -792,7 +790,7 @@ list(
     tar_target(
       inv_tss_mark_heatmap_png,
       display_tss_tile_matrix(
-        tss_mark_matrix,
+        chic.heatmap.tss,
         paste0("figure/", name, "/INV-FPKM-", mark, ".png"),
         scale_image_filter = rep(1/50, 50),
         fc_max = 4,
