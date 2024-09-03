@@ -424,12 +424,12 @@ list(
     data.frame(stdev = Upd_sc[['pcasubset']]@stdev, x = 1:50) %>%
       head(10) %>%
       ggplot(aes(x, stdev^2))
-      + geom_point(color = "#06470c", size = 3)
+      + geom_point(color = "#06470c", size = 2)
       + scale_x_continuous(breaks = c(1, 5, 10))
       + scale_y_continuous(
         trans = "sqrt", breaks = c(4, 36, 100, 150), limits = c(3, 155)
       )
-      + labs(x = "Principal Component (Validation PCA)", y = "Explained Variance")
+      + labs(x = "PC (Germline/Somatic)", y = "Explained Variance")
       + theme_cowplot()
   ),
   # For cell cycle scoring.
@@ -477,7 +477,7 @@ list(
         tribble(
           ~name, ~figure, ~width, ~height,
           "RNAseq-Integrated-Cluster-Dots", supplemental_cluster_dot_plot_figure, 3, 4,
-          "RNAseq-Validation-Elbow", supplemental_elbow_figure, 5, 2.5,
+          "RNAseq-Validation-Elbow", supplemental_elbow_figure, 3, 2.5,
           "RNAseq-CPM-Gene-List-Venn-Area-Blank", cpm_gene_venn, 3.6, 2.7,
           "RNAseq-UMAP-Genotype",
           Upd_sc %>%

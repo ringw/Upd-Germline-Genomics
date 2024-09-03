@@ -73,7 +73,7 @@ Upd_sc_plot_idents_pcasubset <- function(Upd_sc) {
     c("ident", "pcasubset_1", "pcasubset_2")
   ) %>%
     ggplot(
-      aes(-pcasubset_1, pcasubset_2, color=ident)
+      aes(pcasubset_1, pcasubset_2, color=ident)
     ) + rasterize(geom_point(
       stroke=NA, size = 0.25
     ), dpi=80, scale=0.5) + scale_color_manual(
@@ -85,6 +85,46 @@ Upd_sc_plot_idents_pcasubset <- function(Upd_sc) {
       x = "PC 1", y = "PC 2"
     ) + theme_cowplot() + theme(
       aspect.ratio = 0.75
+    )
+}
+
+Upd_sc_plot_idents_pcasubset_batch <- function(Upd_sc) {
+  data <- FetchData(Upd_sc, c("ident", "batch", "pcasubset_1", "pcasubset_2"))
+  plot_data <- \(n) data %>%
+    subset(batch == n) %>%
+    ggplot(
+      aes(pcasubset_1, pcasubset_2, color=ident)
+    ) + rasterize(geom_point(
+      stroke=NA, size = 0.25
+    ), dpi=80, scale=0.5) + scale_color_manual(
+      values=unlist(cluster_colors)[1:2],
+      guide=guide_legend(title=NULL, override.aes = list(size=4))
+    ) + coord_cartesian(
+      c(-22, 22), c(-20, 20), expand=F
+    ) + labs(
+      x = "PC 1", y = "PC 2"
+    ) + theme_cowplot() + theme(
+      aspect.ratio = 2/3
+    )
+  fig <- gtable(
+    # 1 inch margin width as well as flexible width columns.
+    widths = unit(1, rep(c("null", "in"), c(2, 1))),
+    heights = unit(rep(c(0.5, 0.85), c(1, 2)), rep(c("in", "null"), c(1, 2)))
+  ) %>%
+    gtable_add_grob(
+      list(
+        linesGrob(x = 0),
+        textGrob("nos genotype"),
+        textGrob("tj genotype"),
+        as_grob(plot_data("nos.1") + theme(legend.position = "none")),
+        as_grob(plot_data("nos.2") + theme(legend.position = "none")),
+        as_grob(plot_data("tj.1") + theme(legend.position = "none")),
+        as_grob(plot_data("tj.2") + theme(legend.position = "none")),
+        as_grob(get_legend(plot_data("nos.1")))
+      ),
+      t = c(1, 1, 1, 2, 3, 2, 3, 2),
+      l = c(2, 1, 2, 1, 1, 2, 2, 3),
+      b = c(3, 1, 1, 2, 3, 2, 3, 3)
     )
 }
 

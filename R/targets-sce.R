@@ -1,15 +1,20 @@
 targets.sce <- list(
-  # Fig. 1. UMAP plots.
+  # Fig. S1. UMAP plots.
   tar_file(
     sc_idents_supp,
     save_figures(
       "figure/Integrated-scRNAseq", ".pdf",
-      tibble(
-        rowname="RNAseq-Validation-Subset-PCA",
-        figure=Upd_sc_plot_idents_pcasubset(Upd_sc) %>% list,
-        width=6, height=4
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "RNAseq-Validation-Subset-PCA",
+        Upd_sc_plot_idents_pcasubset(Upd_sc),
+        6, 4,
+        "RNAseq-Validation-Subset-PCA-Batch",
+        Upd_sc_plot_idents_pcasubset_batch(Upd_sc),
+        5.75, 3.5,
       )
-    )
+    ),
+    packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
   ),
   tar_map(
     tibble(extension = c(".pdf", ".png")),
