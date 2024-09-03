@@ -739,7 +739,7 @@ plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
     limits=c(-1,1) * 7.5, oob=scales::squish, expand=c(0,0)
   ) + scale_y_reverse(
     limits=c(0, -50), oob=scales::squish, expand=rep(0.01,2)
-  ) + theme_bw() + theme(aspect.ratio = 3/4)
+  ) + theme_bw() + theme(aspect.ratio = 3/2)
 }
 
 l2fc_bar_plot <- function(l2fc_data) {

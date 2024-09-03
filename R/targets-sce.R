@@ -356,7 +356,7 @@ targets.sce <- list(
         figure=plot_volcano_apeglm(Upd_regression_somatic) %>%
           rasterise(dpi=300) %>%
           list,
-        width = 6,
+        width = 3,
         height = 4
       )
     )
