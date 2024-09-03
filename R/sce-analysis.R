@@ -347,56 +347,6 @@ load_cell_cycle_score_drosophila <- function(cell_cycle_drosophila_path, metafea
   cell_cycle_drosophila %>% pull(rowname) %>% split(cell_cycle_drosophila %>% pull(phase))
 }
 
-fpkm_quarter_density <- function(
-  log_fpkm, ylim = c(-5, NA), y_label = bquote(log[10]*"(CPM)"), clusters = c('germline', 'somatic')
-) {
-  log_fpkm <- log_fpkm %>% subset(rowAlls(is.finite(.)))
-  names(dimnames(log_fpkm)) <- c('gene', 'cluster')
-  density_data <- apply(
-    log_fpkm,
-    2,
-    \(v) density(v, n=1000),
-    simplify = F
-  )
-  density_cut <- apply(
-    log_fpkm,
-    2,
-    \(v) c(-Inf, quantile(v, c(0.25, 0.50, 0.75)), Inf)
-  )
-  density_melt <- mapply(
-      \(d, density_cut) d %>%
-        with(data.frame(x, y, quartile=cut(x, density_cut))) %>%
-        within(levels(quartile) <- factor(paste0('Q', 1:4))),
-      density_data,
-      density_cut %>% asplit(2),
-      SIMPLIFY = F) %>%
-    bind_rows(.id = "cluster") %>%
-    subset(between(x, -10, 10))
-  density_melt$cluster <- density_melt$cluster %>% factor(sce.clusters$cluster)
-  density_melt <- density_melt %>%
-    left_join(density_melt %>% group_by(cluster) %>% summarise(max_density = max(y), res = diff(x)[1]), "cluster") %>%
-    within(violinwidth <- y / max_density) %>%
-    subset(cluster %in% clusters)
-  polygon_melt <- density_melt %>%
-    group_by(cluster, quartile) %>%
-    arrange(cluster, quartile, x) %>%
-    reframe(
-      x = c(x[1] - res[1], x, rev(x), x[1] - res[1]),
-      violinwidth = c(violinwidth[1], violinwidth, rev(-violinwidth), -violinwidth[1])
-    )
-  polygon_melt %>%
-    within(quartile <- quartile %>% factor(rev(sort(unique(.))))) %>%
-    ggplot(
-      aes(x = as.numeric(cluster) + violinwidth * 0.95 / 2, y = x, fill = quartile)
-    ) + geom_polygon(aes(group = interaction(cluster, quartile))) + scale_fill_manual(
-      values = sc_quartile_colors %>% setNames(NULL) %>% rev
-    ) + coord_cartesian(
-      NULL, ylim
-    ) + theme_bw() + labs(
-      x = 'Cluster', y = y_label
-    )
-}
-
 fpkm_third_density <- function(
   log_fpkm, cutoff = log(5) / log(10), ylim = c(-5, NA), y_label = bquote(log[10]*"(CPM)"), clusters = c('germline', 'somatic'),
   inter_cutoffs = apply(log_fpkm, 2, \(v) v %>% subset(. >= cutoff) %>% quantile(c(1/3, 2/3)), simplify=F)

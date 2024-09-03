@@ -61,21 +61,6 @@ targets.sce <- list(
             ncol = 2
           ),
           8, 8,
-          "RNAseq-Quantification-Quarters-SCT",
-          fpkm_quarter_density(
-            with(
-              list(
-                sct = cbind(
-                  germline = sctransform_quantile$germline[, "90%"],
-                  somatic = sctransform_quantile$somatic[, "90%"]
-                )
-              ),
-              sct %>% subset(rowAlls(abs(.) >= 0.01))
-            ),
-            y_label = bquote(Q["90%"]*"(SCT)"),
-            ylim = c(-0.5, 5)
-          ),
-          4, 4,
           "RNAseq-Scatter",
           ggplot(
             Upd_cpm %>%
