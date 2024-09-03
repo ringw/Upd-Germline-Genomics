@@ -72,7 +72,6 @@ Upd_sc_plot_idents_pcasubset <- function(Upd_sc) {
     Upd_sc,
     c("ident", "pcasubset_1", "pcasubset_2")
   ) %>%
-    subset(ident %in% c("germline", "somatic")) %>%
     ggplot(
       aes(-pcasubset_1, pcasubset_2, color=ident)
     ) + rasterize(geom_point(

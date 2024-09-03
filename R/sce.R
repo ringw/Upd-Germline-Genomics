@@ -342,9 +342,17 @@ filter_integrate_data = function(seurats) {
   )
   # We noticed regardless of random seed that y needs to be flipped.
   Upd_sc[['umap']]@cell.embeddings[,2] <- -Upd_sc[['umap']]@cell.embeddings[,2]
+  
+  # Now run clustering.
+  Upd_sc$indep_idents = Idents(Upd_sc)
+  DefaultAssay(Upd_sc) <- "integrated"
+  Upd_sc <- Upd_sc %>%
+    FindNeighbors(dims = 1:7, nn.method = "rann") %>%
+    FindClusters(res = 0.1, random.seed = 0)
 
-  # PCA of germline and somatic clusters only
-  Upd_subset = Upd_sc %>% subset(idents = c('germline','somatic'))
+  # PCA of germline and somatic clusters only. Check below for how these largest
+  # clusters were called as either germline or somatic.
+  Upd_subset = Upd_sc %>% subset(idents = c('0', '1', '2'))
   # Now that we removed other clusters, regressing out pct.ribo is more
   # effective and is useful for producing interpretable principal components.
   Upd_subset[['integrated']]@scale.data = (
@@ -362,6 +370,18 @@ filter_integrate_data = function(seurats) {
   pcasubset.key = 'pcasubset_'
   cell.embeddings <- pcasubset@cell.embeddings
   cell.embeddings[,] <- NA
+  # Fix the sign of the pcasubset cell embeddings with somatic on right side.
+  Upd_subset[["pca"]]@cell.embeddings[, 1] <- Upd_subset[[
+    "pca"
+  ]]@cell.embeddings[, 1] %>%
+    `*`(
+      sign(
+        with(
+          FetchData(Upd_subset, c("ident", "PC_1")),
+          cor(ident == "1", PC_1)
+        )
+      )
+    )
   cell.embeddings[colnames(Upd_subset),] <- Upd_subset[["pca"]]@cell.embeddings
   colnames(cell.embeddings) <- paste0(pcasubset.key, 1:ncol(cell.embeddings))
   feature.loadings <- Upd_subset[["pca"]]@feature.loadings
@@ -395,12 +415,12 @@ filter_integrate_data = function(seurats) {
   Upd_sc[['RNA']] <- Upd_sc[['RNA']] %>% JoinLayers
   Upd_sc[['RNA']]@meta.data = assay_data
 
-  Upd_sc$indep_idents = Idents(Upd_sc)
-  DefaultAssay(Upd_sc) <- "integrated"
-  Upd_sc <- Upd_sc %>%
-    FindNeighbors(dims = 1:7, nn.method = "rann") %>%
-    FindClusters(res = 0.1, random.seed = 0)
+  # Queries on the Upd_sc object are going to use RNA log-normalized values. The
+  # batches are quite similar to one another, and we don't care that we have an
+  # SCT integrated assay where we actually warped the Pearson residual values to
+  # be even more comparable between batches.
   DefaultAssay(Upd_sc) <- "RNA"
+  # Now write out the idents.
   Idents(Upd_sc) <- Idents(Upd_sc) %>%
     fct_recode(
       germline="0",
