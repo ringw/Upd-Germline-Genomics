@@ -565,14 +565,8 @@ targets.repli <- list(
           replace(!is.finite(.), NA)
       ),
       diff.replication.progression.gene,
-      fct_recode(
-        quartile.factor_Germline,
-        Off="Q1", Low="Q2", Medium="Q3", High="Q4"
-      ),
-      fct_recode(
-        quartile.factor_Somatic,
-        Off="Q1", Low="Q2", Medium="Q3", High="Q4"
-      ),
+      Upd_cpm[, "germline"],
+      Upd_cpm[, "somatic"],
       "Supplemental_Data/SD04_Repliseq.xlsx"
     ),
     packages = tar_option_get("packages") %>% c("tidyr")

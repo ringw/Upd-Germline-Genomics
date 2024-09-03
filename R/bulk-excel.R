@@ -239,7 +239,7 @@ publish_peaks_contingency_tables <- function(
 
 publish_repli_analysis <- function(
     assay.data.sc, repli_Germline, repli_Somatic, repli_Bayes_Factor,
-    window_name, sc_Germline, sc_Somatic,
+    window_name, CPM_Germline, CPM_Somatic,
     output_path) {
   wb <- createWorkbook()
 
@@ -263,8 +263,13 @@ publish_repli_analysis <- function(
     GSC = repli_Germline$score[gene_lookup],
     CySC = repli_Somatic$score[gene_lookup],
     `Bayes Factor` = repli_Bayes_Factor$score[gene_lookup],
-    `GSC Transcription` = sc_Germline,
-    `CySC Transcription` = sc_Somatic,
+    `GSC CPM` = CPM_Germline,
+    `CySC CPM` = CPM_Somatic,
+    OnOff_CPM = structure(
+      as.numeric(interaction(CPM_Germline >= 5, CPM_Somatic >= 5)),
+      levels = c("GSC Off CySC Off", "GSC On CySC Off", "GSC Off CySC On", "GSC On CySC On"),
+      class = "factor"
+    ),
     `Diff Rep Assay` = window_name,
   )
   writeData(
@@ -275,7 +280,8 @@ publish_repli_analysis <- function(
         "-1 Late to +1 Early",
         NA,
         "P(Alt. Hypot.) / P(Null Hypot.)",
-        "Transcriptome Class",
+        "Transcriptome Values",
+        NA,
         NA,
         "Nested Peak Calling (*** signif) TSS in named region"
       ),
@@ -291,6 +297,15 @@ publish_repli_analysis <- function(
     startCol = 1, startRow = 2,
     withFilter = T,
     tableStyle = excel_tables$deepgreen
+  )
+  # Shrink number of decimals.
+  addStyle(
+    wb,
+    title,
+    createStyle(numFmt = "0.00"),
+    rows = seq(3, 2 + nrow(df)),
+    cols = 10:14,
+    gridExpand = TRUE
   )
 
   dir.create(dirname(output_path), showW = F, rec = F)
