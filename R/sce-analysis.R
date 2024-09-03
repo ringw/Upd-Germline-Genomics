@@ -417,6 +417,28 @@ fpkm_third_density <- function(
     )
 }
 
+fpkm_simple_violin <- function(
+  data, ylim = c(-2.75, 4.5)
+) {
+  melt(data, variable.name = "cluster") %>%
+    ggplot(aes(cluster, value, fill=cluster)) +
+    geom_violin(linewidth = NA) +
+    scale_fill_manual(
+      values = unlist(
+        cluster_colors[c("spermatocyte", "somaticprecursor", "muscle")],
+        use.names = FALSE
+      )
+    ) +
+    coord_cartesian(NULL, ylim) + theme_bw() +
+    scale_y_continuous(breaks = seq(-2, 4)) +
+    theme(
+      panel.grid.major.x = element_blank(),
+      panel.grid.minor.x = element_blank(),
+      legend.position = "none"
+    ) +
+    labs(x = 'Cluster', y = bquote(log[10]*"(CPM)"))
+}
+
 write_Upd_sc_cell_cycle_phases = function(Upd_sc, cell_cycle_drosophila, metafeatures) {
   Upd_sc = Upd_sc %>% NormalizeData
   cell_cycle = load_cell_cycle_score_drosophila(cell_cycle_drosophila, metafeatures)

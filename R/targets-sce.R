@@ -38,6 +38,16 @@ targets.sce <- list(
             aspect.ratio = 1.34
           ),
           4, 4,
+          "RNAseq-Quantification-Additional-CPM-Violin",
+          fpkm_simple_violin(
+            as.data.frame(log(Upd_cpm) / log(10))[3:5] %>%
+              dplyr::rename(
+                Spermatocyte="spermatocyte",
+                `Other Soma`="somaticprecursor",
+                Muscle="muscle"
+              )
+          ),
+          4, 4,
           "RNAseq-Quantification-Quarters-CPM-Criteria",
           ggarrange(
             plotlist = {
