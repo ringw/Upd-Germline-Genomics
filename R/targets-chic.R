@@ -1,6 +1,14 @@
 library(dplyr)
 chic.samples = read.csv('chic/chic_samples.csv') %>%
-  subset(sample != "" & !sapply(rejected, isTRUE))
+  subset(sample != "" & !sapply(rejected, isTRUE)) %>%
+  mutate(
+    sample_glob = sample,
+    sample = sample %>%
+      replace(
+        str_length(ident) != 0,
+        ident[str_length(ident) != 0]
+      )
+  )
 chic.samples.dimreduc <- chic.samples %>%
   subset(!grepl("ChIP", group) & grepl("H3", molecule))
 
@@ -79,8 +87,8 @@ targets.chic.aligned <- tar_map(
               "-i",
               align_chic_lightfiltering,
               str_replace(bowtie[1], "\\..*", ""),
-              paste0(batch, "/", sample, "_R1_001.fastq.gz"),
-              paste0(batch, "/", sample, "_R2_001.fastq.gz"),
+              paste0(batch, "/", sample_glob, "_R1_001.fastq.gz"),
+              paste0(batch, "/", sample_glob, "_R2_001.fastq.gz"),
               output_path
             )
           )

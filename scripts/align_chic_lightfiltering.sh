@@ -15,10 +15,10 @@ OUTPUT_2=`mktemp -u --suffix=.fifo`
 mkfifo $OUTPUT_2
 
 (
-    rclone cat "sharepoint:Bio Data/$READS_1_PATH" | gunzip -c
+    rclone cat --include="`basename $READS_1_PATH`" "sharepoint:Bio Data/`dirname $READS_1_PATH`" | gunzip -c
 ) > $OUTPUT_1 &
 (
-    rclone cat "sharepoint:Bio Data/$READS_2_PATH" | gunzip -c
+    rclone cat --include="`basename $READS_2_PATH`" "sharepoint:Bio Data/`dirname $READS_2_PATH`" | gunzip -c
 ) > $OUTPUT_2 &
 
 TEMP_PATH=$(mktemp -p /tmp --dry-run $(echo $OUTPUT_PATH | tr '/' '.').XXXXXXXXXX)
