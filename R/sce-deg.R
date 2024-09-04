@@ -87,6 +87,24 @@ build_model_matrix <- function(data_frame, decontXcontam) {
   # model.matrix(~ ident + batch, data_frame)
 }
 
+build_model_matrix_add_phase_covariate <- function(ident, Phase) {
+  mm <- model.matrix(~ Phase)[, -1]
+  mm.interaction <- mm * (
+    recode(
+      ident,
+      germline="1",
+      somatic="-1",
+      spermatocyte="0",
+      somaticprecursor="0",
+      muscle="0"
+    ) %>%
+      as.character %>%
+      as.numeric
+  )
+  colnames(mm.interaction) <- paste0("ident:", colnames(mm.interaction))
+  mm <- cbind(mm, mm.interaction)
+}
+
 fit_glm <- function(Upd_assay, Upd_model_matrix, Upd_metadata) {
   Upd_metadata <- Upd_metadata %>% read.csv(row.names = 1)
   # Upd_assay <- Upd_assay %>% subset(cells = Cells(.)[Upd_subset])
@@ -215,11 +233,13 @@ apeglm_coef_table_sample <- function(g, coef=2, test_mle=TRUE, prior_var = NULL,
     ncol=ncol(g$data),
     dimnames=dimnames(g$data)
   )
-  g$Mu = glmGamPoi:::calculate_mu(
-    Beta=g$Beta,
-    model_matrix=g$model_matrix,
-    offset_matrix=g$Offset
-  )
+  if (is.null(prior_var) || test_mle) {
+    g$Mu = glmGamPoi:::calculate_mu(
+      Beta=g$Beta,
+      model_matrix=g$model_matrix,
+      offset_matrix=g$Offset
+    )
+  }
   if (test_mle) {
     message('F-test of regression without shrinkage')
     mle <- test_de(g, colnames(g$Beta)[coef])
@@ -227,20 +247,22 @@ apeglm_coef_table_sample <- function(g, coef=2, test_mle=TRUE, prior_var = NULL,
     mle <- NULL
   }
   message('Calculate regression s.e. using QR decomposition')
-  lfc = predict(
-    g,
-    matrix(
-      seq(ncol(g$Beta)) == coef,
-      nrow=1
-    ),
-    offset=0,
-    se.fit=T
-  ) %>% with(cbind(fit, se.fit))
-  # Our Upd_glm generally has enough cells in each cluster that the se.fit is
-  # never NA. If we are testing an individual cluster other than the 4 factor
-  # levels used so far for fitting Upd_glm, then we might have NA or Inf and
-  # this could cause an error but can easily be excluded.
-  lfc[rowAnys(!is.finite(lfc)), ] <- NA
+  if (is.null(prior_var)) {
+    lfc = predict(
+      g,
+      matrix(
+        seq(ncol(g$Beta)) == coef,
+        nrow=1
+      ),
+      offset=0,
+      se.fit=T
+    ) %>% with(cbind(fit, se.fit))
+    # Our Upd_glm generally has enough cells in each cluster that the se.fit is
+    # never NA. If we are testing an individual cluster other than the 4 factor
+    # levels used so far for fitting Upd_glm, then we might have NA or Inf and
+    # this could cause an error but can easily be excluded.
+    lfc[rowAnys(!is.finite(lfc)), ] <- NA
+  }
   # From apeglm source code.
   prior.control <- list(
     no.shrink = setdiff(seq(ncol(g$Beta)), coef),
@@ -253,10 +275,13 @@ apeglm_coef_table_sample <- function(g, coef=2, test_mle=TRUE, prior_var = NULL,
   # apeglm sets the prior scale parameter to a min of 1 (coefficient represents 
   # a fold-change of e) or empirical value. Wow such interpretable, very cool.
   prior.control$prior.scale <- prior.control$prior.scale %>% min(1)
-  genes.test <- (
-    rowMins(abs(lfc[,1] + qnorm(0.975) * lfc[,2] %*% t(c(-1, 1)))) / log(2) > shrinkage_cutoff
-  ) %>%
-    which
+  if (shrinkage_cutoff != 0)
+    genes.test <- (
+      rowMins(abs(lfc[,1] + qnorm(0.975) * lfc[,2] %*% t(c(-1, 1)))) / log(2) > shrinkage_cutoff
+    ) %>%
+      which
+  else
+    genes.test <- rownames(g$data)
   # Garbage-collect Mu.
   g$Mu = NULL
   message('Optimize Approximate Posterior')

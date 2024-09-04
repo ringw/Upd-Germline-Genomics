@@ -574,13 +574,18 @@ analyze_pcasubset_batch_effect <- function(Upd_sc) {
   manova(pcasubset ~ 0 + genotype + batch_effect)
 }
 
+apply_cell_cycle_score <- function(Upd_sc, cell_cycle_drosophila, assay.data.sc) {
+  cell_cycle <- load_cell_cycle_score_drosophila(cell_cycle_drosophila, assay.data.sc)
+  Upd_sc %>%
+    NormalizeData %>%
+    CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
+}
+
 analyze_pcasubset_ident <- function(Upd_sc, cell_cycle_drosophila, assay.data.sc) {
   pcasubset <- Upd_sc[["pcasubset"]]@cell.embeddings
   ident <- Idents(Upd_sc)
 
-  Upd_sc = Upd_sc %>% NormalizeData
-  cell_cycle = load_cell_cycle_score_drosophila(cell_cycle_drosophila, assay.data.sc)
-  Upd_sc = Upd_sc %>% CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
+  Upd_sc = Upd_sc %>% apply_cell_cycle_score(cell_cycle_drosophila, assay.data.sc)
   Phase <- Upd_sc$Phase %>% factor(c("G1", "S", "G2M"))
 
   manova(pcasubset ~ 0 + ident + Phase)

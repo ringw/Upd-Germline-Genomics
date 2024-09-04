@@ -300,6 +300,16 @@ list(
   tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
   tar_target(Upd_model_matrix, build_model_matrix(FetchData(Upd_sc, c("ident", "batch")), Upd_decontX_contamination)),
   tar_target(
+    Upd_model_matrix_add_phase_covariate,
+    build_model_matrix_add_phase_covariate(
+      Idents(Upd_sc),
+      Upd_sc %>%
+        apply_cell_cycle_score(cell_cycle_drosophila, assay.data.sc) %>%
+        FetchData("Phase") %>%
+        pull(Phase)
+    )
+  ),
+  tar_target(
     shuffle_feature_plot,
     sample(Cells(Upd_sc))
   ),
@@ -329,6 +339,18 @@ list(
     fit_glm(Upd_exons, Upd_model_matrix, metadata),
   ),
   tar_target(
+    Upd_glm_phase,
+    fit_glm(
+      Upd_exons, cbind(Upd_model_matrix, Upd_model_matrix_add_phase_covariate), metadata
+    )
+  ),
+  tar_target(
+    Upd_glm_phase_simplified,
+    fit_glm(
+      Upd_exons, cbind(Upd_model_matrix[, 1:8], Upd_model_matrix_add_phase_covariate), metadata
+    )
+  ),
+  tar_target(
     Upd_regression_somatic,
     # prior_var was determined by fitting Upd_glm with ident + batch and without
     # the decontX terms (which grow the coef of interest when there is a trend
@@ -338,6 +360,10 @@ list(
     # (ident + batch), not weaken the regularization because we purposefully
     # added additional complexity to the model.
     apeglm_coef_table_sample(Upd_glm, shrinkage_cutoff = 0, prior_var = 0.8935249)
+  ),
+  tar_target(
+    Upd_regression_somatic_phase,
+    apeglm_coef_table_sample(Upd_glm_phase, shrinkage_cutoff = 0, prior_var = 0.8208055)
   ),
   tar_target(
     Upd_regression_tid,
@@ -433,11 +459,6 @@ list(
       + theme_cowplot()
   ),
   # For cell cycle scoring.
-  tar_download(
-    cell_cycle_scoring_human_supplemental,
-    "https://www.ncbi.nlm.nih.gov/pmc/articles/PMC4481139/bin/NIHMS687993-supplement-supp_data_2.xlsx",
-    "scRNA-seq/NIHMS687993-supplement-supp_data_2.xlsx"
-  ),
   tar_download(
     cell_cycle_drosophila,
     "https://github.com/hbc/tinyatlas/raw/add6f25/cell_cycle/Drosophila_melanogaster.csv",
