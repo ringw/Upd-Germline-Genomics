@@ -28,15 +28,6 @@ chic.experiments <- chic.fpkm.data %>% cross_join(chic.mark.data)
 # Pull the "chic" (track) target by name for the driver x mark targets.
 chic.experiments <- chic.experiments %>% within({
   experiment_name <- paste(mark, name, sep="_")
-  chic_input_sym <- rlang::syms(paste("chic.smooth_250", "input", mark, name, sep="_"))
-  chic_mod_sym <- rlang::syms(paste("chic.smooth_25", "mod", mark, name, sep="_"))
-  chic_smooth_input_sym <- rlang::syms(paste("chic.smooth", "input", mark, name, sep="_"))
-  chic_smooth_250_input_sym <- rlang::syms(paste("chic.smooth_250", "input", mark, name, sep="_"))
-  chic_smooth_mod_sym <- rlang::syms(paste("chic.smooth", "mod", mark, name, sep="_"))
-  chic_smooth_125_mod_sym <- rlang::syms(paste("chic.smooth_125", "mod", mark, name, sep="_"))
-  chic_smooth_250_mod_sym <- rlang::syms(paste("chic.smooth_250", "mod", mark, name, sep="_"))
-  chic_input_bam <- rlang::syms(paste("chic.merge.bam", "input", mark, name, sep="_"))
-  chic_mod_bam <- rlang::syms(paste("chic.merge.bam", "mod", mark, name, sep="_"))
 })
 
 target_chic_load_raw_expr <- function(group, driver) {

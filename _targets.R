@@ -605,117 +605,6 @@ list(
   tar_file(align_repli, "scripts/align_repli.sh"),
   chic.raw.tracks,
 
-  # ChIC coverage tracks.
-  tar_map(
-    chic.lookup,
-    names = lookup_name,
-    tar_map(
-      data.frame(bw = c(25, 125, 250)),
-      tar_target(
-        chic.smooth,
-        setNames(samples, sample_names) %>%
-          sapply(
-            \(v) v %>%
-              smooth_sparse_vector_to_rle_list(
-                feature.rle,
-                bw = bw,
-                sample_size = ifelse(bw < 50, 10, 50)
-              )
-          ) %>%
-          purrr::reduce(`+`) %>%
-          `/`(length(samples)) %>%
-          rle_list_round_log_scale_pretty %>%
-          pmax(
-            . * 0 + 0.1
-          ) %>%
-          set_attr("n", length(samples))
-      ),
-      tar_target(
-        chic.sd,
-        {
-          s <- setNames(samples, sample_names) %>%
-            sapply(
-              \(v) v %>%
-                smooth_sparse_vector_to_rle_list(
-                  feature.rle,
-                  bw = bw,
-                  sample_size = ifelse(bw < 50, 10, 50)
-                )
-            ) %>%
-            rle_lists_sd
-          attr(s, "n") <- length(samples)
-          s
-        }
-      )
-    ),
-    tar_target(
-      chic.wide,
-      samples %>%
-        sapply(
-          \(x) x %>%
-            smooth_sparse_vector_to_rle_list(
-              feature.rle,
-              bw = 1000,
-              sample_size = 200
-            ),
-          simplify = FALSE
-        ) %>%
-        # Arithmetic mean of reps
-        purrr::reduce(`+`) %>%
-        `/`(length(samples)),
-    ),
-    # Alternative pipeline merging BAM files before proceeding.
-    tar_target(
-      chic.merge.bam,
-      {
-        filename <- paste0(
-          dirname(files[1]),
-          "/",
-          lookup_name,
-          ".bam"
-        )
-        processx::run(
-          "samtools",
-          c(
-            "merge",
-            "-f",
-            filename,
-            files
-          )
-        )
-        processx::run("samtools", c("index", filename))
-        filename
-      },
-      format = "file",
-      cue = tar_cue("never")
-    )
-  ),
-
-  tar_target(
-    chic.squeezeVar_Germline,
-    list(
-      H3K4=chic.sd_250_input_H3K4_Germline,
-      H3K27=chic.sd_250_input_H3K27_Germline,
-      H3K9=chic.sd_250_input_H3K9_Germline
-    ) %>%
-      chic_squeeze_var,
-    packages = "limma"
-  ),
-  tar_target(
-    chic.squeezeVar_Somatic,
-    list(
-      H3K4=chic.sd_250_input_H3K4_Somatic,
-      H3K27=chic.sd_250_input_H3K27_Somatic,
-      H3K9=chic.sd_250_input_H3K9_Somatic
-    ) %>%
-      chic_squeeze_var,
-    packages = "limma"
-  ),
-  tar_target(
-    chic.squeezeVar,
-    list(Germline = chic.squeezeVar_Germline, Somatic = chic.squeezeVar_Somatic)
-  ),
-
   tar_map(
     chic.fpkm.data,
     names = name,
@@ -744,6 +633,7 @@ list(
     factor_genome(flybase.gtf, assay.data.sc, feature.lengths)
   ),
 
+  # Description: Heatmaps of ChIC vs sorted genes.
   tar_map(
     tibble(
       chic.experiments,
@@ -754,26 +644,6 @@ list(
     names = experiment_name,
 
     # Molecule/input FPKM ratio track, in bigwig format.
-    tar_target(
-      chic.bw,
-      {
-        filename <- paste0('chic/', driver, '_', mark, '.FE.bw')
-        export(
-          chic_mod_sym / chic_input_sym
-          * RleList(
-            sapply(
-              chic_input_sym,
-              \(v) ifelse(v >= 1, 1, 0),
-              simplify = FALSE
-            )
-          ),
-          filename,
-          'bigwig'
-        )
-        filename
-      },
-      format = 'file'
-    ),
     tar_target(
       tss_mark_heatmap,
       display_tss_tile_matrix(
@@ -819,134 +689,39 @@ list(
         direction = -1
       ),
       format = "file"
-    ),
-
-    tar_target(
-      bam_replicates_input,
-      as.list(chic_input_files)
-    ),
-    tar_target(
-      bam_replicates_mod,
-      as.list(chic_mod_files)
-    ),
-    tar_target(
-      chic.enrich.grid,
-      enrichR(
-        bam_replicates_mod[[1]],
-        bam_replicates_input[[1]],
-        chic.genome,
-        countConfig = countConfigPairedEnd(tlenFilter = c(70L, 400L), midpoint = FALSE)
-      ) %>% enrichr_set_names(
-        bam_replicates_mod[[1]],
-        bam_replicates_input[[1]]
-      ),
-      pattern = cross(bam_replicates_input, bam_replicates_mod),
-      iteration = "list"
-    ),
-    tar_target(
-      chic.input.count,
-      as.numeric(
-        processx::run(
-          "samtools",
-          c("view", "-c", bam_replicates_input[[1]])
-        )$stdout
-      ),
-      pattern = map(bam_replicates_input),
-      iteration = "list"
-    ),
-    tar_target(
-      chic.mod.count,
-      as.numeric(
-        processx::run(
-          "samtools",
-          c("view", "-c", bam_replicates_mod[[1]])
-        )$stdout
-      ),
-      pattern = map(bam_replicates_mod),
-      iteration = "list"
-    ),
-    tar_target(
-      plot.chic.multiplier,
-      enrichr_grid_ratio(
-        chic.enrich.grid,
-        setNames(unlist(chic.input.count), unlist(bam_replicates_input)),
-        setNames(unlist(chic.mod.count), unlist(bam_replicates_mod))
-      )
-    ),
-    tar_target(
-      enrichr.size.factor,
-      enrichr_ratio_per_reads_mapped_adjustment(plot.chic.multiplier)
-    ),
-    tar_target(
-      plot.chic.multiplier_png,
-      save_figures(
-        paste0("figure/", name), ".png",
-        tribble(
-          ~name, ~figure, ~width, ~height,
-          paste0("EnrichR-Norm-", name, "-", mark),
-          plot.chic.multiplier,
-          6,
-          4
-        )
-      )
-    ),
-
-    tar_target(
-      chic.var.limma,
-      chic.squeezeVar[[name]]$var[[mark]]
-    ),
-    tar_target(
-      chic.test.limma,
-      chic_ttest(
-        pmax(chic_smooth_125_mod_sym, chic_smooth_250_mod_sym) %>%
-          set_attr("n", attr(chic_smooth_125_mod_sym, "n")),
-        chic_smooth_250_input_sym,
-        sd = sqrt(chic.var.limma),
-        df = chic.squeezeVar[[name]]$df
-      )
-    ),
-    tar_target(
-      chic.test.limma.bed,
-      chic.test.limma %>%
-        chic_track_generate_table_by_enrichment %>%
-        subset(q < 0.05)
-    ),
-    tar_target(
-      chic.peak.location.stat,
-      classify_feature_overlaps(chic.test.limma.bed, genomic_feature_factor)
     )
   ),
 
-  tar_target(
-    plot.chic.peak.location_Germline,
-    display_peak_location_stats(
-      list(
-        H3K4=chic.peak.location.stat_H3K4_Germline,
-        H3K27=chic.peak.location.stat_H3K27_Germline,
-        H3K9=chic.peak.location.stat_H3K9_Germline
-      )
-    )
-  ),
-  tar_target(
-    plot.chic.peak.location_Somatic,
-    display_peak_location_stats(
-      list(
-        H3K4=chic.peak.location.stat_H3K4_Somatic,
-        H3K27=chic.peak.location.stat_H3K27_Somatic,
-        H3K9=chic.peak.location.stat_H3K9_Somatic
-      )
-    )
-  ),
-  tar_target(
-    limits_plot.chic.peak.location,
-    c(
-      0,
-      sapply(
-        list(plot.chic.peak.location_Germline, plot.chic.peak.location_Somatic),
-        \(pl) pl$data$value
-      ) %>% max
-    )
-  ),
+  # tar_target(
+  #   plot.chic.peak.location_Germline,
+  #   display_peak_location_stats(
+  #     list(
+  #       H3K4=chic.peak.location.stat_H3K4_Germline,
+  #       H3K27=chic.peak.location.stat_H3K27_Germline,
+  #       H3K9=chic.peak.location.stat_H3K9_Germline
+  #     )
+  #   )
+  # ),
+  # tar_target(
+  #   plot.chic.peak.location_Somatic,
+  #   display_peak_location_stats(
+  #     list(
+  #       H3K4=chic.peak.location.stat_H3K4_Somatic,
+  #       H3K27=chic.peak.location.stat_H3K27_Somatic,
+  #       H3K9=chic.peak.location.stat_H3K9_Somatic
+  #     )
+  #   )
+  # ),
+  # tar_target(
+  #   limits_plot.chic.peak.location,
+  #   c(
+  #     0,
+  #     sapply(
+  #       list(plot.chic.peak.location_Germline, plot.chic.peak.location_Somatic),
+  #       \(pl) pl$data$value
+  #     ) %>% max
+  #   )
+  # ),
 
   tar_map(
     data.frame(extension=c(".png", ".pdf")),
@@ -1021,31 +796,6 @@ list(
 
   tar_target(demo.f.distribution, demo_f_distribution()),
   tar_target(plot.scaled.f.distribution, plot_scaled_f()),
-
-  tar_target(
-    chic.peaks.bed_Germline,
-    write_chic_peaks(
-      list(
-        H3K4=chic.test.limma_H3K4_Germline %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10),
-        H3K9=chic.test.limma_H3K9_Germline %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10),
-        H3K27=chic.test.limma_H3K27_Germline %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10)
-      ),
-      "chic/Germline-Peaks.bed"
-    ),
-    format = "file"
-  ),
-  tar_target(
-    chic.peaks.bed_Somatic,
-    write_chic_peaks(
-      list(
-        H3K4=chic.test.limma_H3K4_Somatic %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10),
-        H3K9=chic.test.limma_H3K9_Somatic %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10),
-        H3K27=chic.test.limma_H3K27_Somatic %>% chic_track_generate_table_by_enrichment %>% subset(q < 0.10)
-      ),
-      "chic/Somatic-Peaks.bed"
-    ),
-    format = "file"
-  ),
 
   tar_target(
     cpm_gene_lists_extended,
