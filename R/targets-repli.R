@@ -161,18 +161,9 @@ targets.repli <- list(
         )
     )
   ),
-  # Sliding plate for explaining the observations using each fitted regression
-  # model. The weights for the observations will be given by a Gaussian kernel
-  # with the given bandwidth in bp. Observations will be taken in chunks of 1000
-  # bp, as this is a low-input assay, and reads aggregated by this window will
-  # be a robust observation.
-  tar_target(repli.sliding.weight.bw, 750 / 1000),
-  tar_target(
-    # Read 9 windows (independent draws of replication timing reads).
-    repli.sliding.weights,
-    diff(pnorm(seq(-2.5, 2.5), sd = repli.sliding.weight.bw)) %>%
-      `/`(max(.))
-  ),
+  # Sliding plate in regression. We need multiple independent observations of
+  # replication coverage which are not too overdispersed.
+  tar_target(repli.sliding.weights, rep(1, 3)),
 
   # From each sample GRanges: Apply regression.
   tar_map(
