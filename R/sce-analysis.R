@@ -347,6 +347,10 @@ load_cell_cycle_score_drosophila <- function(cell_cycle_drosophila_path, metafea
   cell_cycle_drosophila %>% pull(rowname) %>% split(cell_cycle_drosophila %>% pull(phase))
 }
 
+fpkm_quartile_factor_make_cutoffs <- function(log_data) {
+  apply(log_data, 2, \(v) v %>% subset(. >= cutoff) %>% quantile(c(1/3, 2/3)), simplify=F)
+}
+
 fpkm_third_density <- function(
   log_fpkm, cutoff = log(5) / log(10), ylim = c(-5, NA), y_label = bquote(log[10]*"(CPM)"), clusters = c('germline', 'somatic'),
   inter_cutoffs = apply(log_fpkm, 2, \(v) v %>% subset(. >= cutoff) %>% quantile(c(1/3, 2/3)), simplify=F)

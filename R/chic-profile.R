@@ -231,20 +231,12 @@ chic_plot_paneled_profiles_facet_grid <- function(
     )
 }
 
-chic_panel_gtable_binary <- function(
+chic_panel_create_grob <- function(
   facet_data,
-  facet_fn,
   facet_names,
   column_width,
-  row_height,
-  quartile_color,
-  linewidth
+  row_height
 ) {
-  facet_data <- facet_data %>% subset(activity == "active")
-  gr <- gtable(
-    unit(c(0.1, column_width, column_width), "in"),
-    unit(c(0.25, 0.25, row_height, 0.25, row_height), "in")
-  )
   facet1 <- tribble(
     ~level1, ~row,
     1, 3,
@@ -262,7 +254,10 @@ chic_panel_gtable_binary <- function(
     ),
     .id = "name"
   )
-  gr %>%
+  gtable(
+    unit(c(0.1, column_width, column_width), "in"),
+    unit(c(0.25, 0.25, row_height, 0.25, row_height), "in")
+  ) %>%
     gtable_add_grob(
       textGrob(
         str_glue(names(facet_names)[1], levels(pull(facet_data, facet_names[1]))[2]),
@@ -364,7 +359,20 @@ chic_panel_gtable_binary <- function(
           do.call(paste, .)
       ),
       4, 3
-    ) %>%
+    )
+}
+
+chic_panel_gtable_binary <- function(
+  facet_data,
+  facet_fn,
+  facet_names,
+  column_width,
+  row_height,
+  quartile_color,
+  linewidth
+) {
+  facet_data <- facet_data %>% subset(activity == "active")
+  chic_panel_create_grob(facet_data, facet_names, column_width, row_height) %>%
     gtable_add_grob(
       as_grob(
         facet_fn(
@@ -425,6 +433,75 @@ chic_panel_gtable_binary <- function(
           chic_average_profile_limits = c(0.5, 8.5)
         ) +
           theme(legend.position = "none")
+      ),
+      5,
+      3
+    )
+}
+
+chic_panel_fpkm_third_density <- function(
+  peakcalling, Upd_cpm, celltype
+) {
+  data <- log(Upd_cpm) / log(10)
+  inter_cutoffs <- fpkm_quartile_factor_make_cutoffs(data)
+  facet_data_cols <- paste0("H3K", c(4, 27), "_", str_to_title(celltype))
+  pull_data <- chic.gene.enrichment %>%
+    subset(select = facet_data_cols) %>%
+    apply(
+      2,
+      \(v) factor(!is.na(v) & v < 0.001) %>%
+        `levels<-`(value = c("~", "+")),
+      simplify=F
+    ) %>%
+    as_tibble() %>%
+    tibble(
+      symbol = chic.gene.enrichment$symbol,
+      .
+    ) %>%
+    subset(Upd_cpm[, celltype] >= 5) %>%
+    group_by(subset(., select=c(2, 3)))
+  facet_data <- tally(pull_data) %>%
+    tibble(pos = "TSS", mark = "H3K4", genes = str_to_title(celltype))
+  facet_names <- setNames(colnames(facet_data)[1:2], c("K4me3", "K27me3"))
+  celltype_x_coordinate <- c(germline=1, somatic=2)
+  custom_fpkm_third_density <- function(data) fpkm_third_density(
+    data,
+    inter_cutoffs = inter_cutoffs
+  ) +
+    coord_cartesian(celltype_x_coordinate[celltype] + c(0.5, 1.5), c(0, 4.25))
+  chic_panel_create_grob(facet_data, facet_names, 4, 2) %>%
+    gtable_add_grob(
+      as_grob(
+        data[
+          pull_data$symbol[group_data(pull_data)$`.rows`[[3]]],
+        ] %>% custom_fpkm_third_density()
+      ),
+      3,
+      2
+    ) %>%
+    gtable_add_grob(
+      as_grob(
+        data[
+          pull_data$symbol[group_data(pull_data)$`.rows`[[4]]],
+        ] %>% custom_fpkm_third_density()
+      ),
+      3,
+      3
+    ) %>%
+    gtable_add_grob(
+      as_grob(
+        data[
+          pull_data$symbol[group_data(pull_data)$`.rows`[[1]]],
+        ] %>% custom_fpkm_third_density()
+      ),
+      5,
+      2
+    ) %>%
+    gtable_add_grob(
+      as_grob(
+        data[
+          pull_data$symbol[group_data(pull_data)$`.rows`[[2]]],
+        ] %>% custom_fpkm_third_density()
       ),
       5,
       3
