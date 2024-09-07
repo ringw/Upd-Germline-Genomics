@@ -169,8 +169,8 @@ targets.repli <- list(
   tar_target(
     repli.polar.coordinates,
     meshgrid(
-      x = seq(0, pi/2, length.out = 101),
-      y = seq(0.1, 5, by=0.1)
+      x = seq(0, pi/2, length.out = 75),
+      y = seq(0.1, 10, by=0.1)
     ),
     packages = "pracma"
   ),
