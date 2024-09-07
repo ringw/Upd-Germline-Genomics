@@ -141,107 +141,6 @@ beta_dm_pull_expr_plate <- function(exper, i)
       )
     )
 
-# Regression: In SummarizedExperiment, extract a view of the sequential
-# features, centered on the numeric index "center_i", according to "wts".
-# A logistic link function is applied. Then the predicted log-odds value can be
-# transformed, after producing a pseudotime value `(alpha-1)/(alpha+beta-2)`
-# (Beta distribution). The logit transform is applied, and the pseudotime value
-# is multiplied by scale and translated by center. Inverting the transformation,
-# we get an updated alpha and beta. The other degree of freedom of the Beta dist
-# is handled by keeping `alpha+beta` (concentration of the Beta) invariant. If
-# alpha <= 1 or beta <= 1, then the pseudotime value will be extreme and we
-# won't apply any translation to this predicted value.
-beta_dm_regression_gaussian_plate <- function(
-  exper, center_i, wts,
-  xform_scale = 1, xform_center = 0
-) {
-  beta_regression_cuts <- exper@metadata[["beta_regression_cuts"]]
-  beta_regression_size_factors <- exper@metadata[["beta_regression_size_factors"]]
-  i <- seq(
-    pmax(1, center_i - floor(length(wts) / 2)),
-    pmin(nrow(exper), center_i + floor(length(wts) / 2))
-  )
-  wts <- wts[
-    seq(
-      1 + floor(length(wts) / 2) + min(i) - center_i,
-      1 + floor(length(wts) / 2) + max(i) - center_i
-    )
-  ]
-  Y <- beta_dm_pull_expr_plate(exper, i)
-  wts <- rep(wts, each=length(levels(exper$rep)))
-  n <- rowSums(Y)
-  ll_post <- function(v, theta) {
-    log_prior <- (
-      sum(dgamma(v, 9*2, scale=1/6, log = TRUE))
-      + dgamma(theta, 1, scale=0.5, log = TRUE)
-    )
-    if (v[1] > 1 & v[2] > 1) {
-      pseudotime_value <- qlogis((v[1] - 1) / (v[1] + v[2] - 2))
-      pseudotime_value <- pseudotime_value * xform_scale + xform_center
-      updated_param_value <- plogis(pseudotime_value)
-      v <- c(1, 1) + (v[1] + v[2] - 2) * c(updated_param_value, 1 - updated_param_value)
-    }
-    pb <- diff(pbeta(beta_regression_cuts, v[1], v[2]))
-    pb <- pmax(pb, 1e-40)
-    mu_unnorm <- beta_regression_size_factors %*% diag(x = pb)
-    dirparam <- (
-      mu_unnorm
-      /
-      rowSums(mu_unnorm)
-      /
-      theta
-    )
-    log_lik <- dot(
-      ddirmnom(
-        Y,
-        n,
-        dirparam[rep(seq(nrow(dirparam)), length(i)), ],
-        log = TRUE
-      ),
-      wts
-    )
-    -log_prior - log_lik
-  }
-  # Start with a typical value of theta (err on the low side).
-  theta <- 0.01
-  # Initial parameter value is the expected value of alpha and beta in the
-  # prior.
-  par <- optim(c(2, 2), ll_post, theta = theta, method = "L-BFGS-B", control = list(maxit = 1000), lower = c(0.01, 0.01))$par
-  theta <- optim(theta, ll_post, v = par, method = "L-BFGS-B", control = list(maxit = 1000), lower = 1e-4)$par
-  optim_result <- optim(par, ll_post, theta = theta, method = "L-BFGS-B", control = list(maxit = 1000), lower = c(0.01, 0.01))
-  par <- optim_result$par
-  precision <- optimHess(par, ll_post, theta = theta)
-  list(par = par, theta = theta, objective_value = -optim_result$value, fisher_information = precision)
-}
-
-full_quantification_gaussian_plate <- function(rpkm, wts, num_fractions=4) {
-  data <- exp(rpkm$Beta[, 1:num_fractions, drop=F])
-  data <- data / rowSums(data)
-  if (nrow(rpkm$Beta) > 1) {
-    fft_length <- 2^(1+ceil_discrete_log(nrow(rpkm$Beta)))
-    data <- data %>% replace(!is.finite(.), 0)
-    data <- rbind(data, matrix(0, nrow=fft_length-nrow(data), ncol=ncol(data)))
-    # As the increased value of the wts does not actually increase the effect that
-    # the log-likelihood term has, wts will just sum to 1 for applying filter.
-    wts <- wts / sum(wts)
-    filt <- c(
-      wts[seq(ceil(length(wts)/2), length(wts))],
-      rep(0, fft_length - length(wts)),
-      wts[seq(1, floor(length(wts)/2))]
-    )
-    data <- data %>%
-      mvfft %>%
-      `*`(fft(filt)) %>%
-      mvfft(inv=T) %>%
-      `/`(fft_length) %>%
-      abs %>%
-      head(nrow(rpkm$Beta))
-  }
-  timing_values <- seq(-1, 1, length.out = 1 + 2 * num_fractions)
-  timing_values <- timing_values[seq(length(timing_values)-1, 1, by=-2)]
-  dot(t(data), timing_values) / dot(t(data), rep(1, num_fractions))
-}
-
 beta_dm_regression_calculate_prior <- function() {
   nl_prior <- \(v) -sum(dgamma(v, 4, scale=0.5, log = TRUE))
   par <- optim(c(2, 2), nl_prior)$par
@@ -412,4 +311,250 @@ laplace_bayes_factor_polar_integral <- function(posterior_a, posterior_b) {
     sigma=solve(posterior_b$fisher_information)
   )
   sum(integral_a) * sum(integral_b) / sum(integral_a * integral_b)
+}
+
+beta_dm_plain_likelihood_fn <- function(
+  Y, beta_regression_cuts, beta_regression_size_factors,
+  wts, heads, tails, theta
+) {
+  n <- rowSums(Y)
+  beta_values <- cross_join(
+    tibble(cut = beta_regression_cuts),
+    tibble(heads = as.numeric(heads), tails = as.numeric(tails))
+  )
+  pb <- matrix(
+    pbeta(beta_values$cut, beta_values$heads, beta_values$tails),
+    nrow = length(heads)
+  ) %>%
+    rowDiffs
+  pb <- pmax(pb, 1e-40)
+  probs <- purrr::reduce(
+    sapply(
+      seq(nrow(Y)),
+      \(j) {
+        y <- Y[j, ]
+        sf <- beta_regression_size_factors[j, ]
+        mu_unnorm <- t(t(pb) * sf)
+        dirparam <- (
+          mu_unnorm
+          /
+          rowSums(mu_unnorm)
+          /
+          theta
+        )
+        ddirmnom(
+          y,
+          n[j],
+          dirparam
+        )^wts[j]
+      },
+      simplify=FALSE
+    ),
+    `*`
+  )
+}
+
+beta_dm_prior_heads_tails_fn <- function(heads, tails) {
+  prior <- dnorm(
+    sqrt((heads - 1)^2 + (tails - 1)^2),
+    mean = 2.5,
+    sd = 1
+  )
+  prior[!(heads >= 1 & tails >= 1)] <- 0
+  prior <- prior
+}
+
+# The prior on "heads" and "tails" as a separable filter of "X" (angle) and "Y"
+# (heads + tails).
+beta_dm_prior_filter <- function(repli.polar.coordinates) {
+  angle <- repli.polar.coordinates$X
+  rho <- repli.polar.coordinates$Y
+  heads <- 1 + rho * sin(angle)
+  tails <- 1 + rho * cos(angle)
+  M <- beta_dm_prior_heads_tails_fn(heads, tails)
+  s <- svd(M)
+  Xsum <- ncol(M) / (pi/2)
+  Xfactor <- Xsum / sum(abs(s$v[,1]))
+  list(
+    X = abs(s$v[,1]) * Xfactor,
+    Y = s$d[1] / Xfactor * abs(s$u[,1])
+  )
+}
+
+beta_dm_regression_likelihood <- function(
+  exper, center_i, wts,
+  repli.polar.coordinates,
+  theta = NULL,
+  xform_scale = 1, xform_center = 0
+) {
+  angle <- repli.polar.coordinates$X
+  rho <- repli.polar.coordinates$Y
+  heads <- 1 + rho * sin(angle)
+  tails <- 1 + rho * cos(angle)
+  beta_regression_cuts <- exper@metadata[["beta_regression_cuts"]]
+  beta_regression_size_factors <- exper@metadata[["beta_regression_size_factors"]]
+  i <- seq(
+    pmax(1, center_i - floor(length(wts) / 2)),
+    pmin(nrow(exper), center_i + floor(length(wts) / 2))
+  )
+  wts <- wts[
+    seq(
+      1 + floor(length(wts) / 2) + min(i) - center_i,
+      1 + floor(length(wts) / 2) + max(i) - center_i
+    )
+  ]
+  Y <- beta_dm_pull_expr_plate(exper, i)
+  beta_regression_size_factors <- beta_regression_size_factors[
+    rep(seq(nrow(beta_regression_size_factors)), length(i)),
+  ]
+  wts <- rep(wts, each=length(levels(exper$rep)))
+
+  # Mutate the amount placed on heads or tails according to the xform.
+  update_param <- heads > 1.001 & tails > 1.001
+  pseudotime_value <- qlogis(
+    ((heads - 1) / (heads + tails - 2))[update_param]
+  )
+  pseudotime_value <- pseudotime_value * xform_scale + xform_center
+  updated_param_value <- plogis(pseudotime_value)
+  heads[update_param] <- (
+    1 + (heads + tails - 2)[update_param] * updated_param_value
+  )
+  tails[update_param] <- (
+    1 + (heads + tails - 2)[update_param] * (1 - updated_param_value)
+  )
+
+  if (is.null(theta)) {
+    probs <- beta_dm_plain_likelihood_fn(
+      Y, beta_regression_cuts, beta_regression_size_factors,
+      wts, heads, tails, theta = 0.02
+    ) *
+      beta_dm_prior_heads_tails_fn(heads, tails)
+    param0 <- which.max(probs)
+    if (is.matrix(heads)) {
+      i <- param0 %% nrow(heads)
+      j <- 1 + floor((param0 - 1) / nrow(heads))
+      heads0 <- heads[i, j]
+      tails0 <- tails[i, j]
+    } else {
+      heads0 <- heads[param0]
+      tails0 <- tails[param0]
+    }
+    theta <- optimize(
+      \(theta) -log(
+        beta_dm_plain_likelihood_fn(
+          Y, beta_regression_cuts, beta_regression_size_factors,
+          wts, heads0, tails0, theta
+        )
+      ),
+      interval = c(0.001, 20)
+    )$minimum %>%
+      tryCatch(error = \(e) 0.02)
+  }
+
+  probs <- beta_dm_plain_likelihood_fn(
+    Y, beta_regression_cuts, beta_regression_size_factors,
+    wts, heads, tails, theta
+  )
+  probs <- if (is.matrix(heads)) {
+    probs %>%
+      matrix(
+        nrow = nrow(heads), ncol = ncol(heads), dimnames = dimnames(heads)
+      )
+  } else {
+    probs
+  }
+  probs <- probs %>% `attr<-`("theta", value = theta)
+}
+
+beta_dm_regression_post_probability <- function(
+  exper, center_i, wts,
+  repli.polar.coordinates,
+  prior_filter,
+  theta = NULL,
+  xform_scale = 1, xform_center = 0
+) {
+  grid <- beta_dm_regression_likelihood(
+    exper, center_i, wts,
+    repli.polar.coordinates,
+    theta,
+    xform_scale, xform_center
+  )
+  angle <- repli.polar.coordinates$X[1, ]
+  rho <- repli.polar.coordinates$Y[, 1]
+  tibble(
+    value = sin(angle) / (sin(angle) + cos(angle)),
+    prob = colSums(rho * prior_filter$Y * grid),
+    theta = attr(grid, "theta")
+  )
+}
+
+analyze_repli_experiment <- function(
+  repli.experiment,
+  repli.sliding.weights,
+  repli.polar.coordinates,
+  repli.prior.distribution,
+  xform_scale,
+  xform_center,
+  theta = NULL
+) {
+  if (is.null(theta))
+    theta <- numeric(0)
+  # For each set of indices into the experiment (each chromosome),
+  # parallel-apply the beta fitting function with smooth-weight plate.
+  mapply(
+    \(inds, thetas) {
+      exper <- repli.experiment[inds, ]
+      future_lapply(
+        seq_along(inds),
+        \(lookup) with(
+          beta_dm_regression_post_probability(
+            exper,
+            lookup,
+            repli.sliding.weights,
+            repli.polar.coordinates,
+            repli.prior.distribution,
+            theta = if (length(thetas)) thetas[lookup] else NULL,
+            xform_scale = xform_scale,
+            xform_center = xform_center
+          ),
+          tibble(
+            rowname = inds[lookup],
+            value,
+            prob,
+            theta
+          )
+        )
+      ) %>%
+        do.call(rbind, .)
+    },
+    split(
+      seq(nrow(repli.experiment)),
+      rowData(repli.experiment)$seqnames
+    ),
+    split(
+      theta,
+      rowData(repli.experiment)$seqnames
+    ),
+    SIMPLIFY = FALSE
+  ) %>%
+    do.call(rbind, .)
+}
+
+quantify_repli_experiment <- function(prob, prior) {
+  angle <- seq(0, pi/2, length.out=length(prob))
+  timing <- sin(angle)/(sin(angle)+cos(angle))
+  d_timing_d_angle <- 1/(1 + sin(2*angle))
+  sum(timing * prob * prior * d_timing_d_angle) / sum(prob * prior * d_timing_d_angle)
+}
+
+bayes_factor_repli_experiment <- function(prob1, prob2, prior) {
+  angle <- seq(0, pi/2, length.out=length(prob1))
+  d_timing_d_angle <- 1/(1 + sin(2*angle))
+  full_model <- sum(
+    prob1 * d_timing_d_angle * prior
+  ) * sum(
+    prob2 * d_timing_d_angle * prior
+  )
+  reduced_model <- sum(prob1 * prob2 * d_timing_d_angle * prior)
+  full_model / reduced_model
 }

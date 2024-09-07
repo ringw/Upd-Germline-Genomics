@@ -165,6 +165,20 @@ targets.repli <- list(
   # replication coverage which are not too overdispersed.
   tar_target(repli.sliding.weights, rep(1, 3)),
 
+  # Mesh grid to be used for Repliseq inference (Bayesian regression).
+  tar_target(
+    repli.polar.coordinates,
+    meshgrid(
+      x = seq(0, pi/2, length.out = 101),
+      y = seq(0.1, 5, by=0.1)
+    ),
+    packages = "pracma"
+  ),
+  tar_target(
+    repli.prior.distribution,
+    repli.polar.coordinates %>% beta_dm_prior_filter()
+  ),
+
   # From each sample GRanges: Apply regression.
   tar_map(
     mutate(
@@ -219,44 +233,30 @@ targets.repli <- list(
       )
     ),
     tar_target(
-      repli.mse,
-      # For each set of indices into the experiment (each chromosome),
-      # parallel-apply the mse fitting function with smooth-weight plate.
-      sapply(
-        split(
-          seq(nrow(repli.experiment)),
-          rowData(repli.experiment)$seqnames
-        ),
-        \(inds) full_quantification_gaussian_plate(
-          list(Beta = repli.glm$Beta[inds, , drop = F]),
-          wts = repli.sliding.weights
-        ),
-        simplify = FALSE
-      ) %>%
-        unlist(rec = FALSE),
-      packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
+      repli.posterior.unscaled,
+      analyze_repli_experiment(
+        repli.experiment,
+        repli.sliding.weights,
+        repli.polar.coordinates,
+        repli.prior.distribution,
+        xform_scale = 1,
+        xform_center = 0
+      ),
+      packages = tar_option_get("packages") %>% c("extraDistr", "future.apply", "pracma"),
+      format = "parquet"
     ),
-    # Fit MAP and Fisher information (Bayesian Regression).
     tar_target(
-      repli.beta,
-      # For each set of indices into the experiment (each chromosome),
-      # parallel-apply the beta fitting function with smooth-weight plate.
-      sapply(
-        split(
-          seq(nrow(repli.experiment)),
-          rowData(repli.experiment)$seqnames
-        ),
-        \(inds) future_lapply(
-          seq_along(inds),
-          \(...) beta_dm_regression_gaussian_plate(...) %>%
-            tryCatch(error = \(e) beta_dm_regression_calculate_prior()),
-          exper = repli.experiment[inds, ],
-          wts = repli.sliding.weights
-        ),
-        simplify = FALSE
-      ) %>%
-        unlist(rec = FALSE),
-      packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
+      repli.posterior.unscaled.logit,
+      GRanges(
+        chic.tile.diameter_1000,
+        score = repli.posterior.unscaled %>%
+          summarise(
+            value = quantify_repli_experiment(prob, prior = repli.prior.distribution$X),
+            .by = "rowname"
+          ) %>%
+          pull(value) %>%
+          qlogis()
+      )
     ),
     # As an alternative to the Beta quantiles regression, we will fit the %
     # enrichment of each fraction using DM likelihood with no Beta function.
@@ -280,81 +280,57 @@ targets.repli <- list(
         unlist(rec = FALSE),
       packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
     ),
-    # Perform inference on the MAP parameters (Laplace) and create GRanges track.
     tar_target(
-      repli.beta.2,
-      repli.beta %>%
-        future_sapply(laplace_approx_expectation_ratio) %>%
-        repli_logistic_beta_to_tanh() %>%
-        GRanges(chic.tile.diameter_1000, score = .) %>%
-        repli_logistic_link_apply_scale(
-          num_fractions = repli.experiment@metadata$beta_regression_num_fractions
-        ),
-      packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
-    ),
-    tar_target(
-      repli.beta.scales,
-      tribble(
-        ~rowname, ~center, ~scale,
-        "Centered", -repli.beta.2@metadata$`scaled:center`, repli.beta.2@metadata$`scaled:scale`,
-        "SumSquares",
-        0,
-        (
-          qlogistanh(repli.beta.2$score) * repli.beta.2@metadata$`scaled:scale` +
-            repli.beta.2@metadata$`scaled:center`
-        )^2 %>%
-          mean() %>%
-          sqrt()
+      repli.posterior.xform.centering,
+      c(
+        scale=sd(repli.posterior.unscaled.logit$score),
+        center=mean(repli.posterior.unscaled.logit$score)
       )
     ),
     tar_target(
-      repli.beta.fit.scaled,
-      # Do not put in a tibble constructor as it has its own error handling
-      # which is slowing down the target several-fold.
-      cbind(
-        repli.beta.scales,
-        list(
-          index = seq(length(chic.tile.diameter_1000)),
-          fit = sapply(
-            split(
-              seq(nrow(repli.experiment)),
-              rowData(repli.experiment)$seqnames
-            ),
-            \(inds) future_lapply(
-              seq_along(inds),
-              \(...) beta_dm_regression_gaussian_plate(...) %>%
-                tryCatch(error = \(e) beta_dm_regression_calculate_prior()),
-              exper = repli.experiment[inds, ],
-              wts = repli.sliding.weights,
-              xform_scale = repli.beta.scales$scale,
-              xform_center = repli.beta.scales$center
-            ),
-            simplify = FALSE
-          ) %>%
-            unlist(rec = FALSE)
+      repli.posterior,
+      analyze_repli_experiment(
+        repli.experiment,
+        repli.sliding.weights,
+        repli.polar.coordinates,
+        repli.prior.distribution,
+        theta = repli.posterior.unscaled$theta[
+          match(seq(nrow(repli.experiment)), repli.posterior.unscaled$rowname)
+        ],
+        xform_scale = repli.posterior.xform.centering["scale"],
+        xform_center = repli.posterior.xform.centering["center"]
+      ),
+      packages = tar_option_get("packages") %>% c("extraDistr", "future.apply", "pracma"),
+      format = "parquet"
+    ),
+    # Apply Bayesian estimator to the posterior and create GRanges track.
+    tar_target(
+      repli.timing,
+      repli.posterior %>%
+        summarise(
+          value = quantify_repli_experiment(prob, prior = repli.prior.distribution$X),
+          .by = "rowname"
         ) %>%
-          do.call(tibble, .)
-      ) %>%
-        as_tibble(),
-      pattern = map(repli.beta.scales),
-      packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
+        pull(value) %>%
+        repli_logistic_beta_to_tanh() %>%
+        GRanges(chic.tile.diameter_1000, score = .) # %>%
+        # repli_logistic_link_apply_scale(
+        #   num_fractions = repli.experiment@metadata$beta_regression_num_fractions
+        # )
+        ,
+      packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
     ),
     tar_file(
-      repli.beta.bw,
-      repli.beta.2$score %>%
+      repli.bw,
+      repli.timing$score %>%
         replace(is.na(.) | !is.finite(.), 0) %>%
         GRanges(chic.tile.diameter_1000, score = .) %>%
         export(BigWigFile(str_glue("repli/Replication_Bayes_", celltype, "_", reference, ".bw"))) %>%
         as.character()
     ),
     tar_target(
-      repli.autocorrelation.mse,
-      GRanges(chic.tile.diameter_1000, score = scale(repli.mse)[, 1]) %>%
-        autocorrelate_centered_granges(1001)
-    ),
-    tar_target(
       repli.autocorrelation.beta,
-      repli.beta.2 %>% autocorrelate_centered_granges(1001)
+      repli.timing %>% autocorrelate_centered_granges(1001)
     )
   ),
 
@@ -366,7 +342,7 @@ targets.repli <- list(
           experiment.driver, dplyr::rename(bowtie.refs, reference = "name")
         )
       ),
-      repli.beta.2 = rlang::syms(str_glue("repli.beta.2_{celltype}_{reference}")),
+      repli.timing = rlang::syms(str_glue("repli.timing_{celltype}_{reference}")),
       chic.track = rlang::syms(str_glue("chic.tile.diameter_500_score_{reference}")),
       chic.results = list(
         call(
@@ -381,7 +357,7 @@ targets.repli <- list(
     names = celltype | reference,
     tar_target(
       repli.value.bindata,
-      repli.beta.2 %>%
+      repli.timing %>%
         approx_track(chic.track) %>%
         cut_track(seq(-0.75, 0.75, by = 0.002)) %>%
         elementMetadata() %>%
@@ -445,36 +421,32 @@ targets.repli <- list(
   ),
   tar_target(
     repli.bayes.factor_chr,
-    tibble(
-      rbind(
+    GRanges(
+      chic.tile.diameter_1000_chr,
+      score = with(
+        repli.posterior_Germline_chr,
         tibble(
-          repli.beta.fit.scaled_Germline_chr[c("rowname", "index")],
-          Germline = repli.beta.fit.scaled_Germline_chr$fit,
-          Somatic = repli.beta.fit.scaled_Somatic_chr$fit,
-        ),
-        tibble(
-          rowname = "Raw",
-          index = seq_along(repli.beta_Germline_chr),
-          Germline = repli.beta_Germline_chr,
-          Somatic = repli.beta_Somatic_chr
+          rowname,
+          value,
+          p_GSC = prob,
+          p_CySC = repli.posterior_Somatic_chr$prob
         )
-      ),
-      bayes_factor = future_mapply(
-        laplace_bayes_factor_polar_integral,
-        Germline,
-        Somatic
-      )
-    ) %>%
-      subset(select = -c(Germline, Somatic)),
-    format = "parquet"
+      ) %>%
+        group_by(rowname) %>%
+        summarise(
+          bayes_factor = bayes_factor_repli_experiment(
+            p_GSC, p_CySC, repli.prior.distribution$X
+          )
+        ) %>%
+        pull(bayes_factor)
+    )
   ),
   tar_target(
     repli.peaks_chr,
     {
       peaks <- GenomicRanges::reduce(
         chic.tile.diameter_1000_chr[
-          with(repli.bayes.factor_chr, which(
-            bayes_factor[rowname == "Centered"] >= 1000))
+          repli.bayes.factor_chr$score >= 1000
         ]
       )
       seqlengths(peaks) <- NA
@@ -482,7 +454,7 @@ targets.repli <- list(
         GenomicRanges::resize(width(.) + 8000, fix="center") %>%
         GenomicRanges::reduce() %>%
         GenomicRanges::resize(width(.) - 8000, fix="center")
-      diff_timing <- (repli.beta.2_Germline_chr$score - repli.beta.2_Somatic_chr$score)
+      diff_timing <- (repli.timing_Germline_chr$score - repli.timing_Somatic_chr$score)
       peaks_timing <- findOverlaps(
         peaks,
         chic.tile.diameter_1000_chr
@@ -546,15 +518,9 @@ targets.repli <- list(
     sd_repliseq,
     publish_repli_analysis(
       assay.data.sc,
-      repli.beta.2_Germline_chr,
-      repli.beta.2_Somatic_chr,
-      GRanges(
-        chic.tile.diameter_1000_chr,
-        score = with(
-          repli.bayes.factor_chr, bayes_factor[rowname == "Centered"]
-        ) %>%
-          replace(!is.finite(.), NA)
-      ),
+      repli.timing_Germline_chr,
+      repli.timing_Somatic_chr,
+      repli.bayes.factor_chr,
       diff.replication.progression.gene,
       Upd_cpm[, "germline"],
       Upd_cpm[, "somatic"],
@@ -596,7 +562,7 @@ targets.repli <- list(
   tar_map(
     tibble(
       experiment.driver,
-      repli.beta.2 = rlang::syms(str_glue("repli.beta.2_{celltype}_chr"))
+      repli.timing = rlang::syms(str_glue("repli.beta.2_{celltype}_chr"))
     ),
     names = celltype,
     tar_file(
@@ -607,7 +573,7 @@ targets.repli <- list(
         tribble(
           ~rowname, ~figure, ~width, ~height,
           "Repli-Skew-Chrs",
-          plot_track(repli.beta.2, repli_early_late_background$E, repli_early_late_background$L),
+          plot_track(repli.timing, repli_early_late_background$E, repli_early_late_background$L),
           5.75,
           4
         )
@@ -625,7 +591,7 @@ targets.repli <- list(
     tibble(
       chic.experiments,
       celltype = name,
-      repli.beta = rlang::syms(str_glue("repli.beta.2_{celltype}_chr")),
+      repli.timing = rlang::syms(str_glue("repli.timing_{celltype}_chr")),
       chic.bw.tracks = rlang::syms(str_glue("chic.bw.tracks_{mark}_{celltype}_CN_chr")),
       chic.experiment.quantify_peakcalling.broad_chr = rlang::syms(str_glue("chic.experiment.quantify_{mark}_{celltype}_peakcalling.broad_chr")),
     ),
@@ -653,7 +619,7 @@ targets.repli <- list(
         plot_grid(
           # The name of grobs[[6]]$children[[3]] is "panel-1". It is the plot
           # area of the ggplot data, which is exactly a 120x80 raster.
-          as_grob(plot_repli_chic_bin2d(repli.beta,
+          as_grob(plot_repli_chic_bin2d(repli.timing,
             chic.enrich,
             chic_step_size = 100
           ) +
@@ -671,7 +637,7 @@ targets.repli <- list(
         tribble(
           ~filename, ~figure, ~width, ~height,
           as.character(str_glue("Repli-CHIC-", mark)),
-          plot_repli_chic_bin2d(repli.beta,
+          plot_repli_chic_bin2d(repli.timing,
             chic.enrich,
             chic_step_size = 100
           ),
@@ -689,7 +655,7 @@ targets.repli <- list(
           ~rowname, ~figure, ~width, ~height,
           as.character(str_glue("Repli-CHIC-", mark, "-Violin")),
           tibble(
-            repli = approx_track(repli.beta, chic.enrich)$score,
+            repli = approx_track(repli.timing, chic.enrich)$score,
             timing = structure(
               4 - (as.numeric(cut(repli, c(-Inf, -0.375, 0, 0.375, Inf))) - 1),
               levels = c("E", "EM", "ML", "L"),
