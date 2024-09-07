@@ -297,7 +297,7 @@ targets.repli <- list(
         theta = repli.posterior.unscaled$theta[
           match(seq(nrow(repli.experiment)), repli.posterior.unscaled$rowname)
         ],
-        xform_scale = repli.posterior.xform.centering["scale"],
+        xform_scale = 1,
         xform_center = repli.posterior.xform.centering["center"]
       ),
       packages = tar_option_get("packages") %>% c("extraDistr", "future.apply", "pracma"),
