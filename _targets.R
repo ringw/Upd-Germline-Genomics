@@ -359,23 +359,12 @@ list(
     # shrink LFC estimates based on a prior from a highly interpretable model
     # (ident + batch), not weaken the regularization because we purposefully
     # added additional complexity to the model.
-    apeglm_coef_table_sample(Upd_glm, shrinkage_cutoff = 0, prior_var = 0.8935249)
+    apeglm_coef_table_sample(Upd_glm, shrinkage_cutoff = 0, prior_var = 0.8935249),
+    cue = tar_cue("never")
   ),
   tar_target(
     Upd_regression_somatic_phase,
     apeglm_coef_table_sample(Upd_glm_phase, shrinkage_cutoff = 0, prior_var = 0.8208055)
-  ),
-  tar_target(
-    Upd_regression_tid,
-    apeglm_coef_table_sample(Upd_glm, coef = 3, shrinkage_cutoff = 0, prior_var = 0.8935249)
-  ),
-  tar_target(
-    Upd_regression_sompre,
-    apeglm_coef_table_sample(Upd_glm, coef = 4, shrinkage_cutoff = 0, prior_var = 0.8935249)
-  ),
-  tar_target(
-    Upd_regression_mscl,
-    apeglm_coef_table_sample(Upd_glm, coef = 5, shrinkage_cutoff = 0, prior_var = 0.8935249)
   ),
   sce_targets,
   # Pseudobulk by the genotype (Nos-GAL4 or tj-GAL4).
