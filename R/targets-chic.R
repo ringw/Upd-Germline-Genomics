@@ -822,7 +822,8 @@ targets.chic <- list(
                 score = exp(elementMetadata$score * log(2))
               )
             ),
-          as_tibble(read.csv(assay.data.sc)),
+          as_tibble(read.csv(assay.data.sc)) %>%
+            arrange(desc(Upd_cpm[X, tolower(name)])),
           grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
           mask_threshold = 0
         )
