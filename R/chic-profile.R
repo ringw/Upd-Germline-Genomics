@@ -53,6 +53,7 @@ chic_plot_average_profiles_facet_grid <- function(
     pos = seq(head(levels(facet_data$pos), 1), tail(levels(facet_data$pos), 1)),
     label = levels(facet_data$pos)
   )
+  mark_names <- str_glue("{chic.mark.data$mark}me3")
   facet_data$pos.continuous <- break_labels$pos[match(facet_data$pos, break_labels$label)]
   facet_data %>% ggplot(
     aes(x=pos.continuous, y=value, color=genes, linewidth=genes, group=genes)
@@ -61,7 +62,7 @@ chic_plot_average_profiles_facet_grid <- function(
       cross_join(
         tibble(
           genes = NA,
-          mark = factor(chic.mark.data$mark, chic.mark.data$mark, ordered=TRUE)
+          mark = factor(mark_names, mark_names, ordered=TRUE)
         )
       ) %>%
       cross_join(
@@ -290,7 +291,7 @@ chic_panel_create_grob <- function(
           filter(
             facet_data,
             pos == "TSS",
-            mark == "H3K4",
+            mark == "H3K4me3",
             as.numeric(pull(facet_data, facet_names[1])) == 2,
             as.numeric(pull(facet_data, facet_names[2])) == 1
           ) %>%
@@ -309,7 +310,7 @@ chic_panel_create_grob <- function(
           filter(
             facet_data,
             pos == "TSS",
-            mark == "H3K4",
+            mark == "H3K4me3",
             as.numeric(pull(facet_data, facet_names[1])) == 2,
             as.numeric(pull(facet_data, facet_names[2])) == 2
           ) %>%
@@ -328,7 +329,7 @@ chic_panel_create_grob <- function(
           filter(
             facet_data,
             pos == "TSS",
-            mark == "H3K4",
+            mark == "H3K4me3",
             as.numeric(pull(facet_data, facet_names[1])) == 1,
             as.numeric(pull(facet_data, facet_names[2])) == 1
           ) %>%
@@ -347,7 +348,7 @@ chic_panel_create_grob <- function(
           filter(
             facet_data,
             pos == "TSS",
-            mark == "H3K4",
+            mark == "H3K4me3",
             as.numeric(pull(facet_data, facet_names[1])) == 1,
             as.numeric(pull(facet_data, facet_names[2])) == 2
           ) %>%

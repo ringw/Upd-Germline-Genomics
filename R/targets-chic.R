@@ -1673,7 +1673,7 @@ targets.chic <- list(
           \(celltype, plot_name) call(
             "setNames",
             rlang::syms(str_glue("chic.heatmap.{tolower(plot_name)}_{chic.mark.data$mark}_{celltype}_CN_chr")),
-            chic.mark.data$mark
+            str_glue("{chic.mark.data$mark}me3")
           ),
           celltype,
           plot_name,
@@ -1709,7 +1709,7 @@ targets.chic <- list(
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%
-        mutate(mark = factor(mark, chic.mark.data$mark)),
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
       format = "parquet"
     ),
     tar_target(
@@ -1721,7 +1721,7 @@ targets.chic <- list(
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%
-        mutate(mark = factor(mark, chic.mark.data$mark)),
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
       format = "parquet"
     ),
     tar_target(
@@ -1733,7 +1733,7 @@ targets.chic <- list(
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%
-        mutate(mark = factor(mark, chic.mark.data$mark)),
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
       format = "parquet"
     ),
     tar_target(
@@ -1745,7 +1745,7 @@ targets.chic <- list(
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%
-        mutate(mark = factor(mark, chic.mark.data$mark)),
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
       format = "parquet"
     ),
     tar_target(
@@ -1759,7 +1759,7 @@ targets.chic <- list(
           SIMPLIFY=F
         ) %>%
           bind_rows(.id = "mark") %>%
-          mutate(mark = factor(mark, chic.mark.data$mark))
+          mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3")))
       ),
       pattern = map(cpm_gene_lists_extended),
       format = "parquet"
@@ -1789,7 +1789,7 @@ targets.chic <- list(
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%
-        mutate(mark = factor(mark, chic.mark.data$mark)),
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
       format = "parquet"
     ),
     tar_target(
@@ -1820,7 +1820,7 @@ targets.chic <- list(
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%
-        mutate(mark = factor(mark, chic.mark.data$mark)),
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
       format = "parquet"
     ),
     tar_target(
@@ -1848,7 +1848,7 @@ targets.chic <- list(
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%
-        mutate(mark = factor(mark, chic.mark.data$mark)),
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
       format = "parquet"
     )
   ),
@@ -1892,6 +1892,9 @@ targets.chic <- list(
             subset(between(as.numeric(pos), match("-500", levels(pos)), match("500", levels(pos)))),
           \(...) chic_plot_average_profiles_facet_grid(...) +
             theme(panel.spacing = unit(1.25, "lines"), plot.margin = margin(5.5, 10, 5.5, 5.5)),
+          # Pull tlhe chic.gene.enrichment column. The column name is the name
+          # of the lysine residue being tested. The modification being tested is
+          # always me3.
           c(CelltypeK4="H3K4", CelltypeK27="H3K27"),
           6, 2.5,
           unlist(chic_line_track_colors) %>% setNames(NULL),
@@ -1961,7 +1964,7 @@ targets.chic <- list(
           "CHIC-TSS-K4-K27-Valency",
           sc_bivalency_data %>%
             filter(
-              mark %in% c("H3K4", "H3K27"),
+              mark %in% c("H3K4me3", "H3K27me3"),
               activity == "active",
               between(
                 as.numeric(pos),
