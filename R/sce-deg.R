@@ -87,24 +87,6 @@ build_model_matrix <- function(data_frame, decontXcontam) {
   # model.matrix(~ ident + batch, data_frame)
 }
 
-build_model_matrix_add_phase_covariate <- function(ident, Phase) {
-  mm <- model.matrix(~ Phase)[, -1]
-  mm.interaction <- mm * (
-    recode(
-      ident,
-      germline="1",
-      somatic="-1",
-      spermatocyte="0",
-      somaticprecursor="0",
-      muscle="0"
-    ) %>%
-      as.character %>%
-      as.numeric
-  )
-  colnames(mm.interaction) <- paste0("ident:", colnames(mm.interaction))
-  mm <- cbind(mm, mm.interaction)
-}
-
 fit_glm <- function(Upd_assay, Upd_model_matrix, Upd_metadata) {
   Upd_metadata <- Upd_metadata %>% read.csv(row.names = 1)
   # Upd_assay <- Upd_assay %>% subset(cells = Cells(.)[Upd_subset])

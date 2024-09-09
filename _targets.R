@@ -312,16 +312,6 @@ list(
   tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
   tar_target(Upd_model_matrix, build_model_matrix(FetchData(Upd_sc, c("ident", "batch")), Upd_decontX_contamination)),
   tar_target(
-    Upd_model_matrix_add_phase_covariate,
-    build_model_matrix_add_phase_covariate(
-      Idents(Upd_sc),
-      Upd_sc %>%
-        apply_cell_cycle_score(cell_cycle_drosophila, assay.data.sc) %>%
-        FetchData("Phase") %>%
-        pull(Phase)
-    )
-  ),
-  tar_target(
     Upd_phase,
     Upd_sc %>%
       apply_cell_cycle_score(cell_cycle_drosophila, assay.data.sc) %>%
