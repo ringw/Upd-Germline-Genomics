@@ -243,16 +243,24 @@ beta_dm_regression_likelihood <- function(
       heads0 <- heads[param0]
       tails0 <- tails[param0]
     }
-    theta <- optimize(
-      \(theta) -log(
-        beta_dm_plain_likelihood_fn(
-          Y, beta_regression_cuts, beta_regression_size_factors,
-          wts, heads0, tails0, theta
-        )
-      ),
-      interval = c(0.001, 20)
-    )$minimum %>%
-      tryCatch(error = \(e) 0.02)
+    # We cannot actually find the caller of the random function which is leading
+    # to "future.seed" warnings. It is likely in the optimize() algorithm. Even
+    # then, we cannot readily reproduce the "beta_dm_regression_likelihood"
+    # future.seed warning. with_seed will ensure that the result is
+    # deterministic even if the "future.seed" warning does not know that we are
+    # doing so.
+    theta <- with_seed(
+      0,
+      optimize(
+        \(theta) -log(
+          beta_dm_plain_likelihood_fn(
+            Y, beta_regression_cuts, beta_regression_size_factors,
+            wts, heads0, tails0, theta
+          )
+        ),
+        interval = c(0.001, 20)
+      )$minimum
+    )
   }
 
   probs <- beta_dm_plain_likelihood_fn(

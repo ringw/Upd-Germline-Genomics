@@ -283,7 +283,7 @@ publish_repli_analysis <- function(
         "Transcriptome Values",
         NA,
         NA,
-        "Nested Peak Calling (*** signif) TSS in named region"
+        "Nested Peak Calling (** signif) TSS in named region"
       ),
       nrow = 1
     ),

@@ -446,14 +446,14 @@ targets.repli <- list(
     {
       peaks <- GenomicRanges::reduce(
         chic.tile.diameter_1000_chr[
-          repli.bayes.factor_chr$score >= 1000
+          repli.bayes.factor_chr$score >= 100
         ]
       )
       seqlengths(peaks) <- NA
       peaks <- peaks %>%
-        GenomicRanges::resize(width(.) + 8000, fix="center") %>%
+        GenomicRanges::resize(width(.) + 3000, fix="center") %>%
         GenomicRanges::reduce() %>%
-        GenomicRanges::resize(width(.) - 8000, fix="center")
+        GenomicRanges::resize(width(.) - 3000, fix="center")
       diff_timing <- (repli.timing_Germline_chr$score - repli.timing_Somatic_chr$score)
       peaks_timing <- findOverlaps(
         peaks,
