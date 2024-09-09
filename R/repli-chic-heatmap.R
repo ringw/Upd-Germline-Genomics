@@ -234,6 +234,9 @@ plot_repli_track_raster <- function(data) {
     + scale_y_discrete(limits=rev)
     + coord_cartesian(expand=F)
     + guides(fill = guide_colorbar(title = "log2(mark/input)"))
-    + theme(aspect.ratio = 2/3)
+    + theme(
+      aspect.ratio = 2/3,
+      panel.border = element_blank()
+    )
   )
 }
