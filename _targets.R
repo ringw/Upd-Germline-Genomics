@@ -79,6 +79,7 @@ ggplot2::theme_set(
   ggplot2::theme_bw() +
     ggplot2::theme(
       axis.text = ggplot2::element_text(color = "#000000"),
+      panel.background = ggplot2::element_rect(fill="transparent"),
       # We want the facet text to appear as a title of the graphic. Not as a
       # detail akin to the axis break labels!
       strip.text = ggplot2::element_text(size = ggplot2::rel(1.2))
