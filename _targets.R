@@ -74,6 +74,17 @@ Sys.setenv(BOWTIE_THREADS="12")
 
 future::plan(future::multicore, workers=8)
 
+# All plots will have white background.
+ggplot2::theme_set(
+  ggplot2::theme_bw() +
+    ggplot2::theme(
+      axis.text = ggplot2::element_text(color = "#000000"),
+      # We want the facet text to appear as a title of the graphic. Not as a
+      # detail akin to the axis break labels!
+      strip.text = ggplot2::element_text(size = ggplot2::rel(1.2))
+    )
+)
+
 # tar_make_future() is an older (pre-{crew}) way to do distributed computing
 # in {targets}, and its configuration for your machine is below.
 # Install packages {{future}}, {{future.callr}}, and {{future.batchtools}} to allow use_targets() to configure tar_make_future() options.
