@@ -157,21 +157,6 @@ chic_plot_paneled_profiles_facet_grid <- function(
   facet_data %>% ggplot(
       aes(x, y = value, color=genes, linewidth=genes, group=genes)
     ) + geom_tile(
-      data = tribble(
-        ~x, ~value, ~width,
-        # Full-size background color
-        1,
-        1,
-        Inf
-      ) %>%
-        tibble(
-          height = Inf,
-          genes = NA
-        ),
-      aes(width=width, height=height, color=NULL, linewidth=NULL, genes=NULL),
-      color = "transparent",
-      fill = "#eeeeee"
-    ) + geom_tile(
       # Colored tile (TSS and TES)
       data = tribble(
         ~x, ~value, ~width,
@@ -188,7 +173,7 @@ chic_plot_paneled_profiles_facet_grid <- function(
         ),
       aes(width=width, height=height, color=NULL, linewidth=NULL, genes=NULL),
       color = "transparent",
-      fill = viridis(2, option = "magma", end = 0.99)[2]
+      fill = "#fffccb"
     ) + faceter + scale_color_manual(
       values = quartile_colors,
       guide = guide_legend(title = legend_title, override.aes = list(fill = "transparent"))
