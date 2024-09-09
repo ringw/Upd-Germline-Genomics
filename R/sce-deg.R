@@ -224,6 +224,55 @@ apeglm_coef_table <- function(g, coef=2, test_mle=TRUE) {
   lfc
 }
 
+apeglm_coef_timebound <- function(g, coef=2, prior_var) {
+  message('Optimize Approximate Posterior')
+  assay <- as.matrix(assay(g$data))
+  Offset <- g$Offset[1,, drop=T]
+  basemean <- rowMeans(assay)
+  # From apeglm source code.
+  prior.control <- list(
+    no.shrink = setdiff(seq(ncol(g$Beta)), coef),
+    prior.mean = 0,
+    prior.scale = if (is.null(prior_var)) apeglm:::priorVar(lfc) else prior_var,
+    prior.df = 1,
+    prior.no.shrink.mean = 0,
+    prior.no.shrink.scale = 15
+  )
+  # apeglm sets the prior scale parameter to a min of 1 (coefficient represents 
+  # a fold-change of e) or empirical value. Wow such interpretable, very cool.
+  prior.control$prior.scale <- prior.control$prior.scale %>% min(1)
+  apeglm_list <- future_lapply(
+    seq(nrow(g$data)),
+    \(i) tryCatch(
+      withTimeout(
+        apeglm:::apeglm.single(
+          y = assay[i, ],
+          x = g$model_matrix,
+          log.lik = logLikNB,
+          param = g$overdispersion_shrinkage_list$dispersion_trend[i],
+          coef = coef,
+          method = "general",
+          offset = Offset,
+          prefit.beta = NULL,
+          basemean = basemean[i],
+          optim.method = "BFGS",
+          weights = NULL,
+          prior.control = prior.control,
+          prefit.conv = NULL,
+          interval.type = "laplace",
+          param.sd = NULL,
+          interval.level = 0.95,
+          threshold = NULL
+        ),
+        timeout = 30
+      ),
+      TimeoutException = \(ex) NULL
+    )
+  )
+  names(apeglm_list) <- rownames(g$data)
+  apeglm_list <- apeglm_list
+}
+
 apeglm_coef_table_sample <- function(g, coef=2, test_mle=TRUE, prior_var = NULL, shrinkage_cutoff = 1) {
   message('Construct dense matrices in memory for regression')
   g$Offset = matrix(

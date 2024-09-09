@@ -321,6 +321,14 @@ list(
     )
   ),
   tar_target(
+    Upd_phase,
+    Upd_sc %>%
+      apply_cell_cycle_score(cell_cycle_drosophila, assay.data.sc) %>%
+      FetchData("Phase") %>%
+      rownames_to_column() %>%
+      pull(Phase, rowname)
+  ),
+  tar_target(
     shuffle_feature_plot,
     sample(Cells(Upd_sc))
   ),
@@ -350,15 +358,13 @@ list(
     fit_glm(Upd_exons, Upd_model_matrix, metadata),
   ),
   tar_target(
-    Upd_glm_phase,
+    Upd_glm_g1,
     fit_glm(
-      Upd_exons, cbind(Upd_model_matrix, Upd_model_matrix_add_phase_covariate), metadata
-    )
-  ),
-  tar_target(
-    Upd_glm_phase_simplified,
-    fit_glm(
-      Upd_exons, cbind(Upd_model_matrix[, 1:8], Upd_model_matrix_add_phase_covariate), metadata
+      CreateSeuratObject(Upd_exons) %>%
+        `[`(, names(Upd_phase)[Upd_phase == "G1"]) %>%
+        GetAssay("RNA"),
+      Upd_model_matrix[names(Upd_phase)[Upd_phase == "G1"], ],
+      metadata
     )
   ),
   tar_target(
@@ -374,8 +380,12 @@ list(
     cue = tar_cue("never")
   ),
   tar_target(
-    Upd_regression_somatic_phase,
-    apeglm_coef_table_sample(Upd_glm_phase, shrinkage_cutoff = 0, prior_var = 0.8208055)
+    Upd_regression_somatic_g1,
+    with_options(
+      list(future.globals.maxSize = 5 * 1024^3),
+      apeglm_coef_timebound(Upd_glm_g1, prior_var = 0.8055104)
+    ),
+    packages = tar_option_get("packages") %>% c("future.apply", "R.utils")
   ),
   sce_targets,
   # Pseudobulk by the genotype (Nos-GAL4 or tj-GAL4).
