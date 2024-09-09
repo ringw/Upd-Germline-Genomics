@@ -292,4 +292,5 @@ display_tss_tile_matrix <- function(
     width = 1,
     height = 3
   )
+  output_path <- output_path
 }
