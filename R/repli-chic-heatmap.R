@@ -181,7 +181,6 @@ plot_repli_track_raster <- function(data) {
     ggplot(data, aes(x, series, fill=value))
     + geom_raster(aes(), subset(data, series == "Timing Est."))
     + scale_fill_gradientn(
-      # colors = c("red", "blue"),
       colors = c(
         hcl(30, 40, 10),
         repli_level_colors$L,
@@ -192,9 +191,11 @@ plot_repli_track_raster <- function(data) {
       ),
       values = c(0, 0.125, 0.375, 0.625, 0.875, 1),
       guide = guide_colorbar(title = "timing"),
-      limits = c(-0.75, 0.75)
-    )
-    + new_scale_fill()
+      limits = c(-0.75, 0.75),
+      breaks = c(-0.75, 0, 0.75),
+      labels = c("-0.75", "0", "0.75")
+    ) +
+    new_scale_fill()
     + geom_raster(
       aes(fill=q),
       tribble(
@@ -221,10 +222,6 @@ plot_repli_track_raster <- function(data) {
     )
     + new_scale_fill()
     + geom_raster(aes(fill=value2), mutate(subset(data, grepl("^H", series)), value2=value))
-    # + scale_fill_viridis_c(
-    #   option = "magma", direction = -1,
-    #   guide = guide_colorbar(title = "mark/input")
-    # )
     + create_direction_invert_tss_tile_matrix_gradient(limits = c(-0.5, 1.6), oob = squish)
     + scale_x_reverse(
       breaks = c(-0.75, -0.375, 0, 0.375, 0.75),
