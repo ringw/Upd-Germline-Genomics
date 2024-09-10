@@ -18,6 +18,12 @@ chic_heatmap_facet_genes <- function(
   enrichment_mat,
   facet_genes
 ) {
+  if (!length(enrichment_mat))
+    enrichment_mat <- matrix(
+      nrow = length(facet_genes$gene),
+      ncol = 0,
+      dimnames = list(facet_genes$gene, character(0))
+    )
   df <- facet_genes %>%
     group_by(subset(facet_genes, select=-gene)) %>%
     reframe(
@@ -53,7 +59,14 @@ chic_plot_average_profiles_facet_grid <- function(
     pos = seq(head(levels(facet_data$pos), 1), tail(levels(facet_data$pos), 1)),
     label = levels(facet_data$pos)
   )
+  # Get the facet factor levels to use from a global. However, if these are not
+  # the factor levels being used, then just convert the data to factor and use
+  # alphabetical order instead.
   mark_names <- str_glue("{chic.mark.data$mark}me3")
+  if (any(mark_names %in% facet_data$mark))
+    mark <- factor(mark_names, mark_names, ordered=TRUE)
+  else
+    mark <- factor(unique(facet_data$mark))
   facet_data$pos.continuous <- break_labels$pos[match(facet_data$pos, break_labels$label)]
   facet_data %>% ggplot(
     aes(x=pos.continuous, y=value, color=genes, linewidth=genes, group=genes)
@@ -62,7 +75,7 @@ chic_plot_average_profiles_facet_grid <- function(
       cross_join(
         tibble(
           genes = NA,
-          mark = factor(mark_names, mark_names, ordered=TRUE)
+          mark = mark
         )
       ) %>%
       cross_join(
@@ -92,6 +105,21 @@ chic_plot_average_profiles_facet_grid <- function(
   ) + theme(
     aspect.ratio = 1
   )
+}
+
+# H3 plot. The absolute panel size here is an arbitrary number, from the RNAseq
+# Quartile plot being 4 inches high, because we didn't set more specific
+# absolute units on the plot.
+chic_plot_h3_enrichment <- function(facet_data, ...) {
+  y_axis_h3 <- scale_y_continuous(
+    "Enrichment (vs Auto Monosome Median)",
+    limits = c(0, 5.25),
+    expand = FALSE
+  )
+  gg <- chic_plot_average_profiles_facet_grid(facet_data, ...) + y_axis_h3
+  gr <- as_grob(gg)
+  gr$widths[5] <- gr$heights[8] <- unit(2.471, "in")
+  plot_grid(gr)
 }
 
 # Now an average profiles facet grid with "H3K4" and "H3K27" factors.

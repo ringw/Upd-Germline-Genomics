@@ -839,6 +839,11 @@ targets.chic <- list(
                 seqnames,
                 ranges,
                 seqinfo = seqinfo,
+                # Bad! The Imputed Input or FSeq Input that we are using is
+                # already a ratio Current Window / Median Monosome. It is not
+                # a log-fold change. The exp here is why the
+                # log(chic.heatmap.tss.nucleosome) is necessary elsewhere and so
+                # that can be removed soon.
                 score = exp(elementMetadata$score * log(2))
               )
             ),
@@ -1680,6 +1685,16 @@ targets.chic <- list(
           plot_name,
           SIMPLIFY=F
         ),
+        chic.heatmap.tss.nucleosome = mapply(
+          \(celltype, plot_name)
+            if (plot_name == "TSS") {
+              rlang::sym(str_glue("chic.heatmap.tss.nucleosome_H3K27_{celltype}_CN_chr"))
+            } else {
+              numeric(0)
+            },
+          celltype,
+          plot_name
+        ),
         quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}"))
       ),
     names = celltype | plot_name,
@@ -1851,6 +1866,32 @@ targets.chic <- list(
         bind_rows(.id = "mark") %>%
         mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
       format = "parquet"
+    ),
+    # H3 profile. By gene classification (quant).
+    tar_target(
+      sc_nucleosome_quartile_data,
+      chic_heatmap_facet_genes(
+        log(chic.heatmap.tss.nucleosome) / log(2),
+        subset(facet_genes, select=c(quant, gene))
+      ),
+      format = "parquet"
+    ),
+    # H3 profile. Filtered so that the other cell type's gene classification
+    # must be the "off" level.
+    tar_target(
+      sc_nucleosome_exclusive_quartile_data,
+      chic_heatmap_facet_genes(
+        log(chic.heatmap.tss.nucleosome) / log(2),
+        subset(
+          facet_genes,
+          Upd_cpm[
+            facet_genes$gene,
+            c(Germline="somatic", Somatic="germline")[celltype]
+          ] < 5,
+          select=c(quant, gene)
+        )
+      ),
+      format = "parquet"
     )
   ),
   tar_target(
@@ -1870,6 +1911,46 @@ targets.chic <- list(
       chic.heatmap.tss.nucleosome_H3K27_Somatic_CN_chr %>%
         log %>%
         chic_heatmap_facet_genes(subset(facet_genes_Somatic_TSS, select=c(facet,activity,gene))) %>%
+        mutate(value = exp(value)),
+      mark = ""
+    ),
+    format = "parquet"
+  ),
+  tar_target(
+    sc_chr_nucleosome_data.ExclusiveGermlineGenes_Germline_TSS,
+    tibble(
+      chic.heatmap.tss.nucleosome_H3K27_Germline_CN_chr %>%
+        log %>%
+        chic_heatmap_facet_genes(
+          facet_genes_Germline_TSS %>%
+            subset(
+              gene %in% c(
+                cpm_gene_lists_extended$ExclusiveGermlineGenes,
+                cpm_gene_lists_extended$OffGenes
+              ),
+              select=c(facet,activity,gene)
+            )
+        ) %>%
+        mutate(value = exp(value)),
+      mark = ""
+    ),
+    format = "parquet"
+  ),
+  tar_target(
+    sc_chr_nucleosome_data.ExclusiveSomaticGenes_Somatic_TSS,
+    tibble(
+      chic.heatmap.tss.nucleosome_H3K27_Somatic_CN_chr %>%
+        log %>%
+        chic_heatmap_facet_genes(
+          facet_genes_Somatic_TSS %>%
+            subset(
+              gene %in% c(
+                cpm_gene_lists_extended$ExclusiveSomaticGenes,
+                cpm_gene_lists_extended$OffGenes
+              ),
+              select=c(facet,activity,gene)
+            )
+        ) %>%
         mutate(value = exp(value)),
       mark = ""
     ),

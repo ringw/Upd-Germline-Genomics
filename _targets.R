@@ -936,7 +936,7 @@ list(
       "Somatic", rlang::sym("sc_chr_nucleosome_data_Somatic_TSS"), rlang::sym("chic.experiment.quantify_H3K4_Somatic_CN_chr")
     ),
     names = celltype,
-    tar_target(
+    tar_file(
       fig.fpkm.chic.facet.nucleosome,
       save_figures(
         str_glue("figure/", celltype),
@@ -961,6 +961,60 @@ list(
           width=6,
           height=6
         )
+      )
+    )
+  ),
+  tar_target(
+    fig.fpkm.chic.facet.nucleosome.ExclusiveGermlineGenes_Germline,
+    save_figures(
+      "figure/Germline",
+      ".pdf",
+      tibble(
+        rowname="CHIC-TSS-ExclusiveGermlineGenes-Chr-Nucleosome-Occupancy-RNAseq",
+        figure=list(
+          chic_plot_average_profiles_facet_grid(
+            dplyr::rename(sc_chr_nucleosome_data.ExclusiveGermlineGenes_Germline_TSS, genes=activity),
+            "",
+            rep(chic_line_track_colors$germline, 2),
+            faceter = facet_wrap(vars(facet)),
+            x_intercept = NA
+          ) + scale_y_continuous(
+            name = 'Enrichment (vs Auto Monosome Median)',
+            trans = 'log',
+            limits = c(0.9, 32),
+            expand = c(0, 0),
+            breaks = c(1, 4, 16)
+          ) + guides(linewidth = guide_none(), color = guide_none())
+        ),
+        width=6,
+        height=6
+      )
+    )
+  ),
+  tar_target(
+    fig.fpkm.chic.facet.nucleosome.ExclusiveSomaticGenes_Somatic,
+    save_figures(
+      "figure/Somatic",
+      ".pdf",
+      tibble(
+        rowname="CHIC-TSS-ExclusiveSomaticGenes-Chr-Nucleosome-Occupancy-RNAseq",
+        figure=list(
+          chic_plot_average_profiles_facet_grid(
+            dplyr::rename(sc_chr_nucleosome_data.ExclusiveSomaticGenes_Somatic_TSS, genes=activity),
+            "",
+            rep(chic_line_track_colors$somatic, 2),
+            faceter = facet_wrap(vars(facet)),
+            x_intercept = NA
+          ) + scale_y_continuous(
+            name = 'Enrichment (vs Auto Monosome Median)',
+            trans = 'log',
+            limits = c(0.9, 32),
+            expand = c(0, 0),
+            breaks = c(1, 4, 16)
+          ) + guides(linewidth = guide_none(), color = guide_none())
+        ),
+        width=6,
+        height=6
       )
     )
   ),
@@ -1100,7 +1154,9 @@ list(
       figure_dir = str_glue("figure/{name}"),
       plot.chic.peak.location = rlang::syms(str_glue("plot.chic.peak.location_{name}")),
       sc_quartile_data_TSS = rlang::syms(str_glue("sc_quartile_data_{name}_TSS")),
-      sc_quartile_data_Paneled = rlang::syms(str_glue("sc_quartile_data_{name}_Paneled"))
+      sc_quartile_data_Paneled = rlang::syms(str_glue("sc_quartile_data_{name}_Paneled")),
+      sc_nucleosome_quartile_data_TSS = rlang::syms(str_glue("sc_nucleosome_quartile_data_{name}_TSS")),
+      sc_nucleosome_exclusive_quartile_data_TSS = rlang::syms(str_glue("sc_nucleosome_exclusive_quartile_data_{name}_TSS")),
     ),
     names = name,
     tar_file(
@@ -1127,7 +1183,25 @@ list(
             seq(0.5, 0.85, length.out=4),
             facet_wrap(vars(mark))
           ),
-          15, 4
+          15, 4,
+          "CHIC-TSS-H3-RNAseq-Quartile",
+          chic_plot_h3_enrichment(
+            tibble(sc_nucleosome_quartile_data_TSS, genes=quant, mark="H3"),
+            "Quant.",
+            setNames(sc_quartile_annotations, NULL),
+            seq(0.5, 0.85, length.out=4),
+            facet_wrap(vars(mark))
+          ),
+          4, 4,
+          paste0("CHIC-TSS-H3-RNAseq-", name, "Exclusive-Quartile"),
+          chic_plot_h3_enrichment(
+            tibble(sc_nucleosome_exclusive_quartile_data_TSS, genes=quant, mark="H3"),
+            "Quant.",
+            setNames(sc_quartile_annotations, NULL),
+            seq(0.5, 0.85, length.out=4),
+            facet_wrap(vars(mark))
+          ),
+          4, 4,
           # "CHIC-AllMarks-Peak-Annotation",
           # plot.chic.peak.location
           # + scale_y_continuous(
