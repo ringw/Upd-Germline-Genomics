@@ -832,24 +832,10 @@ targets.chic <- list(
       chic.heatmap.tss.nucleosome,
       if (!grepl("peakcalling", bp_name))
         track_to_heatmap(
-          grep("Imputed_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import %>%
-            attributes %>%
-            with(
-              GRanges(
-                seqnames,
-                ranges,
-                seqinfo = seqinfo,
-                # Bad! The Imputed Input or FSeq Input that we are using is
-                # already a ratio Current Window / Median Monosome. It is not
-                # a log-fold change. The exp here is why the
-                # log(chic.heatmap.tss.nucleosome) is necessary elsewhere and so
-                # that can be removed soon.
-                score = exp(elementMetadata$score * log(2))
-              )
-            ),
+          grep("Imputed_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
           as_tibble(read.csv(assay.data.sc)),
           grep("FSeq_Input", chic.bw.tracks, val=T) %>% BigWigFile %>% import,
-          mask_threshold = 0
+          mask_threshold = -Inf
         )
     ),
     tar_target(
@@ -1897,7 +1883,7 @@ targets.chic <- list(
     tar_target(
       sc_nucleosome_quartile_data,
       chic_heatmap_facet_genes(
-        log(chic.heatmap.tss.nucleosome) / log(2),
+        chic.heatmap.tss.nucleosome,
         subset(facet_genes, select=c(quant, gene))
       ),
       format = "parquet"
@@ -1907,7 +1893,7 @@ targets.chic <- list(
     tar_target(
       sc_nucleosome_exclusive_quartile_data,
       chic_heatmap_facet_genes(
-        log(chic.heatmap.tss.nucleosome) / log(2),
+        chic.heatmap.tss.nucleosome,
         subset(
           facet_genes,
           Upd_cpm[
@@ -1924,9 +1910,7 @@ targets.chic <- list(
     sc_chr_nucleosome_data_Germline_TSS,
     tibble(
       chic.heatmap.tss.nucleosome_H3K27_Germline_CN_chr %>%
-        log %>%
-        chic_heatmap_facet_genes(subset(facet_genes_Germline_TSS, select=c(facet,activity,gene))) %>%
-        mutate(value = exp(value)),
+        chic_heatmap_facet_genes(subset(facet_genes_Germline_TSS, select=c(facet,activity,gene))),
       mark = ""
     ),
     format = "parquet"
@@ -1935,9 +1919,7 @@ targets.chic <- list(
     sc_chr_nucleosome_data_Somatic_TSS,
     tibble(
       chic.heatmap.tss.nucleosome_H3K27_Somatic_CN_chr %>%
-        log %>%
-        chic_heatmap_facet_genes(subset(facet_genes_Somatic_TSS, select=c(facet,activity,gene))) %>%
-        mutate(value = exp(value)),
+        chic_heatmap_facet_genes(subset(facet_genes_Somatic_TSS, select=c(facet,activity,gene))),
       mark = ""
     ),
     format = "parquet"
@@ -1946,7 +1928,6 @@ targets.chic <- list(
     sc_chr_nucleosome_data.ExclusiveGermlineGenes_Germline_TSS,
     tibble(
       chic.heatmap.tss.nucleosome_H3K27_Germline_CN_chr %>%
-        log %>%
         chic_heatmap_facet_genes(
           facet_genes_Germline_TSS %>%
             subset(
@@ -1956,8 +1937,7 @@ targets.chic <- list(
               ),
               select=c(facet,activity,gene)
             )
-        ) %>%
-        mutate(value = exp(value)),
+        ),
       mark = ""
     ),
     format = "parquet"
@@ -1966,7 +1946,6 @@ targets.chic <- list(
     sc_chr_nucleosome_data.ExclusiveSomaticGenes_Somatic_TSS,
     tibble(
       chic.heatmap.tss.nucleosome_H3K27_Somatic_CN_chr %>%
-        log %>%
         chic_heatmap_facet_genes(
           facet_genes_Somatic_TSS %>%
             subset(
@@ -1976,8 +1955,7 @@ targets.chic <- list(
               ),
               select=c(facet,activity,gene)
             )
-        ) %>%
-        mutate(value = exp(value)),
+        ),
       mark = ""
     ),
     format = "parquet"
@@ -2087,40 +2065,6 @@ targets.chic <- list(
       )
     )
   ),
-
-  # Temp targets for loading chic.bw.2 and producing repli graphics
-  tar_target(
-    chic.track_chr,
-    tibble(
-      filename = "chic/nos_H3K4.new.FE.bw",
-      track = list(import(BigWigFile(filename)))
-    ) %>%
-      with(
-        GRanges(
-          track[[1]]@seqnames[!grepl("GAL80|FBte", track[[1]]@seqnames)] %>% droplevels,
-          track[[1]]@ranges[!grepl("GAL80|FBte", track[[1]]@seqnames)],
-          seqlengths=subset(seqlengths(track[[1]]), !grepl("GAL80|FBte", names(seqlengths(track[[1]]))))
-        )
-      )
-  ),
-  tar_target(
-    chic.track_masked,
-    tibble(
-      filename = "chic/nos_H3K4.new.FE.bw",
-      track = list(import(BigWigFile(filename)))
-    ) %>%
-      with(
-        GRanges(
-          track[[1]]@seqnames[!grepl("GAL80", track[[1]]@seqnames)] %>% droplevels,
-          track[[1]]@ranges[!grepl("GAL80", track[[1]]@seqnames)],
-          seqlengths=subset(seqlengths(track[[1]]), !grepl("GAL80", names(seqlengths(track[[1]]))))
-        )
-      )
-  ),
-  tar_target(chic.results_nos_chr, list(H3K4="chic/nos_H3K4.new.FE.bw", H3K27="chic/nos_H3K27.new.FE.bw", H3K9="chic/nos_H3K9.new.FE.bw")),
-  tar_target(chic.results_tj_chr, list(H3K4="chic/tj_H3K4.new.FE.bw", H3K27="chic/tj_H3K27.new.FE.bw", H3K9="chic/tj_H3K9.new.FE.bw")),
-  tar_target(chic.results_nos_masked, chic.results_nos_chr),
-  tar_target(chic.results_tj_masked, chic.results_tj_chr),
 
   # Nucleosome positioning analysis.
   tar_file(

@@ -950,12 +950,8 @@ list(
               rep(chic_line_track_colors[[tolower(celltype)]], 2),
               faceter = facet_wrap(vars(facet)),
               x_intercept = NA
-            ) + scale_y_continuous(
-              name = 'Enrichment (vs Auto Monosome Median)',
-              trans = 'log',
-              limits = c(0.9, 32),
-              expand = c(0, 0),
-              breaks = c(1, 4, 16)
+            ) + labs(
+              y = "Median Autosome Monosome-TSS L2FC"
             ) + guides(linewidth = guide_none(), color = guide_none())
           ),
           width=6,
@@ -978,12 +974,8 @@ list(
             rep(chic_line_track_colors$germline, 2),
             faceter = facet_wrap(vars(facet)),
             x_intercept = NA
-          ) + scale_y_continuous(
-            name = 'Enrichment (vs Auto Monosome Median)',
-            trans = 'log',
-            limits = c(0.9, 32),
-            expand = c(0, 0),
-            breaks = c(1, 4, 16)
+          ) + labs(
+            y = "Median Autosome Monosome-TSS L2FC"
           ) + guides(linewidth = guide_none(), color = guide_none())
         ),
         width=6,
@@ -1005,12 +997,8 @@ list(
             rep(chic_line_track_colors$somatic, 2),
             faceter = facet_wrap(vars(facet)),
             x_intercept = NA
-          ) + scale_y_continuous(
-            name = 'Enrichment (vs Auto Monosome Median)',
-            trans = 'log',
-            limits = c(0.9, 32),
-            expand = c(0, 0),
-            breaks = c(1, 4, 16)
+          ) + labs(
+            y = "Median Autosome Monosome-TSS L2FC"
           ) + guides(linewidth = guide_none(), color = guide_none())
         ),
         width=6,
@@ -1037,12 +1025,8 @@ list(
               linewidth = c(0.33, 0.66, 0.33, 0.66),
               faceter = facet_wrap(vars(facet), ncol=4),
               x_intercept = NA
-            ) + scale_y_continuous(
-              name = 'Enrichment (vs Auto Monosome Median)',
-              trans = 'log',
-              limits = c(0.9, 32),
-              expand = c(0, 0),
-              breaks = c(1, 4, 16)
+            ) + labs(
+              y = "Median Autosome Monosome-TSS L2FC"
             ) + theme(
               aspect.ratio = 1
             )
