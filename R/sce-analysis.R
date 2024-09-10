@@ -753,3 +753,41 @@ l2fc_bar_plot <- function(l2fc_data) {
     panel.grid = element_blank()
   )
 }
+
+# Scatter plot of the main regression L2FC values (asynchronous, cell phase not
+# considered) vs G1-phase L2FC values (remove effect of cell phase).
+plot_apeglm_original_g1 <- function(orig_params, new_params_list) {
+  data <- tibble(
+    all = orig_params$map[,2] %>% replace(is.na(.), 0) / -log(2),
+    G1 = sapply(new_params_list, \(lst) lst$map[2]) %>% replace(is.na(.), 0) / -log(2)
+  )
+  coef <- lm(G1 ~ all, data) %>% coef()
+  ggplot(
+    data,
+    aes(all, G1)
+  ) +
+    rasterise(geom_point(stroke=NA, size=0.15), dpi=300) +
+    geom_abline(
+      aes(intercept=intercept, slope=slope, color=color),
+      tribble(
+        ~intercept, ~slope,
+        0, 1,
+        coef["(Intercept)"], coef["all"]
+      ),
+      color=c("blue", "#cc0000"),
+      linetype=c("dotted", "solid")
+    ) +
+    coord_cartesian(
+      c(-8, 8),
+      c(-8, 8),
+      expand=FALSE
+    ) +
+    labs(
+      x = bquote(log[2]*"(GSC/CySC) Async"),
+      y = bquote(log[2]*"(GSC/CySC) G1 Only")
+    ) +
+    theme(
+      aspect.ratio = 1,
+      legend.position = "none"
+    )
+}

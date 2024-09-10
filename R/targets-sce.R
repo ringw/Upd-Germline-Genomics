@@ -510,5 +510,21 @@ targets.sce <- list(
       "scRNA-seq-Regression/SD02-scRNA-seq-Cell-Level.xlsx"
     ),
     packages = tar_option_get("packages") %>% union("openxlsx")
+  ),
+  tar_file(
+    fig.g1.l2fc,
+    save_figures(
+      "figure/Integrated-scRNAseq",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "L2FC-Scatter-G1",
+        plot_apeglm_original_g1(
+          Upd_regression_somatic, Upd_regression_somatic_g1
+        ),
+        3.5,
+        3.5
+      )
+    )
   )
 )
