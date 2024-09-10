@@ -887,7 +887,10 @@ targets.chic <- list(
       ),
       chic.experiment.quantify_peakcalling.broad = rlang::syms(
         str_glue("chic.experiment.quantify_{mark}_{celltype}_peakcalling.broad_chr")
-      )
+      ),
+      chic.bw.track.wide = rlang::syms(
+        str_glue("chic.bw.track.wide_{mark}_{celltype}_CN_chr")
+      ),
     ),
     names = mark | celltype,
     tar_file(
@@ -913,6 +916,29 @@ targets.chic <- list(
         chic.experiment.quantify_peakcalling.sharp
       ) %>%
         gtf_granges_extended_from_tss(as_tibble(read.csv(assay.data.sc)))
+    ),
+    tar_file(
+      fig.track,
+      save_figures(
+        paste0("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          paste0("Track-Plot-", mark),
+          plot_track(
+            import(BigWigFile(chic.bw.track.wide)),
+            name = "L2FC",
+            limits = c(-1, 1),
+            breaks = c(-1, 0, 1)
+          ),
+          5.75,
+          4
+        )
+      ),
+      packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
+      # We are going to edit the PDF and arrange the track line in front of the
+      # panel. In ggplot, to make the grid visible at all, it was placed in the
+      # foreground of the content.
     )
   ),
 

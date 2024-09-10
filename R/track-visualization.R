@@ -1,7 +1,7 @@
 plot_track <- function(
     track,
-    positive_color = "#caff84",
-    negative_color = "#ee9999",
+    positive_color = "#e0eff9",
+    negative_color = "#f7f9e7",
     name = "Timing",
     limits = c(-1, 1),
     breaks = c(-1, 0, 1),
@@ -52,50 +52,61 @@ plot_track <- function(
       minor_breaks = 1000000 * seq(1, 101, by=2),
       labels = NULL
     ) +
-    scale_y_continuous(name = name, breaks = breaks) +
+    scale_y_continuous(
+      name = name,
+      limits = limits,
+      breaks = breaks,
+      oob = scales::squish
+    ) +
     coord_cartesian(
       NULL, limits, expand=F
     ) +
     theme_bw() +
     theme(
       panel.background = element_rect(fill = NA),
-      panel.ontop = TRUE
+      panel.border = element_blank(),
+      panel.grid = element_blank()
     )
-  chrX <- as_grob(
+  ggplot_build_panel_absolute <- function(gg, height, width, margin_right = unit(5.5, "points")) {
+    gr <- as_grob(gg)
+    gr$heights[7] <- height
+    gr$widths[5] <- width
+    gr$widths[9] <- margin_right
+    gr <- gr
+  }
+  chrX <- (
     plot_chr("X") +
       labs(title = "X")
-  )
-  chrX$heights[7] <- unit(0.35, 'in')
-  chrX$widths[5] <- unit(4, 'in')
-  chrX$widths[9] <- unit(5.5, 'points') + unit(1, 'in')
-  chr2 <- as_grob(
+  ) %>%
+    ggplot_build_panel_absolute(
+      unit(0.35, "in"), unit(4, "in"), unit(5.5, "points") + unit(1, "in")
+    )
+  chr2 <- (
     plot_chr("2") +
       annotate("line", rep(chr.lengths["2L"], 2), c(-Inf, Inf)) +
       labs(title = "2")
-  )
-  chr2$heights[7] <- unit(0.35, 'in')
-  chr2$widths[5] <- unit(5, 'in')
-  chr3 <- as_grob(
+  ) %>%
+    ggplot_build_panel_absolute(unit(0.35, 'in'), unit(5, 'in'))
+  chr3 <- (
     plot_chr("3") +
       annotate("line", rep(chr.lengths["3L"], 2), c(-Inf, Inf)) +
       labs(title = "3")
-  )
-  chr3$heights[7] <- unit(0.35, 'in')
-  chr3$widths[5] <- unit(5, 'in')
-  chr4 <- as_grob(
+  ) %>%
+    ggplot_build_panel_absolute(unit(0.35, 'in'), unit(5, 'in'))
+  chr4 <- (
     plot_chr("4") +
       labs(title = "4")
-  )
-  chr4$heights[7] <- unit(0.35, 'in')
-  chr4$widths[5] <- unit(2, 'in')
-  chr4$widths[9] <- unit(5.5, 'points') + unit(3, 'in')
-  chrY <- as_grob(
+  ) %>%
+    ggplot_build_panel_absolute(
+      unit(0.35, 'in'), unit(2, 'in'), unit(5.5, 'points') + unit(3, 'in')
+    )
+  chrY <- (
     plot_chr("Y") +
       labs(title = "Y")
-  )
-  chrY$heights[7] <- unit(0.35, 'in')
-  chrY$widths[5] <- unit(2, 'in')
-  chrY$widths[9] <- unit(5.5, 'points') + unit(3, 'in')
+  ) %>%
+    ggplot_build_panel_absolute(
+      unit(0.35, "in"), unit(2, "in"), unit(5.5, "points") + unit(3, "in")
+    )
   mylayout <- gtable(
     widths = unit(1, 'null'), heights = unit(rep(0.75, 5), 'in')
   ) %>%
