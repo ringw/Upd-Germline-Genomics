@@ -634,6 +634,20 @@ targets.chic <- list(
         )
     ),
     tar_target(
+      chic.experiment.granges.model.frame,
+      tibble(
+        rowname = paste(
+          mark,
+          name,
+          ifelse(grepl(mark, molecule), "M", molecule),
+          model_matrix_rep,
+          sep="_"
+        ),
+        molecule = factor(molecule),
+        rep = factor(model_matrix_rep)
+      )
+    ),
+    tar_target(
       chic.experiment.granges.offset.euchromatin,
       # Median of 1kb-window coverage scores (rescaled to match the scale of
       # the 40 bp count overlaps). Because each fragment is assigned exactly
@@ -863,6 +877,74 @@ targets.chic <- list(
         )
     )
   ),
+  # Pericentromere / chromosome arms reference. This can be generated from the
+  # 5-state chromatin model by searching for classic heterochromatin (GREEN)
+  # near the Watson or Crick end (whichever is flanking the centromere). The
+  # actual pericentromere of interest is very sparse in coverage of chromatin
+  # states. We will start at the centromere end, including that bp, and seek to
+  # find the next chromatin state on the chromosome, which should be GREEN. We
+  # can fill a short gap (< 1 kb) of another chromatin state near the
+  # pericentromere, but otherwise we stop when we find a non-GREEN window.
+  # https://flybase.org/reports/FBsf0000579224.htm
+  tar_target(
+    chromosome_pericetromere_label,
+    GRanges(
+      c(
+        "2L:22192401-23513712",
+        "2R:1-5651400",
+        "3L:23154101-28110227",
+        "3R:1-4229200"
+      )
+    )
+  ),
+  tar_target(
+    chromosome_arms_diameter_1000,
+    {
+      overlaps <- as.list(
+        findOverlaps(
+          chromosome_pericetromere_label, chic.tile.diameter_1000_chr
+        )
+      )
+      GRanges(
+        chic.tile.diameter_1000_chr,
+        group = factor(
+          seqnames(chic.tile.diameter_1000_chr),
+          c("2L", "2LC", "2RC", "2R", "3L", "3LC", "3RC", "3R")
+        ) %>%
+          replace(
+            unlist(overlaps),
+            rep(
+              paste0(seqnames(chromosome_pericetromere_label), "C"),
+              sapply(overlaps, length)
+            )
+          )
+      )
+    }
+  ),
+  tar_target(
+    chromosome_arms_diameter_40,
+    {
+      overlaps <- as.list(
+        findOverlaps(
+          chromosome_pericetromere_label, chic.tile.diameter_40_chr
+        )
+      )
+      GRanges(
+        chic.tile.diameter_40_chr,
+        group = factor(
+          seqnames(chic.tile.diameter_40_chr),
+          c("X", "2L", "2LC", "2RC", "2R", "3L", "3LC", "3RC", "3R", "4", "Y")
+        ) %>%
+          replace(
+            unlist(overlaps),
+            rep(
+              paste0(seqnames(chromosome_pericetromere_label), "C"),
+              sapply(overlaps, length)
+            )
+          )
+      )
+    }
+  ),
   # Tracks which are once per experiment. No parameter options, those have been
   # fixed to particular tracks now!
   tar_map(
@@ -925,6 +1007,185 @@ targets.chic <- list(
       # We are going to edit the PDF and arrange the track line in front of the
       # panel. In ggplot, to make the grid visible at all, it was placed in the
       # foreground of the content.
+    ),
+    tar_target(
+      enriched.chromosomes.data,
+      tibble(
+        label = chromosome_arms_diameter_1000$group %>%
+          factor(
+            levels = c("X", levels(.), "4", "Y")
+          ) %>%
+          replace(
+            which(seqnames(chic.tile.diameter_1000_chr) %in% c("4", "X", "Y")),
+            seqnames(chic.tile.diameter_1000_chr)[
+              seqnames(chic.tile.diameter_1000_chr) %in% c("4", "X", "Y")
+            ] %>%
+              as.character
+          ),
+        L2FC = import(BigWigFile(chic.bw.track.wide))$score
+      ) %>%
+        subset(!is.na(label)),
+      format = "parquet"
+    ),
+    tar_target(
+      enriched.chromosomes,
+      ggplot(
+        enriched.chromosomes.data,
+        aes(label, L2FC, fill=substr(label, 1, 1))
+      ) +
+        geom_violin() +
+        geom_boxplot(outlier.shape = NA, fill = "transparent") +
+        scale_fill_hue(h.start = 75, c = 50, l = 80) +
+        coord_cartesian(NULL, c(-1.2, 1.2)) +
+        labs(
+          x = "Chromosome"
+        ) +
+        theme(aspect.ratio = 1/2, legend.position = "none")
+    ),
+    tar_file(
+      fig.enriched.chromosomes,
+      save_figures(
+        paste0("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          paste0("Enriched-Chromosome-Regions-", mark),
+          enriched.chromosomes,
+          5.5,
+          3.5
+        )
+      )
+    )
+  ),
+  # SummarizedExperiment which is once per mark. Grabbing a particular track and
+  # a particular bowtie reference (chr).
+  tar_map(
+    tibble(
+      chic.mark.data,
+      chic.experiment.granges_Germline = rlang::syms(
+        str_glue("chic.experiment.granges_{mark}_Germline_CN_chr")
+      ),
+      chic.experiment.granges_Somatic = rlang::syms(
+        str_glue("chic.experiment.granges_{mark}_Somatic_CN_chr")
+      ),
+      chic.experiment.granges.offset_Germline = rlang::syms(
+        str_glue("chic.experiment.granges.offset_{mark}_Germline_CN_chr")
+      ),
+      chic.experiment.granges.offset_Somatic = rlang::syms(
+        str_glue("chic.experiment.granges.offset_{mark}_Somatic_CN_chr")
+      ),
+      chic.experiment.granges.model.frame_Germline = rlang::syms(
+        str_glue("chic.experiment.granges.model.frame_{mark}_Germline_CN_chr")
+      ),
+      chic.experiment.granges.model.frame_Somatic = rlang::syms(
+        str_glue("chic.experiment.granges.model.frame_{mark}_Somatic_CN_chr")
+      ),
+    ),
+    names = mark,
+    # Grab counts grouped by chromosome_arms; vars to regress; and size factors.
+    tar_target(
+      enriched.chromosomes.compare,
+      enriched_chromosomes_build_summarized_experiment(
+        cbind(
+          elementMetadata(chic.experiment.granges_Germline),
+          elementMetadata(chic.experiment.granges_Somatic)
+        ),
+        chromosome_arms_diameter_40,
+        bind_rows(
+          list(
+            GSC=chic.experiment.granges.model.frame_Germline,
+            CySC=chic.experiment.granges.model.frame_Somatic
+          ),
+          .id="celltype"
+        ),
+        chic.experiment.granges.offset_Germline,
+        chic.experiment.granges.offset_Somatic
+      )
+    ),
+    # Model matrix with our contrasts for the batch effect. We have set up one
+    # contrast for all of the GSC & CySC batches to be precisely the GSC-CySC
+    # cell type difference. So when creating a model matrix which is singular,
+    # we remove the column which we created manually which is redundant.
+    tar_target(
+      enriched.chromosomes.compare.model.matrix,
+      model.matrix(
+        ~ molecule * celltype + rep,
+        colData(enriched.chromosomes.compare)
+      ) %>%
+        subset(select = -repCelltype)
+    ),
+    # Fit GLM, reduced model, and test, yielding p-value, for celltype - L2FC
+    # interaction coefficient.
+    tar_target(
+      enriched.chromosomes.compare.test,
+      enriched.chromosomes.compare %>%
+        glm_gp(
+          enriched.chromosomes.compare.model.matrix,
+          size_factors = .$sf
+        ) %>%
+        test_de(
+          replace(
+            rep(0, ncol(.$Beta)),
+            ncol(.$Beta),
+            1
+          )
+        )
+    )
+  ),
+  tar_target(
+    enriched.chromosomes.compare.signif,
+    enriched_chromosomes_compare_signif(
+      list(
+        H3K4 = enriched.chromosomes.compare.test_H3K4,
+        H3K27 = enriched.chromosomes.compare.test_H3K27,
+        H3K9 = enriched.chromosomes.compare.test_H3K9
+      )
+    )
+  ),
+  # Enriched Chromosomes significance marks, to be added to the plot later.
+  tar_target(
+    enriched.chromosomes.both.data,
+    rbind(
+      tibble(celltype = "Germline", mark = "H3K4me3", enriched.chromosomes.data_H3K4_Germline),
+      tibble(celltype = "Germline", mark = "H3K27me3", enriched.chromosomes.data_H3K27_Germline),
+      tibble(celltype = "Germline", mark = "H3K9me3", enriched.chromosomes.data_H3K9_Germline),
+      tibble(celltype = "Somatic", mark = "H3K4me3", enriched.chromosomes.data_H3K4_Somatic),
+      tibble(celltype = "Somatic", mark = "H3K27me3", enriched.chromosomes.data_H3K27_Somatic),
+      tibble(celltype = "Somatic", mark = "H3K9me3", enriched.chromosomes.data_H3K9_Somatic)
+    ),
+    format = "parquet"
+  ),
+  tar_target(
+    enriched.chromosomes.both,
+    sapply(
+      c("X", "2", "3", "4", "Y"),
+      purrr::partial(plot_enriched_chromosomes_combined, enriched.chromosomes.both.data),
+      simplify=FALSE
+    )
+  ),
+  tar_file(
+    fig.enriched.chromosomes.both,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "Enriched-Chromosome-Regions-X",
+        enriched.chromosomes.both$X %>% annotate_enriched_chromosomes_combined(),
+        3, 3,
+        "Enriched-Chromosome-Regions-2",
+        enriched.chromosomes.both$`2` %>% annotate_enriched_chromosomes_combined(),
+        8, 3,
+        "Enriched-Chromosome-Regions-3",
+        enriched.chromosomes.both$`3` %>% annotate_enriched_chromosomes_combined(),
+        8, 3,
+        "Enriched-Chromosome-Regions-4",
+        enriched.chromosomes.both$`4` %>% annotate_enriched_chromosomes_combined(),
+        3, 3,
+        "Enriched-Chromosome-Regions-Y",
+        enriched.chromosomes.both$Y %>% annotate_enriched_chromosomes_combined(),
+        3, 3,
+      )
     )
   ),
 

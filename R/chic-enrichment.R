@@ -430,3 +430,192 @@ gtf_granges_extended_from_tss <- function(granges, genes) {
   ) %>%
     setNames(pull(genes, 1))
 }
+
+# Plot the combined chr feature violins once. Cannot use the same
+# position = dodge on a boxplot as we used on the violin, so this is going to be
+# a plainer plot.
+plot_enriched_chromosomes_combined <- function(data, label_pattern, title = label_pattern) {
+  fill_colors <- muted(unlist(chic_line_track_colors, use.names = FALSE), 80, 40)
+  data <- data %>% subset(grepl(label_pattern, label))
+  ggplot(
+    data,
+    aes(label, L2FC, fill = celltype, group = interaction(label, celltype, mark))
+  ) +
+    geom_violin() +
+    # geom_boxplot(outlier.shape = NA, fill = "transparent") +
+    annotate(
+      "text",
+      (1 + seq(3 * length(unique(data$label))))/3, 1.1,
+      label = rep(c("H3K4me3", "H3K27me3", "H3K9me3"), length(unique(data$label))),
+      size = 2
+    ) +
+    scale_fill_manual(values = fill_colors) +
+    coord_cartesian(NULL, c(-1.2, 1.2)) +
+    labs(title = title) +
+    theme(
+      legend.position = "none",
+      panel.grid.major.x = element_blank()
+    )
+}
+
+# Use a built plot_enriched_chromosomes_combined and add additional information
+# to the plot.
+annotate_enriched_chromosomes_combined <- function(gg) {
+  data <- ggplot_build(gg)$data[[1]]
+  # 75% CI information. We persist the density results in ggplot_build data, as
+  # well as the final coordinate space x and y, so we need to match the quantile
+  # to plot to the cumsum of % density and then get the y value for this
+  # particular variable value.
+  box_data <- data %>%
+    group_by(group) %>%
+    summarise(
+      xmin = xmin[1] + (xmax - xmin)[1] * (1 - width[1]) / 2,
+      xmax = xmax[1] - (xmax - xmin)[1] * (1 - width[1]) / 2,
+      ymin = y[
+        findInterval(
+          0.25,
+          cumsum(density) / sum(density)
+        )
+      ],
+      ymax = y[
+        findInterval(
+          0.75,
+          cumsum(density) / sum(density)
+        )
+      ]
+    )
+  median_data <- data %>%
+    group_by(group) %>%
+    summarise(
+      x = xmin[1] + (xmax - xmin)[1] * (1 - width[1]) / 2,
+      x = xmin[1],
+      y = y[
+        findInterval(
+          0.5,
+          cumsum(density) / sum(density)
+        )
+      ],
+      xend = xmax[1] - (xmax - xmin)[1] * (1 - width[1]) / 2,
+      yend = y
+    )
+  # We will set the breaks and labels of the continuous x axis to match the
+  # discrete x axis which we built.
+  labels <- ggplot_build(gg)$layout$panel_params[[1]]$x$limits
+  ggplot(data, aes()) +
+    geom_violin(
+      aes(x, y, fill = fill, xmin = xmin, xmax = xmax, violinwidth = violinwidth, group = group),
+      stat="identity"
+    ) +
+    geom_rect(
+      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
+      box_data,
+      color = "black",
+      fill = "transparent"
+    ) +
+    geom_segment(
+      aes(x, y, xend = xend, yend = yend),
+      median_data,
+      color = "black",
+      linewidth = 1.25
+    ) +
+    annotate(
+      "text",
+      rep(c(-0.3, 0, 0.3), length(labels)) + rep(seq_along(labels), each = 3),
+      1.5,
+      label = rep(c("H3K4me3", "H3K27me3", "H3K9me3"), length(labels)),
+      size = 2
+    ) +
+    scale_x_continuous(breaks = seq_along(labels), labels = labels) +
+    scale_fill_identity() +
+    coord_cartesian(NULL, c(-1.9, 1.9)) +
+    labs(x = "label", y = "L2FC")
+}
+
+# Counts: Grouped by chromosome_arms_diameter_40 for each sample. The
+# diameter-40 windows have exactly 50% overlap between successive windows; the
+# fragment should be counted in exactly 2 of the windows that we are summing up,
+# but the total count is not even because of the window at the start or end of
+# the chromosome_arms group.
+half <- \(x) x/2
+enriched_chromosomes_build_summarized_experiment <- function(
+  counts,
+  chromosome_arms_diameter_40,
+  model_frame,
+  offset_germline,
+  offset_somatic
+) {
+  counts = counts %>%
+    split(chromosome_arms_diameter_40$group) %>%
+    sapply(\(df) df %>% as.matrix %>% colSums) %>%
+    t() %>%
+    matrix(
+      nrow = nrow(.),
+      dimnames = list(
+        rownames(.),
+        model_frame$rowname
+      )
+    ) %>%
+    half() %>%
+    round()
+  celltype. <- model_frame$celltype %>% factor(c("GSC", "CySC"))
+  rep. <- interaction(model_frame$rep, model_frame$celltype) %>%
+    droplevels()
+  num_gsc_batches <- length(unique(rep.[celltype. == "GSC"]))
+  num_cysc_batches <- length(unique(rep.[celltype. == "CySC"]))
+  contrasts(rep.) <- cbind(
+    Celltype = rep(
+      c(1, -1),
+      c(num_gsc_batches, num_cysc_batches)
+    ),
+    bdiag(
+      contr.sum(num_gsc_batches), contr.sum(num_cysc_batches)
+    ) %>%
+      as.matrix()
+  )
+  sf <- exp(
+    as.numeric(
+      sapply(
+        list(
+          elementMetadata(offset_germline)[1,],
+          elementMetadata(offset_somatic)[1,]
+        ),
+        unlist
+      )
+    )
+  )
+  SummarizedExperiment(
+    counts,
+    colData = mutate(
+      model_frame,
+      celltype = celltype.,
+      rep = rep.,
+      sf = sf,
+    )
+  )
+}
+
+# Aggregate significance test for the chromosomes compare model. This produces
+# significance levels of q-value for 33 tests (chromosome arm genomic ranges &
+# 3 marks being tested).
+enriched_chromosomes_compare_signif <- function(data) {
+  pvalues <- rbind(
+    H3K4 = pull(data$H3K4, pval, name),
+    H3K27 = pull(data$H3K27, pval, name),
+    H3K9 = pull(data$H3K9, pval, name)
+  )
+  pvalues <- pvalues %>%
+    replace(
+      seq_along(.),
+      p.adjust(as.numeric(.), "BH")
+    )
+  signif <- pvalues %>%
+    as.numeric %>%
+    cut(c(0, 1e-4, 1e-3, 1e-2, 0.05)) %>%
+    `levels<-`(value = c("****", "***", "**", "*"))
+  matrix(
+    signif,
+    nrow = nrow(pvalues),
+    ncol = ncol(pvalues),
+    dimnames = dimnames(pvalues)
+  )
+}
