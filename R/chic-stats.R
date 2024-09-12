@@ -29,31 +29,6 @@ chic_stats_boxplot <- function(track) {
     labs(x = NULL, y = "Enrichment (vs Auto Monosome Median)")
 }
 
-histogram_paired_end_fragment_size <- function(bulk_reads) {
-  fragment_sizes <- do.call(
-    c,
-    sapply(
-      bulk_reads,
-      \(df) df %>% paired_end_reads_to_fragment_lengths %>% pull("length"),
-      simplify=FALSE
-    )
-  )
-  tbl <- as.data.frame(table(fragment_sizes))
-  tbl <- deframe(tbl)[
-    as.character(seq(50, 500))
-  ] %>%
-    enframe("fragment_sizes", "Freq") %>%
-    mutate(fragment_sizes = as.integer(fragment_sizes))
-  tbl %>%
-    ggplot(aes(fragment_sizes, y=0, height=2*Freq)) +
-    geom_tile(linewidth=0.01, color="black", fill="black") +
-    scale_y_continuous(labels = scales::unit_format(unit = "K", scale = 1e-3)) +
-    coord_cartesian(NULL, c(0, max(tbl$Freq) * 1.05), expand=FALSE) +
-    labs(x = "Fragment Size (bp)", y = "Num H3 Fragments") +
-    theme_bw() +
-    theme(aspect.ratio = 1/2)
-}
-
 histogram_paired_end_fragment_size <- function(bulk_reads, faceted = FALSE) {
   lvl_lookup <- c(
     X="X", `2L`="2", `2R`="2", `3L`="3", `3R`="3", `4`="4", Y="Y"
@@ -81,7 +56,7 @@ histogram_paired_end_fragment_size <- function(bulk_reads, faceted = FALSE) {
   if (faceted)
     tbl <- as.data.frame(with(fragment_sizes, table(chr, size)))
   else
-    tbl <- as.data.frame(table(fragment_sizes))
+    tbl <- as.data.frame(with(fragment_sizes, table(size)))
   tbl$size <- tbl$size %>% as.character %>% as.integer
   tbl <- tbl %>% subset(between(size, 50, 500))
   # tbl <- deframe(tbl)[
