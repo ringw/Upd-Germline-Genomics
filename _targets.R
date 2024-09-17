@@ -1038,6 +1038,70 @@ list(
       )
     )
   ),
+  # Plot Germline-Somatic both genes H3 at TSS. Differential nucleosome
+  # likelihood at the position that appears to be TSS+1.
+  tar_target(
+    plot.fpkm.chic.nonexclusive.nucleosome.both,
+    chic_plot_average_profiles_facet_grid(
+      list(Germline=sc_chr_nucleosome_NonExclusive_data_Germline_TSS, Somatic=sc_chr_nucleosome_NonExclusive_data_Somatic_TSS) %>%
+        bind_rows(.id = "name") %>%
+        arrange(desc(row_number())) %>%
+        mutate(genes=interaction(activity, ordered(name)), facet=facet %>% ordered(c("X","2","3","4"))),
+      "",
+      unlist(chic_line_track_colors, use.names = FALSE),
+      linewidth = rep(0.66, 2),
+      faceter = facet_wrap(vars(facet), ncol=4),
+      x_intercept = NA
+    ) + labs(
+      y = "Median Autosome Monosome-TSS L2FC"
+    ) + theme(
+      aspect.ratio = 1
+    )
+  ),
+  tar_target(
+    plot.annot.fpkm.chic.nonexclusive.nucleosome.both,
+    plot.fpkm.chic.nonexclusive.nucleosome.both +
+      geom_text(
+        aes(label=label),
+        tibble(
+          enriched.tss.plus132.nucleosomes.test,
+          genes = "active.Germline",
+          pos.continuous = 132 + 50,
+          value = c(3, 3, 3, 2.75),
+          label = cut(
+            p.adjust(pval, "BH"),
+            c(0, 1e-4, 1e-3, 1e-2, 5e-2, 1)
+          ) %>%
+            `levels<-`(
+              value = c(
+                "****",
+                "***",
+                "**",
+                "*",
+                "n.s."
+              )
+            )
+        ),
+        color = "black",
+        hjust = 0
+      )
+  ),
+  tar_target(
+    fig.fpkm.chic.facet.nonexclusive.nucleosome.both,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        rowname="CHIC-TSS-Chr-NonExclusiveGermlineAndSomatic-Nucleosome-Occupancy-RNAseq",
+        figure=list(
+          plot.annot.fpkm.chic.nonexclusive.nucleosome.both %>%
+            replace_legend(germline_somatic_line_plot_legend)
+        ),
+        width=10,
+        height=3
+      )
+    )
+  ),
 
   tar_target(
     germline_somatic_line_plot_legend,

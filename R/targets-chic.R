@@ -1189,6 +1189,111 @@ targets.chic <- list(
     )
   ),
 
+  # Analysis of chic (40 bp TSS window) analysis at TSS+132, where we found the
+  # TSS+1 nucleosome to be. Differential enrichment test of H3 input will reveal
+  # differential likelihood of nucleosome presence in germline vs somatic.
+  tar_target(
+    non_exclusive_genes_assay_data_tss_132,
+    assay.data.sc %>%
+      read.csv() %>%
+      as_tibble() %>%
+      filter(
+        X %in% cpm_gene_lists_extended$NonExclusiveGermlineAndSomaticGenes,
+        chr %in% names(chr.lengths)
+      ) %$%
+      GRanges(
+        chr,
+        IRanges(
+          ifelse(strand == "+", start, end) +
+            ifelse(strand == "+", 1, -1) * 132,
+          width=1
+        ),
+        gene = X
+      ) %>%
+        setNames(.$gene)
+  ),
+  tar_target(
+    non_exclusive_genes_tss_132_diameter_40,
+    GRanges(
+      non_exclusive_genes_assay_data_tss_132,
+      window = sapply(
+        findOverlaps(
+          non_exclusive_genes_assay_data_tss_132,
+          chic.tile.diameter_40_score_chr
+        ),
+        \(v) v[1]
+      )
+    )
+  ),
+  tar_target(
+    enriched.tss.plus132.nucleosomes,
+    SummarizedExperiment(
+      list(
+        counts = cbind(
+          chic.experiment.granges_H3K27_Germline_CN_chr[
+            non_exclusive_genes_tss_132_diameter_40$window
+          ] %>%
+            elementMetadata() %>%
+            as.matrix(),
+          chic.experiment.granges_H3K27_Somatic_CN_chr[
+            non_exclusive_genes_tss_132_diameter_40$window
+          ] %>%
+            elementMetadata() %>%
+            as.matrix()
+        ) %>%
+          matrix(
+            nrow = length(non_exclusive_genes_tss_132_diameter_40),
+            dimnames = list(
+              names(non_exclusive_genes_tss_132_diameter_40),
+              colnames(enriched.chromosomes.compare_H3K27)
+            )
+          )
+      ),
+      colData = colData(enriched.chromosomes.compare_H3K27)
+    )
+  ),
+  tar_target(
+    enriched.tss.facet,
+    mutate(
+      tribble(
+        ~facet, ~chrs,
+        "X", "X",
+        "2", c("2L", "2R"),
+        "3", c("3L", "3R"),
+        "4", "4",
+      ),
+      facet = factor(facet, facet)
+    )
+  ),
+  tar_target(
+    enriched.tss.plus132.nucleosomes.test,
+    {
+      genes_take <- which(
+        seqnames(non_exclusive_genes_tss_132_diameter_40) %in%
+          enriched.tss.facet$chrs[[1]]
+      )
+      Y <- matrix(
+        assay(enriched.tss.plus132.nucleosomes)[genes_take, ],
+        nrow = 1
+      )
+      col_data <- dplyr::slice(
+        as.data.frame(colData(enriched.tss.plus132.nucleosomes)),
+        rep(seq(ncol(enriched.tss.plus132.nucleosomes)), each=length(genes_take))
+      )
+      g <- glm_gp(
+        Y,
+        ~ celltype * molecule,
+        col_data,
+        size_factors = col_data$sf
+      )
+      tibble(
+        enriched.tss.facet,
+        pval = test_de(g, "celltypeCySC")$pval
+      )
+    },
+    pattern = map(enriched.tss.facet)
+  ),
+
   tar_target(
     chic.experiment.nucleosomes,
     chic.tile.diameter_40_score_chr %>%
@@ -2141,6 +2246,18 @@ targets.chic <- list(
       format = "parquet"
     ),
     # H3 profile. By gene classification (quant).
+    tar_target(
+      sc_chr_nucleosome_NonExclusive_data,
+      chic_heatmap_facet_genes(
+        chic.heatmap.tss.nucleosome,
+        subset(
+          facet_genes,
+          gene %in% cpm_gene_lists_extended$NonExclusiveGermlineAndSomaticGenes,
+          select=c(facet, activity, gene)
+        )
+      ),
+      format = "parquet"
+    ),
     tar_target(
       sc_nucleosome_quartile_data,
       chic_heatmap_facet_genes(
