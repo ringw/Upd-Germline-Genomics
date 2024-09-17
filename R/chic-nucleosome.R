@@ -46,3 +46,89 @@ bed_to_mark_bigwig <- function(bed_file, bw_path) {
   }
   export(unlist(GRangesList(granges_list)), BigWigFile(bw_path))
 }
+
+nucleosome_repeat_length_analysis <- function(fragments) {
+  # Our NRL could operate on either the set of Watson strand-mapped reads or the
+  # set of Crick strand-mapped reads! For now, we will use the starts of the
+  # IRanges, which are Watson-mapped.
+  chr_length <- seqlengths(fragments)[
+    as.character(seqnames(fragments)[1])
+  ]
+  stopifnot(is.finite(chr_length))
+  lst <- fragments %>%
+    split(
+      cut(
+        start(fragments),
+        union(
+          seq(0, chr_length, by=2000),
+          chr_length
+        )
+      )
+    )
+  starts <- sapply(lst, start, simplify=FALSE)
+  dist_within <- sapply(
+    starts,
+    \(v) abs(
+      rep(v, length(v)) - rep(v, each = length(v))
+    ) %>%
+      tabulate(2000)
+  )
+  dist_neighbor <- mapply(
+    \(v1, v2) abs(
+      rep(v1, length(v2)) - rep(v2, each = length(v1))
+    ) %>%
+      tabulate(2000),
+    starts[-1],
+    starts[-length(starts)]
+  )
+  dist_within_rolling <- dist_within %>% rowCumsums()
+  dist_neighbor_rolling <- dist_neighbor %>% rowCumsums()
+  est_gr <- slidingWindows(
+    GRanges(
+      "*",
+      1:length(lst)
+    ),
+    width = 1000
+  )[[1]]
+  est_gr$score <- sapply(
+    seq(length(est_gr)),
+    \(i) 149 + which.max(
+      dist_within_rolling[-(1:149), end(est_gr[i])] -
+        if (start(est_gr)[i] > 1) {
+          dist_within_rolling[-(1:149), start(est_gr[i]) - 1]
+        } else {
+          0
+        } +
+      dist_neighbor_rolling[-(1:149), end(est_gr[i]) - 1] -
+        if (start(est_gr)[i] > 1) {
+          dist_neighbor_rolling[-(1:149), start(est_gr[i]) - 1]
+        } else {
+          0
+        }
+    )
+  )
+  GRanges(
+    seqnames(fragments)[1],
+    IRanges(
+      mid(est_gr) * 2000,
+      width = 1
+    ),
+    score = est_gr$score %>%
+      replace(. < 155, NA),
+    seqinfo = Seqinfo(
+      seqnames = as.character(seqnames(fragments)[1]),
+      seqlengths = seqlengths(fragments)[
+        as.character(seqnames(fragments)[1])
+      ]
+    )
+  )
+}
+
+granges_mean_score <- function(ga, gb, gc) {
+  data <- cbind(
+    A = ga$score,
+    B = gb$score,
+    C = gc$score
+  )
+  GRanges(ga, score = colMeans(data, na.rm=T))
+}

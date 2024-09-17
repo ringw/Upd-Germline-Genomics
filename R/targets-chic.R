@@ -1696,23 +1696,23 @@ targets.chic <- list(
   tar_target(
     gg.chic.nucleosome.est,
     tibble(
-      celltype = rep(c("Germline", "Somatic"), each=length(chic.nucleosome.est.query)),
-      chr = rep(as.factor(seqnames(chic.nucleosome.est.query)), 2) %>%
+      celltype = rep(c("Germline", "Somatic"), each=length(nucleosome.repeat.length_Germline)),
+      chr = rep(as.factor(seqnames(nucleosome.repeat.length_Germline)), 2) %>%
         fct_recode(`2`="2L", `2`="2R", `3`="3L", `3`="3R") %>%
         relevel("X"),
       pos = rep(
-        mid(chic.nucleosome.est.query) +
+        mid(nucleosome.repeat.length_Germline) +
           ifelse(
-            seqnames(chic.nucleosome.est.query) == "2R", chr.lengths["2L"],
+            seqnames(nucleosome.repeat.length_Germline) == "2R", chr.lengths["2L"],
             ifelse(
-              seqnames(chic.nucleosome.est.query) == "3R", chr.lengths["3L"],
+              seqnames(nucleosome.repeat.length_Germline) == "3R", chr.lengths["3L"],
               0
             )
           ),
         2
       ),
-      value = c(chic.nucleosome.est_Germline$score, chic.nucleosome.est_Somatic$score) %>%
-        replace(!between(., 150, 250), NA)
+      value = c(nucleosome.repeat.length_Germline$score, nucleosome.repeat.length_Somatic$score) %>%
+        replace(!between(., 160, 250), NA)
     ) %>%
       subset(chr != "rDNA") %>%
       ggplot(
@@ -2440,6 +2440,103 @@ targets.chic <- list(
           5.25,
           4.5,
         )
+      )
+    )
+  ),
+
+  # Nucleosome repeat length analysis.
+  tar_map(
+    tibble(
+      cross_join(
+        subset(
+          chic.samples,
+          group == "H3K27" &
+            molecule == "H3",
+          select = c(sample, driver)
+        ),
+        tibble(chr = names(chr.lengths))
+      ),
+      celltype = c(nos="Germline", tj="Somatic")[driver],
+      bulk_reads = rlang::syms(
+        str_glue("bulk_reads_{chr}_chic.bam_{sample}_chr")
+      ),
+      bulk_reads_idxstats = rlang::syms(
+        "bulk_reads_idxstats_chic.bam_GC3768007_S7_L001_chr"
+      )
+    ),
+    names = celltype | sample | chr,
+    tar_target(
+      nucleosome.repeat.length.chr,
+      bulk_reads %>%
+        subset(mapq >= 20) %>%
+        paired_end_reads_to_granges() %>%
+        GRanges(
+          seqlengths = pull(bulk_reads_idxstats, rlength, rname)
+        ) %>%
+        nucleosome_repeat_length_analysis()
+    )
+  ),
+  tar_target(
+    nucleosome.repeat.length_Germline,
+    granges_mean_score(
+      c(
+        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_2L,
+        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_2R,
+        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_3L,
+        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_3R,
+        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_4,
+        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_X,
+        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_Y
+      ),
+      c(
+        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_2L,
+        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_2R,
+        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_3L,
+        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_3R,
+        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_4,
+        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_X,
+        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_Y
+      ),
+      c(
+        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_2L,
+        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_2R,
+        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_3L,
+        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_3R,
+        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_4,
+        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_X,
+        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_Y
+      )
+    )
+  ),
+  tar_target(
+    nucleosome.repeat.length_Somatic,
+    granges_mean_score(
+      c(
+        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_2L,
+        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_2R,
+        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_3L,
+        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_3R,
+        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_4,
+        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_X,
+        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_Y
+      ),
+      c(
+        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_2L,
+        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_2R,
+        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_3L,
+        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_3R,
+        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_4,
+        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_X,
+        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_Y
+      ),
+      c(
+        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_2L,
+        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_2R,
+        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_3L,
+        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_3R,
+        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_4,
+        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_X,
+        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_Y
       )
     )
   ),
