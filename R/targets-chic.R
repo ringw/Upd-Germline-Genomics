@@ -2073,7 +2073,9 @@ targets.chic <- list(
           celltype,
           plot_name
         ),
-        quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}"))
+        quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}")),
+        repli.factor = rlang::syms(str_glue("repli.gene_{celltype}")),
+        repli.gene.active = rlang::syms(str_glue("repli.gene.active_{celltype}")),
       ),
     names = celltype | plot_name,
     tar_target(chic.experiment.tss.heatmaps, named_tss_data),
@@ -2089,6 +2091,8 @@ targets.chic <- list(
             fct_recode(off="Q1", low="Q2", med="Q3", high="Q4"),
           activity = quartile.factor %>%
             fct_recode(off="Q1", active="Q2", active="Q3", active="Q4"),
+          repli = repli.factor[X],
+          repli.active = repli.gene.active[X],
           gene = X
         ) %>%
           subset(!is.na(facet))
@@ -2136,6 +2140,30 @@ targets.chic <- list(
         chic_heatmap_facet_genes,
         named_tss_data,
         list(subset(facet_genes, select=c(activity, gene))),
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
+      format = "parquet"
+    ),
+    tar_target(
+      repli_quartile_data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        list(subset(facet_genes, select=c(repli, gene))),
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
+      format = "parquet"
+    ),
+    tar_target(
+      repli_quartile_active_data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        list(subset(facet_genes, select=c(repli.active, gene))),
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%

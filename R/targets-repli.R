@@ -558,11 +558,42 @@ targets.repli <- list(
     )$output_file
   ),
 
+  # For each repli track, look up gene TSS values.
+  tar_target(
+    chic.tile.diameter_1000_genes_location,
+    read.csv(assay.data.sc) %$%
+      GRanges(
+        chr[!is.na(chr)],
+        IRanges(
+          ifelse(strand[!is.na(chr)] == "+", start[!is.na(chr)], end[!is.na(chr)]),
+          width = 1
+        ),
+        gene_name = X[!is.na(chr)]
+      ) %>%
+        setNames(.$gene_name)
+  ),
+  tar_target(
+    chic.tile.diameter_1000_genes,
+    GRanges(
+      seqnames(chic.tile.diameter_1000_genes_location),
+      ranges(chic.tile.diameter_1000_genes_location),
+      seqinfo = seqinfo(chic.tile.diameter_1000_chr),
+      lookup = chic.tile.diameter_1000_genes_location %>%
+        findOverlaps(chic.tile.diameter_1000_chr) %>%
+        to()
+    ) %>%
+      setNames(names(chic.tile.diameter_1000_genes_location))
+  ),
+
   # Repli graphic for dmel-all-chromosomes, not the masked bowtie reference.
   tar_map(
     tibble(
       experiment.driver,
-      repli.timing = rlang::syms(str_glue("repli.beta.2_{celltype}_chr"))
+      repli.timing = rlang::syms(str_glue("repli.timing_{celltype}_chr")),
+      figure_dir = str_glue("figure/{celltype}"),
+      repli_quartile_data_TSS = rlang::syms(str_glue("repli_quartile_data_{celltype}_TSS")),
+      repli_quartile_active_data_TSS = rlang::syms(str_glue("repli_quartile_active_data_{celltype}_TSS")),
+      celltype_lower = tolower(celltype),
     ),
     names = celltype,
     tar_file(
@@ -583,6 +614,111 @@ targets.repli <- list(
       # panel. In ggplot, to make the grid visible at all, it was placed in the
       # foreground of the content.
       cue = tar_cue("never")
+    ),
+
+    # Factor for genes.
+    tar_target(
+      repli.gene,
+      repli.timing$score[chic.tile.diameter_1000_genes$lookup] %>%
+        cut(c(-Inf, -0.5, 0, 0.5, Inf)) %>%
+        `levels<-`(
+          value = c("L", "ML", "EM", "E")
+        ) %>%
+        setNames(names(chic.tile.diameter_1000_genes))
+    ),
+    # In cutting genes, exclude the mitochondrion_genome at this point. If the
+    # criteria are timing values then it doesn't matter, but the later exclusion
+    # of the mitochondrion_genome is going to cause "quartiles" of different
+    # sizes.
+    tar_target(
+      repli.gene.active,
+      repli.timing$score[chic.tile.diameter_1000_genes$lookup] %>%
+        replace(
+          Upd_cpm[names(chic.tile.diameter_1000_genes), celltype_lower] < 5 |
+            !as.logical(
+              seqnames(chic.tile.diameter_1000_genes) %in% names(chr.lengths)
+            ),
+          NA
+        ) %>%
+        rank(na="keep", ties="first") %>%
+        cut(c(0, quantile(., c(1/4, 1/2, 3/4), na.rm=T), Inf)) %>%
+        `levels<-`(
+          value = c("LA", "MLA", "EMA", "EA")
+        ) %>%
+        setNames(names(chic.tile.diameter_1000_genes))
+    ),
+    tar_file(
+      repli.chic.results,
+      save_figures(
+        figure_dir,
+        ".pdf",
+        tribble(
+          ~name, ~figure, ~width, ~height,
+          "CHIC-TSS-AllMarks-Repli-Timing-Quartile",
+          chic_plot_average_profiles_facet_grid(
+            mutate(
+              repli_quartile_data_TSS,
+              genes = repli %>%
+                fct_relabel(
+                  \(n) paste0(
+                    n,
+                    " (n = ",
+                    sapply(
+                      n,
+                      \(n) repli_quartile_data_TSS$n[
+                        head(
+                          which(
+                            repli_quartile_data_TSS$repli == n
+                          ),
+                          1
+                        )
+                      ]
+                    ),
+                    ")"
+                  )
+                ),
+              .keep = "unused"
+            ),
+            "Timing",
+            unlist(rev(repli_level_colors), use.names = FALSE),
+            c(0.4, 0.62, 0.73, 0.85),
+            facet_wrap(vars(mark))
+          ),
+          10, 3.25,
+          "CHIC-TSS-AllMarks-Repli-Timing-Quartile-RNAseq-Active",
+          chic_plot_average_profiles_facet_grid(
+            mutate(
+              repli_quartile_active_data_TSS %>%
+                subset(!is.na(repli.active)),
+              genes = repli.active %>%
+                fct_relabel(
+                  \(n) paste0(
+                    n,
+                    " (n = ",
+                    sapply(
+                      n,
+                      \(n) repli_quartile_active_data_TSS$n[
+                        head(
+                          which(
+                            repli_quartile_active_data_TSS$repli.active == n
+                          ),
+                          1
+                        )
+                      ]
+                    ),
+                    ")"
+                  )
+                ),
+              .keep = "unused"
+            ),
+            "Timing",
+            unlist(rev(repli_level_colors), use.names = FALSE),
+            c(0.4, 0.62, 0.73, 0.85),
+            facet_wrap(vars(mark))
+          ),
+          10, 3.25,
+        )
+      )
     )
   ),
 
