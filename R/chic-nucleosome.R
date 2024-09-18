@@ -54,7 +54,7 @@ nucleosome_repeat_length_analysis <- function(fragments) {
   chr_length <- seqlengths(fragments)[
     as.character(seqnames(fragments)[1])
   ]
-  stopifnot(is.finite(chr_length))
+  stopifnot(!is.na(chr_length))
   lst <- fragments %>%
     split(
       cut(
@@ -130,5 +130,5 @@ granges_mean_score <- function(ga, gb, gc) {
     B = gb$score,
     C = gc$score
   )
-  GRanges(ga, score = colMeans(data, na.rm=T))
+  GRanges(ga, score = rowMeans(data, na.rm=T))
 }
