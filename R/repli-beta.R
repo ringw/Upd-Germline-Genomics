@@ -96,27 +96,6 @@ beta_dm_pull_expr_plate <- function(exper, i)
       )
     )
 
-beta_dm_regression_calculate_prior <- function() {
-  nl_prior <- \(v) -sum(dgamma(v, 4, scale=0.5, log = TRUE))
-  par <- optim(c(2, 2), nl_prior)$par
-  precision <- optimHess(par, nl_prior)
-  list(par = par, theta = 0, fisher_information = precision)
-}
-
-# Fix Bivariate Normal precision matrix using pseudo-count identity matrix. This
-# fixes cases where the Fisher information is not positive definite.
-beta_correct_fit_hessian_precision_matrix <- function(fit) {
-  eigs <- eigen(fit$fisher_information, sym=T)
-  if (eigs$values[2] < 0)
-    fit$fisher_information <- fit$fisher_information + c(
-      -eigs$values[2] + 0.0001,
-      0,
-      0,
-      -eigs$values[2] + 0.0001
-    )
-  fit <- fit
-}
-
 beta_dm_plain_likelihood_fn <- function(
   Y, beta_regression_cuts, beta_regression_size_factors,
   wts, heads, tails, theta

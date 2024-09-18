@@ -270,8 +270,7 @@ targets.repli <- list(
         ),
         \(inds) future_lapply(
           seq_along(inds),
-          \(...) dm_regression_gaussian_plate(...) %>%
-            tryCatch(error = \(e) beta_dm_regression_calculate_prior()),
+          dm_regression_gaussian_plate,
           exper = repli.experiment[inds, ],
           wts = repli.sliding.weights
         ),
