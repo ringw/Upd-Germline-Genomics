@@ -962,6 +962,9 @@ targets.chic <- list(
       chic.bw.track.wide = rlang::syms(
         str_glue("chic.bw.track.wide_{mark}_{celltype}_CN_chr")
       ),
+      chic.experiment.quantify.smooth_bw2000 = rlang::syms(
+        str_glue("chic.experiment.quantify.smooth_bw2000_{mark}_{celltype}_CN_chr")
+      )
     ),
     names = mark | celltype,
     tar_file(
@@ -1025,7 +1028,18 @@ targets.chic <- list(
             ] %>%
               as.character
           ),
-        L2FC = import(BigWigFile(chic.bw.track.wide))$score
+        start = start(chic.tile.diameter_1000_chr),
+        end = end(chic.tile.diameter_1000_chr),
+        L2FC = import(BigWigFile(chic.bw.track.wide))$score,
+        # H3 track: Need to re-apply the downsampling here, similar to the
+        # "Wide L2FC" bw track that has already been written to disk.
+        input = approx_track(
+          GRanges(
+            chic.tile.diameter_40_score_chr,
+            score=chic.experiment.quantify.smooth_bw2000$score.molH3
+          ),
+          chic.tile.diameter_1000_chr
+        )$score,
       ) %>%
         subset(!is.na(label)),
       format = "parquet"
@@ -1155,7 +1169,9 @@ targets.chic <- list(
       tibble(celltype = "Somatic", mark = "H3K4me3", enriched.chromosomes.data_H3K4_Somatic),
       tibble(celltype = "Somatic", mark = "H3K27me3", enriched.chromosomes.data_H3K27_Somatic),
       tibble(celltype = "Somatic", mark = "H3K9me3", enriched.chromosomes.data_H3K9_Somatic)
-    ),
+    ) %>%
+      group_by(label, start) %>%
+      filter(all(input > 0.1)),
     format = "parquet"
   ),
   tar_target(
