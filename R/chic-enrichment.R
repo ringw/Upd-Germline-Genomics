@@ -435,7 +435,7 @@ gtf_granges_extended_from_tss <- function(granges, genes) {
 # position = dodge on a boxplot as we used on the violin, so this is going to be
 # a plainer plot.
 plot_enriched_chromosomes_combined <- function(data, label_pattern, title = label_pattern) {
-  fill_colors <- muted(unlist(chic_line_track_colors, use.names = FALSE), 80, 40)
+  fill_colors <- c(Germline="#96C586", Somatic="#A97AAC")
   data <- data %>% subset(grepl(label_pattern, label))
   ggplot(
     data,
