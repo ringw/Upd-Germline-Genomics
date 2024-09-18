@@ -38,7 +38,7 @@ sc_quartile_colors = viridis(5)[-1]
 names(sc_quartile_colors)[c(1,4)] = c('low', 'high')
 
 sc_quartile_annotations = c(
-  low = hcl(252, 66, 50),
+  off = "#A8A7A7",
   hcl(200, 37, 60),
   hcl(137, 37, 80),
   high = hcl(77, 87, 87)
