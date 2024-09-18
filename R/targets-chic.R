@@ -33,15 +33,6 @@ chic.experiments <- chic.experiments %>% within({
   experiment_name <- paste(mark, name, sep="_")
 })
 
-target_chic_load_raw_expr <- function(group, driver) {
-  group. <- group
-  driver. <- driver
-  samples <- chic.samples %>%
-    filter(group == group., driver == driver.) %>%
-    reframe(molecule, rep, sample, pileup = rlang::syms(str_glue("chic.raw_{sample}")))
-  rlang::call2("tibble", rowname = samples$sample, molecule = samples$molecule, rep = call("factor", samples$rep), pileup = samples$pileup)
-}
-
 granges_to_normalize_euchromatin <- substitute(
   which(as.logical(seqnames(chic.tile.diameter_40_score) %in% c("2L", "2R", "3L", "3R", "4")))
 )

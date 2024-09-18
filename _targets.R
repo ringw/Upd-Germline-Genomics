@@ -133,45 +133,10 @@ repli.coverage <- list(
   contrast = c('EarlyLate', 'Weighted','EarlyLate','Weighted')
 )
 
-chic.raw.tracks <- tar_map(
-  tibble(
-    chic.samples,
-    chr_target = rlang::syms(paste0("chic.bam_", sample, "_chr"))
-  ),
-  names = sample,
-  unlist = FALSE,
-  tar_file(
-    chic.bam,
-    chr_target
-  ),
-  tar_target(
-    chic.raw,
-    bam_paired_fragment_ends(chic.bam, feature.lengths),
-    cue = tar_cue("never")
-  )
-)
-
 # ChIC lookup: For every driver x mark x input/mod aggregation.
 chic.lookup <- chic.fpkm.data %>%
   cross_join(chic.mark.data) %>%
   cross_join(tribble(~input, "input", "mod"))
-# Pull the sample names from the sample sheet csv. For each target chic.bam and
-# chic.raw, create rlang syms referring to the list of targets.
-chic.lookup$files <- mapply(
-  \(mark, driver, input) chic.samples[
-    chic.samples$driver == driver
-      & chic.samples$group == mark
-      & if (input == "input") chic.samples$molecule == "H3" else chic.samples$molecule != "H3",
-    "sample"
-  ] %>%
-    paste0("chic.bam_", .) %>%
-    rlang::syms() %>%
-    append(list("c"), .) %>% do.call(call, ., quote=T),
-  chic.lookup$mark,
-  chic.lookup$driver,
-  chic.lookup$input,
-  SIMPLIFY = FALSE
-)
 chic.lookup$sample_names <- mapply(
   \(mark, driver, input) chic.samples[
     chic.samples$driver == driver
@@ -193,20 +158,6 @@ chic.lookup$samples <- sapply(
 chic.lookup <- chic.lookup %>% within(
   lookup_name <- paste(input, mark, name, sep="_")
 )
-chic.experiments$chic_input_files <- chic.experiments %>%
-  mutate(input = "input") %>%
-  left_join(
-    chic.lookup %>% mutate(chic_input_files = files),
-    by = c("name", "driver", "mark", "input")
-  ) %>%
-  pull(chic_input_files)
-chic.experiments$chic_mod_files <- chic.experiments %>%
-  mutate(input = "mod") %>%
-  left_join(
-    chic.lookup %>% mutate(chic_mod_files = files),
-    by = c("name", "driver", "mark", "input")
-  ) %>%
-  pull(chic_mod_files)
 
 sce_targets <- tar_map(
   unlist = FALSE,
@@ -604,7 +555,6 @@ list(
   tar_file(align_chic_lightfiltering, "scripts/align_chic_lightfiltering.sh"),
   tar_file(align_repli_lightfiltering, "scripts/align_repli_lightfiltering.sh"),
   tar_file(align_repli, "scripts/align_repli.sh"),
-  chic.raw.tracks,
 
   tar_map(
     chic.fpkm.data,
