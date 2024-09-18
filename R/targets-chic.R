@@ -1703,6 +1703,7 @@ targets.chic <- list(
       chr = rep(as.factor(seqnames(nucleosome.repeat.length_Germline)), 2) %>%
         fct_recode(`2`="2L", `2`="2R", `3`="3L", `3`="3R") %>%
         relevel("X"),
+      chr.orig = rep(as.factor(seqnames(nucleosome.repeat.length_Germline)), 2),
       pos = rep(
         mid(nucleosome.repeat.length_Germline) +
           ifelse(
@@ -1719,7 +1720,7 @@ targets.chic <- list(
     ) %>%
       subset(chr != "rDNA") %>%
       ggplot(
-        aes(pos, value, group=celltype, color=celltype, fill=celltype)
+        aes(pos, value, group=interaction(celltype, chr.orig), color=celltype, fill=celltype)
       ) +
         facet_wrap(vars(chr), scales = "free_x", nrow=1) +
         geom_smooth() +
