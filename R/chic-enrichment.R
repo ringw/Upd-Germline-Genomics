@@ -435,7 +435,6 @@ gtf_granges_extended_from_tss <- function(granges, genes) {
 # position = dodge on a boxplot as we used on the violin, so this is going to be
 # a plainer plot.
 plot_enriched_chromosomes_combined <- function(data, label_pattern, title = label_pattern) {
-  fill_colors <- c(Germline="#96C586", Somatic="#A97AAC")
   data <- data %>% subset(grepl(label_pattern, label))
   ggplot(
     data,
@@ -449,7 +448,7 @@ plot_enriched_chromosomes_combined <- function(data, label_pattern, title = labe
       label = rep(c("H3K4me3", "H3K27me3", "H3K9me3"), length(unique(data$label))),
       size = 2
     ) +
-    scale_fill_manual(values = fill_colors) +
+    scale_fill_manual(values = cell_type_violin_colors) +
     coord_cartesian(NULL, c(-1.2, 1.2)) +
     labs(title = title) +
     theme(

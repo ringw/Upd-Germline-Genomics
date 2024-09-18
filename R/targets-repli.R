@@ -722,6 +722,100 @@ targets.repli <- list(
     )
   ),
 
+  # Violin graphic of chromosome arm features.
+  tar_target(
+    repli.feature.factor,
+    GRanges(
+      chromosome_arms_diameter_1000,
+      group = chromosome_arms_diameter_1000$group %>%
+        factor(c(levels(.), "4", "X", "Y")) %>%
+        replace(which(seqnames(chic.tile.diameter_1000_chr) == "4"), "4") %>%
+        replace(which(seqnames(chic.tile.diameter_1000_chr) == "X"), "X") %>%
+        replace(which(seqnames(chic.tile.diameter_1000_chr) == "Y"), "Y")
+    )
+  ),
+  tar_target(
+    repli.timing.byfeature,
+    bind_rows(
+      list(
+        Germline=tibble(
+          chr = factor(seqnames(chic.tile.diameter_1000_chr), names(chr.lengths)),
+          feature = repli.feature.factor$group,
+          timing = repli.timing_Germline_chr$score
+        ),
+        Somatic=tibble(
+          chr = factor(seqnames(chic.tile.diameter_1000_chr), names(chr.lengths)),
+          feature = repli.feature.factor$group,
+          timing = repli.timing_Somatic_chr$score
+        )
+      ),
+      .id = "celltype"
+    ) %>%
+      subset(!is.na(feature)) %>%
+      tibble(
+        row = feature %>%
+          fct_relabel(
+            \(n) ifelse(
+              grepl("^2", n),
+              "2",
+              ifelse(
+                grepl("^3", n),
+                "3",
+                ""
+              )
+            )
+          )
+      ),
+    format = "parquet"
+  ),
+  tar_file(
+    fig.repli.timing.byfeature,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "Repli-Chromosome-Arm-Violin",
+        ggplot(
+          repli.timing.byfeature,
+          aes(feature, timing, fill=celltype)
+        ) +
+          facet_wrap(vars(row), nrow=3, scales="free") +
+          geom_violin() +
+          geom_blank(
+            aes(),
+            tibble(
+              feature="", timing=0, celltype=c("Germline", "Somatic"), row=factor("", c("2", "3", ""))
+            )
+          ) +
+          scale_fill_manual(values = cell_type_violin_colors) +
+          labs(x = "Genomic Range") +
+          theme(
+            aspect.ratio = 1/3,
+            panel.grid.major.x = element_blank(),
+            legend.position = "none"
+          ),
+        4,
+        5,
+        "Repli-Chromosome-Violin",
+        ggplot(
+          repli.timing.byfeature,
+          aes(chr, timing, fill=celltype)
+        ) +
+          geom_violin() +
+          scale_fill_manual(values = cell_type_violin_colors) +
+          labs(x = "dm6 Chromosome") +
+          theme(
+            aspect.ratio = 1/3,
+            panel.grid.major.x = element_blank(),
+            legend.position = "none"
+          ),
+        6,
+        2,
+      )
+    )
+  ),
+
   # Repli-CHIC graphic for one CHIC track.
   tar_map(
     tibble(

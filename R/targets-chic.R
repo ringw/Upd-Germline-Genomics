@@ -1,4 +1,7 @@
 library(dplyr)
+
+cell_type_violin_colors <- c(Germline="#96C586", Somatic="#A97AAC")
+
 chic.samples = read.csv('chic/chic_samples.csv') %>%
   subset(sample != "" & !sapply(rejected, isTRUE)) %>%
   mutate(
