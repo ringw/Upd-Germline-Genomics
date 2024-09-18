@@ -352,13 +352,15 @@ targets.repli <- list(
           as.character(str_glue("H3K{c(4,27,9)}"))
         )
       ),
+      quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}")),
+      celltype_lower = tolower(celltype),
     ),
     names = celltype | reference,
     tar_target(
       repli.value.bindata,
       repli.timing %>%
         approx_track(chic.track) %>%
-        cut_track(seq(-0.75, 0.75, by = 0.002)) %>%
+        cut_track(seq(-1, 1, by = 0.002)) %>%
         elementMetadata() %>%
         as.data.frame(),
       format = "parquet"
@@ -370,7 +372,7 @@ targets.repli <- list(
     tar_target(
       repli.chic.projection.profile,
       cbind(
-        repli = seq(-0.75, 0.75, by = 0.002),
+        repli = seq(-1, 1, by = 0.002),
         sapply(
           chic.results,
           \(f) f %>%
@@ -385,6 +387,23 @@ targets.repli <- list(
             GRanges(chic.track, score = .) %>%
             apply_granges_projection(repli.value.projection, .)
         ),
+        split(
+          quartile.factor[names(chic.tile.diameter_500_score_genes)],
+          factor(
+            repli.value.bindata$bin[chic.tile.diameter_500_score_genes$lookup],
+            seq(max(repli.value.bindata$bin))
+          )
+        ) %>%
+          sapply(table) %>%
+          `/`(rowMaxs(.)) %>%
+          t %>%
+          matrix(
+            ncol = 4,
+            dimnames = list(
+              NULL,
+              c("TSS_off", "TSS_low", "TSS_medium", "TSS_high")
+            )
+          ),
         sample_size_bp = repli.value.bindata$size_of_bin_bp[
           match(seq(nrow(repli.value.projection[[1]])), repli.value.bindata$bin)
         ]
@@ -406,7 +425,8 @@ targets.repli <- list(
           6,
           4.5
         )
-      )
+      ),
+      packages = tar_option_get("packages") %>% c("colorspace")
     ),
     tar_file(
       fig.repli.chic.raster,
@@ -415,7 +435,8 @@ targets.repli <- list(
         plot_grid(as_grob(plot_repli_track_raster(repli.chic.projection.profile))$grobs[[6]]),
         w = 750,
         h = 5
-      )
+      ),
+      packages = tar_option_get("packages") %>% c("colorspace")
     )
   ),
   tar_target(
@@ -579,6 +600,18 @@ targets.repli <- list(
       seqinfo = seqinfo(chic.tile.diameter_1000_chr),
       lookup = chic.tile.diameter_1000_genes_location %>%
         findOverlaps(chic.tile.diameter_1000_chr) %>%
+        to()
+    ) %>%
+      setNames(names(chic.tile.diameter_1000_genes_location))
+  ),
+  tar_target(
+    chic.tile.diameter_500_score_genes,
+    GRanges(
+      seqnames(chic.tile.diameter_1000_genes_location),
+      ranges(chic.tile.diameter_1000_genes_location),
+      seqinfo = seqinfo(chic.tile.diameter_500_score_chr),
+      lookup = chic.tile.diameter_1000_genes_location %>%
+        findOverlaps(chic.tile.diameter_500_score_chr) %>%
         to()
     ) %>%
       setNames(names(chic.tile.diameter_1000_genes_location))

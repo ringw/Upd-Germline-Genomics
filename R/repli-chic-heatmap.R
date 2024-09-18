@@ -164,7 +164,29 @@ apply_granges_projection <- function(projs, granges) {
   )
 }
 
+repli_blend_sc_intensity <- function(sc_columns, sc_colors) {
+  color_fourth <- sc_columns[, 4]
+  color_third <- pmin(1 - color_fourth, sc_columns[, 3])
+  color_2 <- pmin(1 - color_third - color_fourth, sc_columns[, 2])
+  color_1 <- pmin(1 - color_2 - color_third - color_fourth, sc_columns[, 1])
+  colors_sRGB <- hex2RGB(c("#ffffff", sc_colors))
+  colors_lab <- as(colors_sRGB, "LAB")
+  cc <- mixcolor(color_1, colors_lab[1,], colors_lab[2,])
+  cc <- mixcolor(color_2, cc, colors_lab[3,])
+  cc <- mixcolor(color_third, cc, colors_lab[4,])
+  cc <- mixcolor(color_fourth, cc, colors_lab[5,])
+  hexvalues <- hex(cc)
+}
+
 plot_repli_track_raster <- function(data) {
+  sc_track <- tibble(
+    series = "TSS Density",
+    x = data[, "repli"],
+    fill = repli_blend_sc_intensity(
+      data[, c("TSS_off", "TSS_low", "TSS_medium", "TSS_high")],
+      sc_quartile_annotations
+    )
+  )
   sample_size_mb <- round(sum(data[, "sample_size_bp"], na.rm=T) / 1000 / 1000, 1)
   data[, grep("^H", colnames(data))] <- log(data[, grep("^H", colnames(data))]) / log(2)
   data <- melt(data) %>%
@@ -178,8 +200,8 @@ plot_repli_track_raster <- function(data) {
     )
   x_values <- unique(data$value[data$series == "ranking"])
   (
-    ggplot(data, aes(x, series, fill=value))
-    + geom_raster(aes(), subset(data, series == "Timing Est."))
+    ggplot(data, aes(x, series))
+    + geom_raster(aes(fill=value), subset(data, series == "Timing Est."))
     + scale_fill_gradientn(
       colors = c(
         hcl(30, 40, 10),
@@ -193,7 +215,8 @@ plot_repli_track_raster <- function(data) {
       guide = guide_colorbar(title = "timing"),
       limits = c(-0.75, 0.75),
       breaks = c(-0.75, 0, 0.75),
-      labels = c("-0.75", "0", "0.75")
+      labels = c("-0.75", "0", "0.75"),
+      na.value = "white"
     ) +
     new_scale_fill()
     + geom_raster(
@@ -207,32 +230,26 @@ plot_repli_track_raster <- function(data) {
       ) %>%
         mutate(value = 0)
     )
-    + annotate(
-      "text",
-      x = quantile(x_values, c(0.125, 0.375, 0.625, 0.875)),
-      y = 4,
-      label = c("Q1", "Q2", "Q3", "Q4"),
-      size = 3,
-      color = "white",
-      family = "Helvetica"
-    )
     + scale_fill_manual(
       values = unlist(rev(repli_level_colors), use.names = FALSE),
       guide = guide_none()
     )
     + new_scale_fill()
+    + geom_raster(aes(fill=fill), sc_track)
+    + scale_fill_identity()
+    + new_scale_fill()
     + geom_raster(aes(fill=value2), mutate(subset(data, grepl("^H", series)), value2=value))
-    + create_direction_invert_tss_tile_matrix_gradient(limits = c(-0.5, 1.6), oob = squish)
+    + create_direction_invert_tss_tile_matrix_gradient(limits = c(-0.5, 1.6), oob = squish, na.value = "white")
     + scale_x_reverse(
-      breaks = c(-0.75, -0.375, 0, 0.375, 0.75),
+      breaks = c(-1, -.5, 0, .5, 1),
       labels = purrr::partial(format, drop0 = TRUE),
       name = str_glue("Sorted Timing Est ({sample_size_mb} Mb)")
     )
     + scale_y_discrete(limits=rev)
-    + coord_cartesian(expand=F)
+    + coord_cartesian(c(1, -1), NULL, expand=F)
     + guides(fill = guide_colorbar(title = "log2(mark/input)"))
     + theme(
-      aspect.ratio = 2/3,
+      aspect.ratio = 4/5,
       panel.border = element_blank()
     )
   )
