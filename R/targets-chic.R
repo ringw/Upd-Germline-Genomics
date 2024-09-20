@@ -242,7 +242,13 @@ targets.chic <- list(
     tar_target(
       chic.tile.diameter_1000,
       sapply(
-        levels(seqnames(chic.tile_chr_granges_list[[1]])),
+        levels(
+          seqnames(chic.tile_chr_granges_list[[1]]) %>%
+            as.factor() %>%
+            # We are going to split chic.tile.diameter_1000_masked and then
+            # expect the first elements in the list to be masked.lengths!
+            fct_relevel("2L_Histone_Repeat_Unit", after=7L)
+        ),
         \(n) if (n %in% names(masked.feature.lengths))
           chic.tile_all_chr_diameter_1000_granges_list[[n]]
         else

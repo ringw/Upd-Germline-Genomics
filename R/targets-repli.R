@@ -96,7 +96,7 @@ targets.repli <- list(
         bulk_reads_split = mapply(
           \(ref_name, n) rlang::syms(
             str_glue(
-              "bulk_reads_{names(chr.lengths)}_{n}"
+              "bulk_reads_{if (ref_name == 'masked') names(masked.lengths) else names(chr.lengths)}_{n}"
             )
           ) %>%
             setNames(names(chr.lengths)) %>%
@@ -112,11 +112,6 @@ targets.repli <- list(
       rowwise() %>%
       # Include 2L_Histone_Repeat_Unit - split refs and sum up - when splitting by rname and summing.
       mutate(
-        bulk_reads_shortrefs = if (name == "masked") {
-          list(call("rbind", bulk_reads_misc, rlang::sym(str_glue("bulk_reads_2L_Histone_Repeat_Unit_repli.bam_{repli_target}_masked"))))
-        } else {
-          list(bulk_reads_misc)
-        },
         markdup = isTRUE(is_paired_end),
         df_pos_midpoint_callable = list(
           if (isTRUE(is_paired_end)) quote(paired_end_pos_to_midpoint) else quote(single_end_pos_to_midpoint)
