@@ -13,7 +13,7 @@ bulk.samples <- rbind(
 
 bulk.bam <- cross_join(
   bulk.samples,
-  tibble(reference = c("chr"))
+  reframe(bowtie.refs, reference = name)
 ) %>%
   mutate(
     bam.target = rlang::syms(str_glue("{bam}_{symbol}_{reference}"))
