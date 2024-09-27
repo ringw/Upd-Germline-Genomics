@@ -804,10 +804,12 @@ targets.repli <- list(
         ~rowname, ~figure, ~width, ~height,
         "Repli-Chromosome-Arm-Violin",
         ggplot(
-          repli.timing.byfeature,
+          # Reverse (top to bottom) feature. Reverse again celltype!
+          repli.timing.byfeature %>%
+            mutate(celltype = factor(celltype, c("Somatic", "Germline"))),
           aes(feature, timing, fill=celltype)
         ) +
-          facet_wrap(vars(row), nrow=3, scales="free") +
+          facet_wrap(vars(row), ncol=3, scales="free") +
           geom_violin() +
           geom_blank(
             aes(),
@@ -815,30 +817,38 @@ targets.repli <- list(
               feature="", timing=0, celltype=c("Germline", "Somatic"), row=factor("", c("2", "3", ""))
             )
           ) +
+          scale_x_discrete(limits = rev) +
+          scale_y_reverse() +
           scale_fill_manual(values = cell_type_violin_colors) +
           labs(x = "Genomic Range") +
+          coord_flip() +
           theme(
-            aspect.ratio = 1/3,
-            panel.grid.major.x = element_blank(),
-            legend.position = "none"
-          ),
-        4,
-        5,
-        "Repli-Chromosome-Violin",
-        ggplot(
-          repli.timing.byfeature,
-          aes(chr, timing, fill=celltype)
-        ) +
-          geom_violin() +
-          scale_fill_manual(values = cell_type_violin_colors) +
-          labs(x = "dm6 Chromosome") +
-          theme(
-            aspect.ratio = 1/3,
+            aspect.ratio = 1.5,
             panel.grid.major.x = element_blank(),
             legend.position = "none"
           ),
         6,
+        3,
+        "Repli-Chromosome-Violin",
+        ggplot(
+          # Reverse (top to bottom) feature. Reverse again celltype!
+          repli.timing.byfeature %>%
+            mutate(celltype = factor(celltype, c("Somatic", "Germline"))),
+          aes(chr, timing, fill=celltype)
+        ) +
+          geom_violin() +
+          scale_x_discrete(limits = rev) +
+          scale_y_reverse() +
+          scale_fill_manual(values = cell_type_violin_colors) +
+          labs(x = "dm6 Chromosome") +
+          coord_flip() +
+          theme(
+            aspect.ratio = 3,
+            panel.grid.major.x = element_blank(),
+            legend.position = "none"
+          ),
         2,
+        6,
       )
     )
   ),
