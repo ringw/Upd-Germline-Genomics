@@ -178,17 +178,32 @@ repli_blend_sc_intensity <- function(sc_columns, sc_colors) {
   hexvalues <- hex(cc)
 }
 
-plot_repli_track_raster <- function(data) {
-  sc_track <- tibble(
-    series = "TSS Density",
-    x = data[, "repli"],
-    fill = repli_blend_sc_intensity(
-      data[, c("TSS_off", "TSS_low", "TSS_medium", "TSS_high")],
-      sc_quartile_annotations
+plot_repli_track_raster <- function(data, log2_limits = c(-0.5, 0.52), censor_l2fc = numeric(0)) {
+  data <- data +
+    ifelse(
+      is.na(data[, "sample_size_bp"]) |
+        data[, "sample_size_bp"] < 500,
+      NA,
+      0
     )
-  )
+  if (any(grepl("TSS", colnames(data)))) {
+    sc_track <- tibble(
+      series = "TSS Density",
+      x = data[, "repli"],
+      fill = repli_blend_sc_intensity(
+        data[, c("TSS_off", "TSS_low", "TSS_medium", "TSS_high")],
+        sc_quartile_annotations
+      )
+    )
+  } else {
+    sc_track <- NULL
+  }
   sample_size_mb <- round(sum(data[, "sample_size_bp"], na.rm=T) / 1000 / 1000, 1)
-  data[, grep("^H", colnames(data))] <- log(data[, grep("^H", colnames(data))]) / log(2)
+  data[, grep("^H", colnames(data))] <- (
+    log(data[, grep("^H", colnames(data))]) / log(2)
+  ) %>%
+    replace(. < -censor_l2fc, NA) %>%
+    replace(. > censor_l2fc, NA)
   data <- melt(data) %>%
     mutate(series = series %>% fct_recode(`Timing Est.`="repli")) %>%
     group_by(timing) %>%
@@ -199,7 +214,9 @@ plot_repli_track_raster <- function(data) {
       x = value[which.max(series == "ranking")]
     )
   x_values <- unique(data$value[data$series == "ranking"])
-  (
+  range_x <- range(data$x[data$series == "Timing Est." & !is.na(data$value)])
+  rnd_x <- round(range_x, 2)
+  gg <- (
     ggplot(data, aes(x, series))
     + geom_raster(aes(fill=value), subset(data, series == "Timing Est."))
     + scale_fill_gradientn(
@@ -213,44 +230,46 @@ plot_repli_track_raster <- function(data) {
       ),
       values = c(0, 0.125, 0.375, 0.625, 0.875, 1),
       guide = guide_colorbar(title = "timing"),
-      limits = c(-0.75, 0.75),
-      breaks = c(-0.75, 0, 0.75),
-      labels = c("-0.75", "0", "0.75"),
-      na.value = "white"
-    ) +
-    new_scale_fill()
-    + geom_raster(
-      aes(fill=q),
-      tribble(
-        ~x, ~series, ~q,
-        -9/16 - 7.5e-04, "Quartile", "Q1",
-        -3/16 - 2.5e-04, "Quartile", "Q2",
-        3/16 + 2.5e-04, "Quartile", "Q3",
-        9/16 + 7.5e-04, "Quartile", "Q4"
-      ) %>%
-        mutate(value = 0)
-    )
-    + scale_fill_manual(
-      values = unlist(rev(repli_level_colors), use.names = FALSE),
-      guide = guide_none()
-    )
-    + new_scale_fill()
-    + geom_raster(aes(fill=fill), sc_track)
-    + scale_fill_identity()
-    + new_scale_fill()
-    + geom_raster(aes(fill=value2), mutate(subset(data, grepl("^H", series)), value2=value))
-    + create_direction_invert_tss_tile_matrix_gradient(limits = c(-0.5, 1.6), oob = squish, na.value = "white")
-    + scale_x_reverse(
-      breaks = c(-1, -.5, 0, .5, 1),
-      labels = purrr::partial(format, drop0 = TRUE),
-      name = str_glue("Sorted Timing Est ({sample_size_mb} Mb)")
-    )
-    + scale_y_discrete(limits=rev)
-    + coord_cartesian(c(1, -1), NULL, expand=F)
-    + guides(fill = guide_colorbar(title = "log2(mark/input)"))
-    + theme(
-      aspect.ratio = 4/5,
-      panel.border = element_blank()
+      limits = c(-1, 1),
+      breaks = c(rnd_x[1], -0.5, 0, 0.5, rnd_x[2]),
+      labels = c(rnd_x[1], "-0.5", "0", "0.5", rnd_x[2]),
+      na.value = "transparent"
     )
   )
+  if (!is.null(sc_track)) {
+    gg <- gg +
+      new_scale_fill() +
+      geom_raster(aes(fill=fill), sc_track) +
+      scale_fill_identity()
+  }
+  gg <- gg +
+    new_scale_fill() +
+    geom_raster(aes(fill=value2), mutate(subset(data, grepl("^H", series)), value2=value)) +
+    create_direction_invert_tss_tile_matrix_gradient(
+      invert_tss_limits = if (is.null(log2_limits))
+        range(data$value[grepl("^H", data$series)], na.rm=T)
+      else
+        log2_limits,
+      breaks = pretty_breaks(3),
+      limits = log2_limits, oob = squish, na.value = "transparent"
+    ) +
+    scale_x_reverse(
+      breaks = c(range_x[1], -.5, 0, .5, range_x[2]),
+      labels = c(
+        round(range_x[1], 2),
+        "-0.5",
+        "0",
+        "0.5",
+        round(range_x[2], 2)
+      ),
+      name = str_glue("Sorted Timing Est ({sample_size_mb} Mb)")
+    ) +
+    scale_y_discrete(limits=rev) +
+    coord_cartesian(rev(range_x), NULL, expand=F) +
+    guides(fill = guide_colorbar(title = "log2(mark/input)")) +
+    theme(
+      aspect.ratio = 2/3,
+      panel.border = element_blank(),
+      panel.grid.major.y = element_blank()
+    )
 }

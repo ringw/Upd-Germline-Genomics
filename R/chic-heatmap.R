@@ -224,9 +224,9 @@ smooth_image_columns <- function(
     head(orig_height)
 }
 
-create_direction_invert_tss_tile_matrix_gradient <- function(...) scale_fill_gradientn(
+create_direction_invert_tss_tile_matrix_gradient <- function(invert_tss_limits = c(-1, 3), ...) scale_fill_gradientn(
   colors = c("white", viridis(7, option = "magma", end = 0.9, direction = -1)),
-  values = c(0, 1, 1.5, 2, 2.5, 3, 3.5, 4) %>% rescale,
+  values = c(0, seq(-invert_tss_limits[1], diff(invert_tss_limits), length.out = 7)) %>% rescale(),
   ...
 )
 

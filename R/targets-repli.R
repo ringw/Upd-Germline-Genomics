@@ -416,7 +416,12 @@ targets.repli <- list(
         tribble(
           ~name, ~figure, ~width, ~height,
           paste0("Repli-CHIC-Whole-Genome-", reference),
-          plot_repli_track_raster(repli.chic.projection.profile),
+          plot_repli_track_raster(repli.chic.projection.profile, log2_limits = c(-0.65, 0.8)) +
+            annotate(
+              # Quartile cuts!
+              "segment",
+              c(0.5, 0, -0.5), 4.5, xend=c(0.5, 0, -0.5), yend=5.5
+            ),
           6,
           4.5
         )
