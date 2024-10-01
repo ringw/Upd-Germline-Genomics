@@ -598,15 +598,17 @@ targets.repli <- list(
   tar_target(
     chic.tile.diameter_1000_genes_location,
     read.csv(assay.data.sc) %$%
-      GRanges(
-        chr[!is.na(chr)],
-        IRanges(
-          ifelse(strand[!is.na(chr)] == "+", start[!is.na(chr)], end[!is.na(chr)]),
-          width = 1
+      setNames(
+        GRanges(
+          chr %>% replace(is.na(chr), "Y"),
+          IRanges(
+            ifelse(strand == "+", start, end) %>%
+              replace(is.na(chr), -10000),
+            width = 1
+          )
         ),
-        gene_name = X[!is.na(chr)]
-      ) %>%
-        setNames(.$gene_name)
+        X
+      )
   ),
   tar_target(
     chic.tile.diameter_1000_genes,
@@ -616,7 +618,7 @@ targets.repli <- list(
       seqinfo = seqinfo(chic.tile.diameter_1000_chr),
       lookup = chic.tile.diameter_1000_genes_location %>%
         findOverlaps(chic.tile.diameter_1000_chr) %>%
-        to()
+        sapply(\(v) head(c(v, NA), 1))
     ) %>%
       setNames(names(chic.tile.diameter_1000_genes_location))
   ),
@@ -628,7 +630,7 @@ targets.repli <- list(
       seqinfo = seqinfo(chic.tile.diameter_500_score_chr),
       lookup = chic.tile.diameter_1000_genes_location %>%
         findOverlaps(chic.tile.diameter_500_score_chr) %>%
-        to()
+        sapply(\(v) head(c(v, NA), 1))
     ) %>%
       setNames(names(chic.tile.diameter_1000_genes_location))
   ),
