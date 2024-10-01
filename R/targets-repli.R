@@ -621,6 +621,7 @@ targets.repli <- list(
   tar_map(
     tibble(
       experiment.driver,
+      repli.dm = rlang::syms(str_glue("repli.dm_{celltype}_chr")),
       repli.timing = rlang::syms(str_glue("repli.timing_{celltype}_chr")),
       figure_dir = str_glue("figure/{celltype}"),
       repli_quartile_data_TSS = rlang::syms(str_glue("repli_quartile_data_{celltype}_TSS")),
@@ -641,11 +642,7 @@ targets.repli <- list(
           4
         )
       ),
-      packages = tar_option_get("packages") %>% c("grid", "gtable"),
-      # We are going to edit the PDF and arrange the track line in front of the
-      # panel. In ggplot, to make the grid visible at all, it was placed in the
-      # foreground of the content.
-      cue = tar_cue("never")
+      packages = tar_option_get("packages") %>% c("grid", "gtable")
     ),
 
     # Factor for genes.
@@ -751,6 +748,40 @@ targets.repli <- list(
           10, 3.25,
         )
       )
+    ),
+    tar_file(
+      fig.repli.dm.barchart,
+      save_figures(
+        paste0("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          "Repli-Fraction-Bars-Chrs",
+          dm_barplot(
+            repli.dm,
+            chromosome_arms_diameter_1000
+          ) %>%
+            set_panel_size(
+              w = unit(3.25, "in"),
+              h = unit(1.35, "in")
+            ),
+          4,
+          2,
+          "Repli-Fraction-Bars-Chromosome-Arms",
+          dm_barplot(
+            repli.dm,
+            chromosome_arms_diameter_1000,
+            chromosome_arms_diameter_1000$group
+          ) %>%
+            set_panel_size(
+              w = unit(3.25, "in"),
+              h = unit(1.35 * 8/7, "in")
+            ),
+          4,
+          2,
+        )
+      ),
+      packages = tar_option_get("packages") %>% c("egg")
     )
   ),
 
