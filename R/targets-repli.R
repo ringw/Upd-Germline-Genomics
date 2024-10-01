@@ -322,6 +322,22 @@ targets.repli <- list(
         export(BigWigFile(str_glue("repli/Replication_Bayes_", celltype, "_", reference, ".bw"))) %>%
         as.character()
     ),
+    tar_file(
+      repli.map.bw,
+      GRanges(
+        chic.tile.diameter_1000,
+        score = repli.posterior %>%
+          group_by(rowname) %>%
+          summarise(
+            value = mean(
+              (1 - 2*value)[rank(prob, ties="max") == length(prob)]
+            )
+          ) %>%
+          pull(value)
+      ) %>%
+        export(BigWigFile(str_glue("repli/Replication_MAP_", celltype, "_", reference, ".bw"))) %>%
+        as.character()
+    ),
     tar_target(
       repli.autocorrelation.beta,
       repli.timing %>% autocorrelate_centered_granges(1001)
