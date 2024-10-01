@@ -178,7 +178,7 @@ repli_blend_sc_intensity <- function(sc_columns, sc_colors) {
   hexvalues <- hex(cc)
 }
 
-plot_repli_track_raster <- function(data, log2_limits = c(-0.5, 0.52), censor_l2fc = numeric(0)) {
+plot_repli_track_raster <- function(data, log2_limits = c(-0.5, 0.52)) {
   data <- data +
     ifelse(
       is.na(data[, "sample_size_bp"]) |
@@ -201,9 +201,7 @@ plot_repli_track_raster <- function(data, log2_limits = c(-0.5, 0.52), censor_l2
   sample_size_mb <- round(sum(data[, "sample_size_bp"], na.rm=T) / 1000 / 1000, 1)
   data[, grep("^H", colnames(data))] <- (
     log(data[, grep("^H", colnames(data))]) / log(2)
-  ) %>%
-    replace(. < -censor_l2fc, NA) %>%
-    replace(. > censor_l2fc, NA)
+  )
   data <- melt(data) %>%
     mutate(series = series %>% fct_recode(`Timing Est.`="repli")) %>%
     group_by(timing) %>%
