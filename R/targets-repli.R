@@ -636,6 +636,32 @@ targets.repli <- list(
   ),
 
   # Repli graphic for dmel-all-chromosomes, not the masked bowtie reference.
+  tar_file(
+    fig.repli.skew.difference,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "Repli-Skew-Diff-Timing",
+        plot_genomic_ranges_score(
+          GRanges(
+            chic.tile.diameter_1000_chr,
+            score = repli.timing_Germline_chr$score - repli.timing_Somatic_chr$score
+          )[
+            to(findOverlaps(repli.peaks_chr, chic.tile.diameter_1000_chr))
+          ],
+          repli_early_late_background$E, repli_early_late_background$L,
+          name = "Diff.",
+          limits=c(-1.8, 1.8),
+          breaks=c(-1.8, 0, 1.8)
+        ),
+        5.75,
+        4
+      )
+    ),
+    packages = tar_option_get("packages") %>% c("grid", "gtable")
+  ),
   tar_map(
     tibble(
       experiment.driver,

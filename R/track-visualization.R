@@ -4,8 +4,7 @@ plot_track <- function(
     negative_color = "#f7f9e7",
     name = "Timing",
     limits = c(-1, 1),
-    breaks = c(-1, 0, 1),
-    subsample_draw = TRUE) {
+    breaks = c(-1, 0, 1)) {
   df <- tibble(
     chr = as.factor(seqnames(track)),
     pos = mid(track),
@@ -14,19 +13,152 @@ plot_track <- function(
     subset(chr %in% names(chr.lengths))
   chr_lookup <- as.numeric(df$chr)
   chr_levels <- list(`2` = 1, `3` = 2, `4` = 3, `X` = 4, `Y` = 5)
-  if (subsample_draw)
-    df <- df %>%
-      dplyr::slice(
-        df %>%
-          group_by(chr) %>%
-          reframe(
-            keep = seq(length(pos)) %in% round(seq(1, length(pos), length.out=1000)) |
-              chr == "4"
-          ) %>%
-          pull(keep) %>%
-          which()
-      )
+  df <- df %>%
+    dplyr::slice(
+      df %>%
+        group_by(chr) %>%
+        reframe(
+          keep = seq(length(pos)) %in% round(seq(1, length(pos), length.out=1000)) |
+            chr == "4"
+        ) %>%
+        pull(keep) %>%
+        which()
+    )
   plot_chr <- function(chr.) ggplot(subset(df, chr == chr.), aes(pos, value)) +
+    annotate(
+      "rect",
+      xmin=-Inf, xmax=Inf,
+      ymin=-Inf, ymax=0,
+      fill=negative_color
+    ) +
+    annotate(
+      "rect",
+      xmin=-Inf, xmax=Inf,
+      ymin=Inf, ymax=0,
+      fill=positive_color
+    ) +
+    geom_line(linewidth = 0.25) +
+    scale_x_continuous(
+      name = NULL,
+      breaks = c(1, 1000000 * seq(2, 100, by=2)),
+      minor_breaks = 1000000 * seq(1, 101, by=2),
+      labels = NULL
+    ) +
+    scale_y_continuous(
+      name = name,
+      limits = limits,
+      breaks = breaks,
+      oob = scales::squish
+    ) +
+    coord_cartesian(
+      NULL, limits, expand=F
+    ) +
+    theme_bw() +
+    theme(
+      panel.background = element_rect(fill = NA),
+      panel.border = element_blank(),
+      panel.grid = element_blank()
+    )
+  ggplot_build_panel_absolute <- function(gg, height, width, margin_right = unit(5.5, "points")) {
+    gr <- as_grob(gg)
+    gr$heights[7] <- height
+    gr$widths[5] <- width
+    gr$widths[9] <- margin_right
+    gr <- gr
+  }
+  # Contents width will be 5.25 in. Two-column (chromosome arms) layout will be
+  # handled by the two arms having precisely 2 * default margins (5.5 pt) in
+  # between the columns, and no other middle content (axis title, axis text).
+  chrX <- (
+    plot_chr("X") +
+      labs(title = "Chromosome X")
+  ) %>%
+    ggplot_build_panel_absolute(
+      unit(0.35, "in"), unit(4.5, "in"), unit(0.55, "in") + unit(11, "points")
+    )
+  chr2 <- cbind(
+    (plot_chr("2L") + labs(title = "Chromosome 2")) %>%
+      ggplot_build_panel_absolute(unit(0.35, "in"), unit(2.5, "in")),
+    (
+      plot_chr("2R") +
+        theme(
+          axis.title = element_blank(),
+          axis.text = element_blank()
+        )
+    ) %>%
+      ggplot_build_panel_absolute(
+        unit(0.35, "in"), unit(2.5, "in"), unit(0.05, "in")
+      )
+  )
+  chr3 <- cbind(
+    (plot_chr("3L") + labs(title = "Chromosome 3")) %>%
+      ggplot_build_panel_absolute(unit(0.35, "in"), unit(2.5, "in")),
+    (
+      plot_chr("3R") +
+        theme(
+          axis.title = element_blank(),
+          axis.text = element_blank()
+        )
+    ) %>%
+      ggplot_build_panel_absolute(
+        unit(0.35, "in"), unit(2.5, "in"), unit(0.05, "in")
+      )
+  )
+  chr4 <- (
+    plot_chr("4") +
+      labs(title = "Chromosome 4")
+  ) %>%
+    ggplot_build_panel_absolute(
+      unit(0.35, "in"), unit(2, "in"), unit(3.05, "in") + unit(11, "points")
+    )
+  chrY <- (
+    plot_chr("Y") +
+      labs(title = "Chromosome Y")
+  ) %>%
+    ggplot_build_panel_absolute(
+      unit(0.35, "in"), unit(2, "in"), unit(3.05, "in") + unit(11, "points")
+    )
+  mylayout <- gtable(
+    widths = unit(1, 'null'), heights = unit(rep(0.75, 5), 'in')
+  ) %>%
+    gtable_add_grob(
+      list(
+        chrX, chr2, chr3, chr4, chrY
+      ),
+      1:5,
+      1
+    )
+  plot_grid(mylayout)
+}
+
+plot_genomic_ranges_score <- function(
+    track,
+    positive_color = "#e0eff9",
+    negative_color = "#f7f9e7",
+    name = "Timing",
+    limits = c(-1, 1),
+    breaks = c(-1, 0, 1)) {
+  df <- tibble(
+    chr = as.factor(seqnames(track)),
+    pos = mid(track),
+    value = track$score
+  )
+  df$group <- cumsum(
+    c(
+      1,
+      end(track)[-length(track)] + 1 != start(track)[-1] |
+        diff(as.numeric(seqnames(track))) != 0
+    )
+  )
+  df <- df %>% subset(chr %in% names(chr.lengths))
+  df <- df %>%
+    group_by(group) %>%
+    dplyr::slice(
+      unique(round(seq(1, length(pos), length.out=pmax(3, round(diff(range(pos)) / 10000)))))
+    )
+  chr_lookup <- as.numeric(df$chr)
+  chr_levels <- list(`2` = 1, `3` = 2, `4` = 3, `X` = 4, `Y` = 5)
+  plot_chr <- function(chr.) ggplot(subset(df, chr == chr.), aes(pos, value, group=group)) +
     annotate(
       "rect",
       xmin=-Inf, xmax=Inf,
