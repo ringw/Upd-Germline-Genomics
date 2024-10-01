@@ -1,6 +1,12 @@
 # chr lengths from dmel r6.47
-chr.lengths = c(
+chr.lengths <- c(
   `2L`=23513712, `2R`=25286936, `3L`=28110227, `3R`=32079331, `4`=1348131, X=23542271, Y=3667352
+)
+scaffolds.length <- 6178042
+
+chr.colors <- setNames(
+  hcl(seq(0, 330, length.out=8)[-8] + 100, 100, 65),
+  names(chr.lengths)
 )
 
 misc.lengths <- c(

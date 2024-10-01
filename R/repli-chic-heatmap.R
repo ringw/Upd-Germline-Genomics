@@ -164,18 +164,32 @@ apply_granges_projection <- function(projs, granges) {
   )
 }
 
-repli_blend_sc_intensity <- function(sc_columns, sc_colors) {
-  color_fourth <- sc_columns[, 4]
-  color_third <- pmin(1 - color_fourth, sc_columns[, 3])
-  color_2 <- pmin(1 - color_third - color_fourth, sc_columns[, 2])
-  color_1 <- pmin(1 - color_2 - color_third - color_fourth, sc_columns[, 1])
-  colors_sRGB <- hex2RGB(c("#ffffff", sc_colors))
-  colors_lab <- as(colors_sRGB, "LAB")
-  cc <- mixcolor(color_1, colors_lab[1,], colors_lab[2,])
-  cc <- mixcolor(color_2, cc, colors_lab[3,])
-  cc <- mixcolor(color_third, cc, colors_lab[4,])
-  cc <- mixcolor(color_fourth, cc, colors_lab[5,])
-  hexvalues <- hex(cc)
+my_mix_color_correct_overplotting <- function(mix_columns) {
+  # sums <- rowSums(mix_columns)
+  # mix_columns <- mix_columns *
+  #   ifelse(sums > 1, 1/sums, 1)
+  cumulative_color <- 0
+  for (i in seq(ncol(mix_columns))) {
+    mix_columns[, i] <- mix_columns[, i] %>%
+      pmin(1 - cumulative_color)
+    cumulative_color <- cumulative_color + mix_columns[, i]
+  }
+  mix_columns <- mix_columns
+}
+
+my_mix_color <- function(mix_columns, mix_colors) {
+  cumulative_paint <- 1 - rowSums(mix_columns, na.rm=T)
+  result <- hex2RGB("#ffffff")
+  for (i in seq(ncol(mix_columns))) {
+    result <- mixcolor(
+      mix_columns[, i] / (mix_columns[, i] + cumulative_paint),
+      result,
+      mix_colors[i],
+      "LAB"
+    )
+    cumulative_paint <- cumulative_paint + mix_columns[, i]
+  }
+  result <- result
 }
 
 plot_repli_track_raster <- function(data, log2_limits = c(-0.5, 0.52)) {
@@ -190,15 +204,31 @@ plot_repli_track_raster <- function(data, log2_limits = c(-0.5, 0.52)) {
     sc_track <- tibble(
       series = "TSS Density",
       x = data[, "repli"],
-      fill = repli_blend_sc_intensity(
-        data[, c("TSS_off", "TSS_low", "TSS_medium", "TSS_high")],
-        sc_quartile_annotations
-      )
+      fill = my_mix_color(
+        data[, c("TSS_high", "TSS_medium", "TSS_low", "TSS_off")] %>%
+          my_mix_color_correct_overplotting(),
+        hex2RGB(rev(sc_quartile_annotations))
+      ) %>%
+        hex()
     )
   } else {
     sc_track <- NULL
   }
-  sample_size_mb <- round(sum(data[, "sample_size_bp"], na.rm=T) / 1000 / 1000, 1)
+  chr_track <- tibble(
+    series = "Mode Chr.",
+    x = data[, "repli"],
+    fill = data[, c("chr2L", "chr2R", "chr3L", "chr3R", "chr4", "chrX", "chrY")] %>%
+      cbind(scaffolds = 1 - rowSums(.)) %>%
+      `*`(
+        rep(
+          1000 / c(chr.lengths, scaffolds.length),
+          each = nrow(.)
+        )
+      ) %>%
+      apply(1, \(v) if (any(is.finite(v))) which.max(v) else NA) %>%
+      `[`(c(chr.colors, "#ffffff"), value = .)
+  )
+  sample_size_mb <- round(sum(data[-match(0, data[, "repli"]), "sample_size_bp"], na.rm=T) / 1000 / 1000, 1)
   data[, grep("^H", colnames(data))] <- (
     log(data[, grep("^H", colnames(data))]) / log(2)
   )
@@ -240,6 +270,10 @@ plot_repli_track_raster <- function(data, log2_limits = c(-0.5, 0.52)) {
       geom_raster(aes(fill=fill), sc_track) +
       scale_fill_identity()
   }
+  gg <- gg +
+    new_scale_fill() +
+    geom_raster(aes(fill=fill), chr_track) +
+    scale_fill_identity()
   gg <- gg +
     new_scale_fill() +
     geom_raster(aes(fill=value2), mutate(subset(data, grepl("^H", series)), value2=value)) +

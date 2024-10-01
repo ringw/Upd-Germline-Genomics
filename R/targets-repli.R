@@ -415,6 +415,18 @@ targets.repli <- list(
               c("TSS_off", "TSS_low", "TSS_medium", "TSS_high")
             )
           ),
+        # For 7 dm6 ref seqs, write out % of 1kb windows that are from the seq.
+        split(
+          as.factor(seqnames(chic.tile.diameter_500_score_chr)),
+          factor(
+            repli.value.bindata$bin,
+            seq(max(repli.value.bindata$bin))
+          )
+        ) %>%
+          sapply(
+            \(chr) colMeans(model.matrix(~ 0 + chr)[, 1:7, drop=F])
+          ) %>%
+          t(),
         sample_size_bp = repli.value.bindata$size_of_bin_bp[
           match(seq(nrow(repli.value.projection[[1]])), repli.value.bindata$bin)
         ]
@@ -436,7 +448,7 @@ targets.repli <- list(
             annotate(
               # Quartile cuts!
               "segment",
-              c(0.5, 0, -0.5), 4.5, xend=c(0.5, 0, -0.5), yend=5.5
+              c(0.5, 0, -0.5), 5.5, xend=c(0.5, 0, -0.5), yend=6.5
             ),
           6,
           4.5
