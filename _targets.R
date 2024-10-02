@@ -138,31 +138,6 @@ chic.lookup <- chic.fpkm.data %>%
   cross_join(chic.mark.data) %>%
   cross_join(tribble(~input, "input", "mod"))
 
-sce_targets <- tar_map(
-  unlist = FALSE,
-  sce.data %>% mutate(obj = rlang::syms(batch)),
-  names = batch,
-  tar_file(
-    tenx_file, tenx_path,
-    cue = tar_cue("never")
-  ),
-  # Our light QC (before SCTransform) will be based on mitochondrial percent and
-  # ribo transcript percent. This is not the full QC. Later we will filter
-  # nCount_RNA and nFeature_RNA. At this stage, these criteria did not need to
-  # be applied to get clear clusters.
-  tar_target(
-    seurat_qc,
-    read_seurat_sctransform(
-      tenx_file, batch, sce.present.features, assay.data.sc
-    )
-  ),
-  # Plot every batch, for validation.
-  tar_target(
-    batch_umap,
-    run_umap_on_batch(obj, metadata),
-    packages = c(tar_option_get("packages"), "tidyr")
-  )
-)
 
 
 list(
@@ -212,20 +187,7 @@ list(
       flybase.annotations, flybase.gtf, h3.gfp.gtf, sce.present.features,
       'scRNA-seq-Assay-Metadata.csv')
   ),
-  tar_target(nos.1, call_nos.1(seurat_qc_nos.1)),
-  tar_target(nos.2, call_nos.2(seurat_qc_nos.2)),
-  tar_target(tj.1, call_tj.1(seurat_qc_tj.1)),
-  tar_target(tj.2, call_tj.2(seurat_qc_tj.2)),
-  tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
   tar_target(Upd_model_matrix, build_model_matrix(FetchData(Upd_sc, c("ident", "batch")), Upd_decontX_contamination)),
-  tar_target(
-    Upd_phase,
-    Upd_sc %>%
-      apply_cell_cycle_score(cell_cycle_drosophila, assay.data.sc) %>%
-      FetchData("Phase") %>%
-      rownames_to_column() %>%
-      pull(Phase, rowname)
-  ),
   tar_target(
     shuffle_feature_plot,
     sample(Cells(Upd_sc))
@@ -275,7 +237,6 @@ list(
     ),
     packages = tar_option_get("packages") %>% c("future.apply", "R.utils")
   ),
-  sce_targets,
   # Pseudobulk by the genotype (Nos-GAL4 or tj-GAL4).
   tar_target(
     supplemental_genes,

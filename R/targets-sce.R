@@ -1,4 +1,54 @@
 targets.sce <- list(
+  # Each 10X Cell Ranger -> a Seurat object to filter out doublet clusters later.
+  tar_map(
+    sce.data %>% mutate(obj = rlang::syms(batch)),
+    names = batch,
+    tar_file(
+      tenx_file, tenx_path,
+      cue = tar_cue("never")
+    ),
+    # Read 10X and immediately apply mt_pct and ribo_pct to filter cells. This
+    # target is not going to filter nFeature or nCount. Doublets are low-
+    # complexity (they contain both germline and somatic transcripts and are a
+    # big cluster somewhere in the middle in terms of transcriptome). Keeping
+    # barcodes with excessive transcripts makes the doublet clusters more
+    # apparent in the next step.
+    tar_target(
+      seurat_qc,
+      read_seurat_sctransform(
+        tenx_file, batch, sce.present.features, assay.data.sc
+      )
+    ),
+    # Plot every batch, for validation.
+    tar_target(
+      batch_umap,
+      run_umap_on_batch(obj, metadata),
+      packages = c(tar_option_get("packages"), "tidyr")
+    )
+  ),
+  # Call clusters in the biological replicate. The purpose of this indep
+  # clustering step before integration is to identify doublets.
+  tar_target(nos.1, call_nos.1(seurat_qc_nos.1)),
+  tar_target(nos.2, call_nos.2(seurat_qc_nos.2)),
+  tar_target(tj.1, call_tj.1(seurat_qc_tj.1)),
+  tar_target(tj.2, call_tj.2(seurat_qc_tj.2)),
+  # Filter by nCount/nFeature, integrate, and separate cells into 5 clusters.
+  # The Seurat clustering functions using the Upd_sc target's random seed and
+  # the parameters in this function are what really matter for exactly
+  # reproducing our clustering of the cells.
+  tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
+
+  # Store Seurat cell cycle feature result, as we didn't put this into the
+  # Upd_sc target.
+  tar_target(
+    Upd_phase,
+    Upd_sc %>%
+      apply_cell_cycle_score(cell_cycle_drosophila, assay.data.sc) %>%
+      FetchData("Phase") %>%
+      rownames_to_column() %>%
+      pull(Phase, rowname)
+  ),
+
   # Fig. S1. UMAP plots.
   tar_file(
     sc_idents_supp,
