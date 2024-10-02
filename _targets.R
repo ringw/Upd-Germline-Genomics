@@ -693,9 +693,6 @@ list(
     )
   ),
 
-  tar_target(demo.f.distribution, demo_f_distribution()),
-  tar_target(plot.scaled.f.distribution, plot_scaled_f()),
-
   tar_target(
     cpm_gene_lists_extended,
     cpm_gene_lists %>%
