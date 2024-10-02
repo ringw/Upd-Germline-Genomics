@@ -137,27 +137,6 @@ repli.coverage <- list(
 chic.lookup <- chic.fpkm.data %>%
   cross_join(chic.mark.data) %>%
   cross_join(tribble(~input, "input", "mod"))
-chic.lookup$sample_names <- mapply(
-  \(mark, driver, input) chic.samples[
-    chic.samples$driver == driver
-      & chic.samples$group == mark
-      & if (input == "input") chic.samples$molecule == "H3" else chic.samples$molecule != "H3",
-    "sample"
-  ] %>%
-    paste0("chic.raw_", .),
-  chic.lookup$mark,
-  chic.lookup$driver,
-  chic.lookup$input,
-  SIMPLIFY = FALSE
-)
-chic.lookup$samples <- sapply(
-  chic.lookup$sample_names,
-  rlang::syms,
-  simplify = FALSE
-)
-chic.lookup <- chic.lookup %>% within(
-  lookup_name <- paste(input, mark, name, sep="_")
-)
 
 sce_targets <- tar_map(
   unlist = FALSE,
