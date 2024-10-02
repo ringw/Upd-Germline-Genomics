@@ -1033,66 +1033,10 @@ list(
             facet_wrap(vars(mark))
           ),
           4, 4,
-          # "CHIC-AllMarks-Peak-Annotation",
-          # plot.chic.peak.location
-          # + scale_y_continuous(
-          #   limits = limits_plot.chic.peak.location,
-          #   expand = expansion(mult = c(0, 0.05))
-          # ),
-          # 6, 3
         )
       )
     )
   ),
-
-  # Did not make one of these for the completed replication timing values and
-  # their cuts yet. Do so!
-  # tar_map(
-  #   data.frame(extension = c(".pdf", ".png")),
-  #   tar_target(
-  #     name = repli.chic.quarter_Somatic,
-  #     chic_average_profiles(
-  #       repli.quarters_Tj_Weighted %>%
-  #         rownames_to_column %>%
-  #         pull(quarter, rowname) %>%
-  #         # Some genes were not quantified in 10X Genomics BAM TX. The reason why
-  #         # those genomic features were unsuitable for quantifying at the isoform
-  #         # level by 10X Cell Ranger is unclear. To make Repli and FPKM somewhat
-  #         # more comparable (although there may still be genomic features with low
-  #         # read count in the Repli window and we will remove those features
-  #         # before any Repli computation), we will filter Repli features using 10X
-  #         # FPKM feature criteria.
-  #         subset(names(.) %in% names(quartile.factor_Somatic)),
-  #       dirname(
-  #         c(
-  #           chic.bw_H3K4_Somatic,
-  #           chic.bw_H3K27_Somatic,
-  #           chic.bw_H3K9_Somatic
-  #         )[1]
-  #       ),
-  #       assay.data.sc,
-  #       'tj',
-  #       'Repli Quartile',
-  #       setNames(repli_quartile_fills, NULL)
-  #     ) %>%
-  #       list %>%
-  #       tibble(
-  #         name = "Somatic_marks",
-  #         figure = .,
-  #         width = 9,
-  #         height = 4
-  #       ) %>%
-  #       save_figures("repli/profile", extension, ., dpi = 300),
-  #     format = "file"
-  #   )
-  # ),
-
-  #,
-
-  # tar_target(repli_dir, 'Repli-Seq/Validation', format='file'),
-  # tar_target(name = repli.raw, command = load_repli(repli_dir), cue=tar_cue('never')),
-  # tar_target(name = repli, command = normalize_repli(repli.raw), cue=tar_cue('never')),
-  # tar_target(name = repli.hmm, command = repli_fit_hmm(repli), cue=tar_cue('never'))
 
   # Repli-Seq
   tar_file(run_fastqc_sh, "scripts/run_fastqc.sh"),
