@@ -156,29 +156,6 @@ sce_targets <- tar_map(
       tenx_file, batch, sce.present.features, assay.data.sc
     )
   ),
-  # Quantiles of gene expression value per cluster. We will apply one of the
-  # quantiles as a nonparametric statistic for calling some genes "off", because
-  # their % expressed is too low, or because the normalized expression value at
-  # the low end is tiny.
-  tar_target(
-    sctransform_quantile,
-    read_seurat_sctransform(
-      tenx_file, batch, sce.features, assay.data.sc,
-      return.only.var.genes = FALSE, run_pca = FALSE
-    ) %>%
-      quantify_quantiles(metadata),
-    cue = tar_cue("never")
-  ),
-  tar_target(
-    lognormalize_quantile,
-    read_seurat_sctransform(
-      tenx_file, batch, sce.present.features, assay.data.sc,
-      return.only.var.genes = FALSE, run_pca = FALSE
-    ) %>%
-      quantify_quantiles(
-        metadata, assay = "RNA", slot = "data", per_million = FALSE
-      )
-  ),
   # Plot every batch, for validation.
   tar_target(
     batch_umap,
@@ -263,16 +240,6 @@ list(
     metadata,
     extract_upd_metadata_to_csv(Upd_sc, Upd_sc_size_factors, "scRNA-seq-Metadata.csv"),
     format='file'
-  ),
-  tar_combine(
-    sctransform_quantile,
-    sce_targets$sctransform_quantile,
-    command = combine_gene_quantiles(list(!!!.x))
-  ),
-  tar_combine(
-    lognormalize_quantile,
-    sce_targets$lognormalize_quantile,
-    command = combine_gene_quantiles(list(!!!.x))
   ),
   tar_target(
     Upd_glm,
@@ -521,7 +488,7 @@ list(
       Upd_regression_somatic,
       Upd_count_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
       Upd_isoform_exonic_length,
-      sctransform_quantile, supplemental_bulk_cpm, assay.data.sc, flybase.gtf,
+      supplemental_bulk_cpm, assay.data.sc, flybase.gtf,
       list(nos.1=batch_umap_nos.1, nos.2=batch_umap_nos.2, tj.1=batch_umap_tj.1, tj.2=batch_umap_tj.2) %>%
         bind_rows(.id = "batch"),
       'scRNA-seq-Regression/Enriched-Genes.xlsx'

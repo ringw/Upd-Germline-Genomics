@@ -10,7 +10,7 @@ publish_excel_results <- function(
   Upd_regression_somatic,
   Upd_cpm_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
   Upd_isoform_exonic_length,
-  sctransform_quantile, supplemental_bulk_pct_expressed, metafeatures, gtf_path,
+  supplemental_bulk_pct_expressed, metafeatures, gtf_path,
   batch_data,
   target_path
 ) {
@@ -22,7 +22,6 @@ publish_excel_results <- function(
     'Gene Quantification',
     metafeatures$flybase,
     Upd_cpm,
-    sctransform_quantile,
     supplemental_bulk_pct_expressed,
     excel_tables$mono
   )
@@ -30,7 +29,7 @@ publish_excel_results <- function(
   write_quant_stats(
     wb, "Gene Quantification Summary", Upd_cpm_transcripts, Upd_cpm,
     Upd_tpm_do_not_use_for_quantification, Upd_isoform_exonic_length,
-    Upd_regression_somatic, sctransform_quantile, gtf_path, metafeatures
+    Upd_regression_somatic, gtf_path, metafeatures
   )
 
   baseMeanCPM <- exp(Upd_regression_somatic$map[, "(Intercept)"]) %>% `*`(
@@ -50,7 +49,7 @@ publish_excel_results <- function(
 }
 
 write_abundance_table <- function(
-    wb, title, flybase, Upd_cpm, sctransform_quantile, supplemental_bulk_pct_expressed, table_style) {
+    wb, title, flybase, Upd_cpm, supplemental_bulk_pct_expressed, table_style) {
   rename = c(germline='GSC', somatic="CySC", spermatocyte="tid", somaticprecursor="SP", muscle="muscle")
   data = data.frame(
     symbol = rownames(Upd_cpm),
@@ -60,19 +59,6 @@ write_abundance_table <- function(
   for (n in names(rename)) {
     name = rename[n]
     data[str_glue("CPM_{name}")] <- Upd_cpm[,n]
-    if (n %in% names(sctransform_quantile)) {
-      sct_ranking <- sctransform_quantile[[n]][, '90%']
-      sct_ranking <- sct_ranking %>% round(2)
-      sct_ranking_data <- data.frame(
-        symbol = names(sct_ranking), v = sct_ranking
-      )
-      colnames(sct_ranking_data)[2] <- paste('SCT90%', name, sep='_')
-      data <- data %>%
-        left_join(
-          sct_ranking_data,
-          by = "symbol"
-        )
-    }
   }
   data = data %>%
     left_join(
@@ -95,19 +81,17 @@ write_abundance_table <- function(
 write_quant_stats <- function(
   wb, title, Upd_cpm_transcripts, Upd_cpm,
   Upd_tpm_do_not_use_for_quantification, Upd_isoform_exonic_length,
-  Upd_regression_somatic, sctransform_quantile, gtf_path, metafeatures
+  Upd_regression_somatic, gtf_path, metafeatures
 ) {
   addWorksheet(wb, title)
 
   n_genes <- tribble(
-    ~ cluster, ~ CPM, ~ SCT, ~ L2FC,
+    ~ cluster, ~ CPM, ~ L2FC,
     "GSC",
     sum((Upd_cpm[, "germline"] > 0) %>% replace(is.na(.), FALSE)),
-    sum(is.finite(sctransform_quantile[["germline"]][, "90%"])),
     sum(is.finite(Upd_regression_somatic$map[, 2])),
     "CySC",
     sum((Upd_cpm[, "somatic"] > 0) %>% replace(is.na(.), FALSE)),
-    sum(is.finite(sctransform_quantile[["somatic"]][, "90%"])),
     sum(is.finite(Upd_regression_somatic$map[, 2]))
   )
 
@@ -198,13 +182,11 @@ write_quant_stats <- function(
     start_row <- start_row + 1
     CPM <- Upd_cpm[analyze_genes, n]
     TPM <- Upd_tpm_do_not_use_for_quantification[analyze_genes, n]
-    SCT = sctransform_quantile[[n]][analyze_genes, "90%"]
     lengths <- Upd_isoform_exonic_length[analyze_genes, n]
 
     analysis <- data.frame(
       `cor(log(CPM), log(exon_length))` = cor(log(CPM), log(lengths)),
       `cor(log(TPM), log(exon_length))` = cor(log(TPM), log(lengths)),
-      `cor(SCT90%, log(length))` = cor(SCT, log(lengths)),
       check.names = FALSE
     )
     writeDataTable(

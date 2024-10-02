@@ -1,14 +1,3 @@
-determine_gene_list <- function(sctransform_quantile, supplemental_bulk_fpkm) {
-  gene_lists <- sapply(
-    c("germline", "somatic"),
-    \(n) union(
-      rownames(sctransform_quantile[[n]]) %>% subset(sctransform_quantile[[n]][, "90%"] > 1),
-      supplemental_bulk_fpkm %>% subset(percent_expressed > 0.75) %>% rownames
-    ),
-    simplify = FALSE
-  )
-}
-
 determine_two_way_venn_area <- function(n1=1500, n2=1000, n_intersect=500) {
   r1 = sqrt(n1 / pi)
   r2 = sqrt(n2 / pi)
