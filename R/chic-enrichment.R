@@ -181,37 +181,6 @@ reduce_peaks_2_tracks <- function(
     )
 }
 
-display_peak_location_stats <- function(lst) {
-  lst %>%
-    sapply(
-      \(df) df$region %>%
-        table() %>%
-        enframe(),
-      simplify = FALSE
-    ) %>%
-    bind_rows(.id = "mark") %>%
-    mutate(
-      mark = mark %>% factor(chic.mark.data$mark),
-      name = name %>% factor(lst[[1]]$region %>% levels())
-    ) %>%
-    ggplot(
-      aes(x = name, y = value, fill = mark)
-    ) +
-    geom_bar(
-      stat = "identity", position = "dodge"
-    ) +
-    scale_y_continuous(
-      expand = expansion(mult = c(0, 0.05))
-    ) +
-    scale_fill_viridis_d(
-      option = "turbo", begin = 0.3, end = 0.9
-    ) +
-    labs(
-      x = "Genomic Annotation",
-      y = "Number of Peaks (q < 0.05)"
-    )
-}
-
 # Converts object GRanges to coverage GRanges.
 # The objects must already be reduced. We will create a new "score" which is 1
 # for these objects, and 0 for runs of 0 coverage across the genome. The new

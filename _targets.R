@@ -622,37 +622,6 @@ list(
     )
   ),
 
-  # tar_target(
-  #   plot.chic.peak.location_Germline,
-  #   display_peak_location_stats(
-  #     list(
-  #       H3K4=chic.peak.location.stat_H3K4_Germline,
-  #       H3K27=chic.peak.location.stat_H3K27_Germline,
-  #       H3K9=chic.peak.location.stat_H3K9_Germline
-  #     )
-  #   )
-  # ),
-  # tar_target(
-  #   plot.chic.peak.location_Somatic,
-  #   display_peak_location_stats(
-  #     list(
-  #       H3K4=chic.peak.location.stat_H3K4_Somatic,
-  #       H3K27=chic.peak.location.stat_H3K27_Somatic,
-  #       H3K9=chic.peak.location.stat_H3K9_Somatic
-  #     )
-  #   )
-  # ),
-  # tar_target(
-  #   limits_plot.chic.peak.location,
-  #   c(
-  #     0,
-  #     sapply(
-  #       list(plot.chic.peak.location_Germline, plot.chic.peak.location_Somatic),
-  #       \(pl) pl$data$value
-  #     ) %>% max
-  #   )
-  # ),
-
   tar_map(
     data.frame(extension=c(".png", ".pdf")),
     tar_target(
