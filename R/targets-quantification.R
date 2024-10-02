@@ -174,17 +174,6 @@ targets.quantification <- list(
     )
   ),
   tar_target(
-    Upd_sc_pseudobulk_bygene,
-    sce_select_transcript_to_use(
-      Upd_sc, assay.data.sc,
-      Upd_sc_pseudobulk_transcripts, Upd_cpm_transcript_to_use
-    )
-  ),
-  tar_target(
-    Upd_glm_transcripts,
-    fit_glm_decontX(Upd_sc_pseudobulk_transcripts, ~ 0 + ident)
-  ),
-  tar_target(
     Upd_lm_transcripts,
     lmFit(
       log(assay(Upd_sc_pseudobulk_transcripts, "decontXcounts"))
