@@ -330,20 +330,6 @@ list(
     )
   ),
   tar_target(
-    supplemental_cluster_dot_plot_figure,
-    dot_plot_cpm(
-      list(
-        GSC=supplemental_cluster_cpm_germline,
-        CySC=supplemental_cluster_cpm_somatic,
-        `other(germ)`=supplemental_cluster_cpm_spermatocyte,
-        `other(soma)`=supplemental_cluster_cpm_somaticprecursor,
-        mus=supplemental_cluster_cpm_muscle
-      ),
-      supplemental_gene_list,
-      logcpm_max=3.55
-    )
-  ),
-  tar_target(
     supplemental_elbow_figure,
     data.frame(stdev = Upd_sc[['pcasubset']]@stdev, x = 1:50) %>%
       head(10) %>%
@@ -395,7 +381,6 @@ list(
         "figure/Integrated-scRNAseq", extension,
         tribble(
           ~name, ~figure, ~width, ~height,
-          "RNAseq-Integrated-Cluster-Dots", supplemental_cluster_dot_plot_figure, 3, 4,
           "RNAseq-Validation-Elbow", supplemental_elbow_figure, 3, 2.5,
           "RNAseq-CPM-Gene-List-Venn-Area-Blank", cpm_gene_venn, 3.6, 2.7,
           "RNAseq-UMAP-Genotype",
