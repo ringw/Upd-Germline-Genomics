@@ -114,32 +114,6 @@ sce.clusters <- tribble(
   'muscle', c(1,0.5,0,0,1)
 )
 
-repli.processing = data.frame(
-  name=c('.q20.bedgraph', '.q20.markdup.bedgraph', '.q20.p10.markdup.bedgraph', '.q20.near10.bedgraph', '.q20.near25.bedgraph'),
-  display=c('OrigPileup', 'DupePosition', 'DownsampleAndDupePosition', 'DeleteNearbyPositions', 'DeleteNearbyPositions25')
-)
-repli.processing = data.frame(
-  name='.q20.near10.bedgraph',
-  display='DeleteNearbyPositions'
-)
-
-repli.coverage.contrasts = list(
-  EarlyLate = c(1,0,0,-1),
-  Weighted = c(7/8, 5/8, 3/8, 1/8)
-)
-
-repli.coverage <- list(
-  ident = c('Tj','Tj','GSC','GSC'),
-  contrast = c('EarlyLate', 'Weighted','EarlyLate','Weighted')
-)
-
-# ChIC lookup: For every driver x mark x input/mod aggregation.
-chic.lookup <- chic.fpkm.data %>%
-  cross_join(chic.mark.data) %>%
-  cross_join(tribble(~input, "input", "mod"))
-
-
-
 list(
   tar_file(
     flybase.annotations.current,
