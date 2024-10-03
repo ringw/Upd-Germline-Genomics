@@ -211,72 +211,6 @@ list(
     ),
     packages = tar_option_get("packages") %>% c("future.apply", "R.utils")
   ),
-  # Pseudobulk by the genotype (Nos-GAL4 or tj-GAL4).
-  tar_target(
-    supplemental_genes,
-    "tj,vas" %>% strsplit(",") %>% unlist
-  ),
-  tar_target(
-    supplemental_bulk_cpm,
-    gene_pseudobulk_cpm(
-      paste0(
-        "scRNA-seq-Regression/pseudobulk_",
-        c("nos", "nos", "tj", "tj"),
-        c(".1", ".2", ".1", ".2"),
-        "_filtered.txt"
-      ),
-      mapply(
-        # Load all of the 10X matrices using sce.features (all features instead
-        # of our min # cells features).
-        \(n, f) read_seurat_sctransform(
-          f, n, sce.features, assay.data.sc, sctransform=FALSE
-        ),
-        c("nos.1", "nos.2", "tj.1", "tj.2"),
-        c(tenx_file_nos.1, tenx_file_nos.2, tenx_file_tj.1, tenx_file_tj.2),
-        SIMPLIFY = FALSE
-      ),
-      c("nos.1", "nos.2", "tj.1", "tj.2"),
-      flybase.gtf,
-      metadata,
-      assay.data.sc
-    )
-  ),
-  tar_target(
-    supplemental_gene_list,
-    c(
-      "Act5C", "alphaTub84B", "AGO3", "vas", "tj", "zfh1",
-      "soti", "w-cup",
-      "lncRNA:roX2",
-      "wb",
-      "Act57B"
-    )
-  ),
-  tar_map(
-    sce.clusters,
-    names = cluster,
-    tar_target(
-      supplemental_cluster_cpm,
-      gene_cluster_cpm(
-        Upd_cpm,
-        list(nos.1=nos.1, nos.2=nos.2, tj.1=tj.1, tj.2=tj.2),
-        cluster,
-        metadata
-      )
-    )
-  ),
-  tar_target(
-    supplemental_elbow_figure,
-    data.frame(stdev = Upd_sc[['pcasubset']]@stdev, x = 1:50) %>%
-      head(10) %>%
-      ggplot(aes(x, stdev^2))
-      + geom_point(color = "#06470c", size = 2)
-      + scale_x_continuous(breaks = c(1, 5, 10))
-      + scale_y_continuous(
-        trans = "sqrt", breaks = c(4, 36, 100, 150), limits = c(3, 155)
-      )
-      + labs(x = "PC (Germline/Somatic)", y = "Explained Variance")
-      + theme_cowplot()
-  ),
   # For cell cycle scoring.
   tar_download(
     cell_cycle_drosophila,
@@ -355,7 +289,7 @@ list(
     glm_make_cpm_table(Upd_glm)
   ),
   tar_target(
-    Upd_fpkm_regression,
+    Upd_fpkm_regression_do_not_use_for_quantification,
     Upd_cpm_regression %>% cpm_to_fpkm_using_cds(assay.data.sc)
   ),
   tar_target(
@@ -383,8 +317,10 @@ list(
         as.data.frame %>%
         cbind(exon_length = Upd_count_transcripts$exon_length, .),
       Upd_cpm_transcript_to_use,
-      Upd_fpkm_regression %>% table_to_tpm) %>%
-      table_to_tpm
+      Upd_fpkm_regression_do_not_use_for_quantification %>%
+        table_to_tpm()
+    ) %>%
+      table_to_tpm()
   ),
   # CPM values based on dominant isoform (by max FPKM or TPM value for the
   # isoform). We will fix the values to sum to 1MM because we are adding back in
@@ -403,12 +339,20 @@ list(
       table_to_tpm
   ),
   tar_target(
+    sc_pct_all_cells,
+    calculate_pct_all_cells(
+      as_tibble(read.csv(metadata)),
+      as_tibble(read.csv(assay.data.sc)),
+      list(nos.1=tenx_file_nos.1, nos.2=tenx_file_nos.2, tj.1=tenx_file_tj.1, tj.2=tenx_file_tj.2)
+    )
+  ),
+  tar_target(
     sc_excel,
     publish_excel_results(
       Upd_regression_somatic,
       Upd_count_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
       Upd_isoform_exonic_length,
-      supplemental_bulk_cpm, assay.data.sc, flybase.gtf,
+      sc_pct_all_cells, assay.data.sc, flybase.gtf,
       list(nos.1=batch_umap_nos.1, nos.2=batch_umap_nos.2, tj.1=batch_umap_tj.1, tj.2=batch_umap_tj.2) %>%
         bind_rows(.id = "batch"),
       'scRNA-seq-Regression/Enriched-Genes.xlsx'
@@ -416,23 +360,9 @@ list(
     format='file',
     packages = tar_option_get("packages") %>% c("lme4")
   ),
-
-  # ChIC paired-end alignment targets.
-  tar_file(align_chic_lightfiltering, "scripts/align_chic_lightfiltering.sh"),
-  tar_file(align_repli_lightfiltering, "scripts/align_repli_lightfiltering.sh"),
-  tar_file(align_repli, "scripts/align_repli.sh"),
-
   tar_map(
     chic.fpkm.data,
     names = name,
-    tar_target(
-      bed,
-      reference_sort_by_fpkm_table(
-        Upd_cpm, tolower(name), assay.data.sc,
-        paste0("scRNA-seq-Regression/", name, "-FPKM.bed")
-      ),
-      format = "file"
-    ),
     tar_target(
       quartile.factor,
       quant_quartile_factor(Upd_cpm[, tolower(name)], q1_threshold=5),
@@ -440,15 +370,10 @@ list(
     )
   ),
 
-  # TODO: Try replacing this target (data frame) with feature.rle
-  tar_target(
-    chic.genome,
-    feature.lengths %>% data.frame(chr = names(.), len = .)
-  ),
-  tar_target(
-    genomic_feature_factor,
-    factor_genome(flybase.gtf, assay.data.sc, feature.lengths)
-  ),
+  # Paths to bowtie2-calling scripts. Used by the chic and repli targets.
+  tar_file(align_chic_lightfiltering, "scripts/align_chic_lightfiltering.sh"),
+  tar_file(align_repli_lightfiltering, "scripts/align_repli_lightfiltering.sh"),
+  tar_file(align_repli, "scripts/align_repli.sh"),
 
   # Description: Heatmaps of ChIC vs sorted genes.
   tar_map(

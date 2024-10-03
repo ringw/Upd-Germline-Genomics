@@ -50,6 +50,19 @@ targets.sce <- list(
   ),
 
   # Fig. S1. UMAP plots.
+  tar_target(
+    supplemental_elbow_figure,
+    data.frame(stdev = Upd_sc[['pcasubset']]@stdev, x = 1:50) %>%
+      head(10) %>%
+      ggplot(aes(x, stdev^2))
+      + geom_point(color = "#06470c", size = 2)
+      + scale_x_continuous(breaks = c(1, 5, 10))
+      + scale_y_continuous(
+        trans = "sqrt", breaks = c(4, 36, 100, 150), limits = c(3, 155)
+      )
+      + labs(x = "PC (Germline/Somatic)", y = "Explained Variance")
+      + theme_cowplot()
+  ),
   tar_file(
     sc_idents_supp,
     save_figures(

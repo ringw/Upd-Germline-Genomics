@@ -6,11 +6,31 @@ excel_tables = list(
   mono='TableStyleMedium1'
 )
 
+calculate_pct_all_cells <- function(
+  metadata,
+  assay.meta.data,
+  tenx_list
+) {
+  stats <- tibble(gene = assay.meta.data$X, n_present = 0)
+  n_cells <- 0
+  for (n in names(tenx_list)) {
+    mat <- Read10X(tenx_list[[n]])
+    patt <- paste0(n, "_")
+    cells <- metadata$X %>%
+      subset(str_starts(., patt)) %>%
+      str_replace(patt, "")
+    mat <- mat[, cells]
+    stats$n_present <- stats$n_present + rowSums(mat != 0)
+    n_cells <- n_cells + length(cells)
+  }
+  pcts <- deframe(stats) / n_cells
+}
+
 publish_excel_results <- function(
   Upd_regression_somatic,
   Upd_cpm_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
   Upd_isoform_exonic_length,
-  supplemental_bulk_pct_expressed, metafeatures, gtf_path,
+  gene_pct_all_cells, metafeatures, gtf_path,
   batch_data,
   target_path
 ) {
@@ -22,7 +42,7 @@ publish_excel_results <- function(
     'Gene Quantification',
     metafeatures$flybase,
     Upd_cpm,
-    supplemental_bulk_pct_expressed,
+    gene_pct_all_cells,
     excel_tables$mono
   )
 
@@ -49,7 +69,7 @@ publish_excel_results <- function(
 }
 
 write_abundance_table <- function(
-    wb, title, flybase, Upd_cpm, supplemental_bulk_pct_expressed, table_style) {
+    wb, title, flybase, Upd_cpm, gene_pct_all_cells, table_style) {
   rename = c(germline='GSC', somatic="CySC", spermatocyte="tid", somaticprecursor="SP", muscle="muscle")
   data = data.frame(
     symbol = rownames(Upd_cpm),
@@ -62,9 +82,10 @@ write_abundance_table <- function(
   }
   data = data %>%
     left_join(
-      data.frame(
-        symbol = rownames(supplemental_bulk_pct_expressed),
-        pctAllCells = supplemental_bulk_pct_expressed$percent_expressed
+      enframe(
+        gene_pct_all_cells,
+        "symbol",
+        "pctAllCells"
       ),
       by = "symbol"
     )
