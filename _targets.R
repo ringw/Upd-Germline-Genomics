@@ -237,6 +237,21 @@ list(
     )
   ),
   tar_target(
+    cpm_gene_lists_extended,
+    cpm_gene_lists %>%
+      with(
+        list(
+          AllGermlineGenes = germline,
+          AllSomaticGenes = somatic,
+          ExclusiveGermlineGenes = setdiff(germline, somatic),
+          ExclusiveSomaticGenes = setdiff(somatic, germline),
+          NonExclusiveGermlineAndSomaticGenes = intersect(germline, somatic),
+          AllGermlineOrSomaticGenes = union(germline, somatic),
+          OffGenes = rownames(read.csv(assay.data.sc, row.names=1)) %>% setdiff(germline) %>% setdiff(somatic)
+        )
+    )
+  ),
+  tar_target(
     cpm_gene_venn,
     plot_gene_lists(
       cpm_gene_lists
@@ -505,21 +520,6 @@ list(
     )
   ),
 
-  tar_target(
-    cpm_gene_lists_extended,
-    cpm_gene_lists %>%
-      with(
-        list(
-          AllGermlineGenes = germline,
-          AllSomaticGenes = somatic,
-          ExclusiveGermlineGenes = setdiff(germline, somatic),
-          ExclusiveSomaticGenes = setdiff(somatic, germline),
-          NonExclusiveGermlineAndSomaticGenes = intersect(germline, somatic),
-          AllGermlineOrSomaticGenes = union(germline, somatic),
-          OffGenes = rownames(read.csv(assay.data.sc, row.names=1)) %>% setdiff(germline) %>% setdiff(somatic)
-        )
-    )
-  ),
   tar_map(
     tibble(
       chic.fpkm.data,
@@ -897,9 +897,6 @@ list(
       )
     )
   ),
-
-  # Repli-Seq
-  tar_file(run_fastqc_sh, "scripts/run_fastqc.sh"),
 
   targets.bulk.samples,
   targets.chic,
