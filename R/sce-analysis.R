@@ -490,50 +490,11 @@ plot_chr_ratio_on_clusters <- function(Upd_sc) {
   )
 }
 
-analyze_pcasubset_batch_effect <- function(Upd_sc) {
-  pcasubset <- Upd_sc[["pcasubset"]]@cell.embeddings
-  genotype <- recode(Upd_sc$batch, nos.1='nos', nos.2='nos', tj.1='tj', tj.2='tj')
-  batch_effect <- cbind(
-    nos_batch = as.numeric(Upd_sc$batch == "nos.1"),
-    tj_batch = as.numeric(Upd_sc$batch == "tj.1")
-  )
-  manova(pcasubset ~ 0 + genotype + batch_effect)
-}
-
 apply_cell_cycle_score <- function(Upd_sc, cell_cycle_drosophila, assay.data.sc) {
   cell_cycle <- load_cell_cycle_score_drosophila(cell_cycle_drosophila, assay.data.sc)
   Upd_sc %>%
     NormalizeData %>%
     CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
-}
-
-analyze_pcasubset_ident <- function(Upd_sc, cell_cycle_drosophila, assay.data.sc) {
-  pcasubset <- Upd_sc[["pcasubset"]]@cell.embeddings
-  ident <- Idents(Upd_sc)
-
-  Upd_sc = Upd_sc %>% apply_cell_cycle_score(cell_cycle_drosophila, assay.data.sc)
-  Phase <- Upd_sc$Phase %>% factor(c("G1", "S", "G2M"))
-
-  manova(pcasubset ~ 0 + ident + Phase)
-}
-
-analyze_manova <- function(mn, term_names, ncol_mn) {
-  # Review the manova display of the terms, source code here:
-  # print(stats:::print.aov)
-  # The "effects" matrix is a change of basis of the dependent variable (in
-  # MANOVA, a matrix of response variables in the columns). The sum of
-  # squares of entries (rows) which correspond to model coefficients relating to
-  # the term of interest is the sum of squares explained.
-  cross_join(
-    data.frame(term = term_names),
-    data.frame(response = colnames(mn$effects)[seq(ncol_mn)])
-  ) %>%
-    rowwise %>%
-    mutate(
-      sse = sum(mn$effects[grepl(term, rownames(mn$effects)), response]^2),
-      ssr = sum(mn$fitted.values[, response]^2 + mn$residuals[, response]^2) - sse,
-      R2 = sse / (sse + ssr)
-    )
 }
 
 plot_multiple_umap_data <- function(data) {
@@ -560,51 +521,8 @@ plot_multiple_umap_data <- function(data) {
   )
 }
 
-report_cpm_in_gene_sets <- function(Upd_cpm, gene_sets, output_html, output_pdf) {
-  tibble(
-    name = names(gene_sets),
-    num_genes = sapply(gene_sets, length),
-    marker_genes = sapply(
-      gene_sets,
-      \(v) v %>%
-        intersect(c("nos", "vas", "tj", "zfh1", "lncRNA:roX1", "lncRNA:roX2", "AGO1", "AGO3")) %>%
-        append(list(sep = ", ")) %>%
-        do.call(paste, .)
-    )
-  ) %>%
-    gt %>%
-    gtsave(output_html)
-  pdf(output_pdf)
-  for (n in names(gene_sets)) {
-    data <- Upd_cpm[gene_sets[[n]], c("germline", "somatic")]
-    names(dimnames(data)) <- c("gene", "cluster")
-    data <- log(data) %>% subset(rowAlls(is.finite(.)))
-    # melt(data, value.var = "log10CPM") %>%
-    print(
-      data %>%
-        as.data.frame %>%
-        ggplot(aes(germline, somatic)) + geom_point(
-        ) + geom_density_2d_filled(alpha=0.5) + scale_x_continuous(
-          labels = exp,
-          breaks = log(c(1, 10, 30, 50, 100, 1000))
-        ) + scale_y_continuous(
-          labels = exp,
-          breaks = log(c(1, 10, 30, 50, 100, 1000))
-        ) + coord_cartesian(
-          log(c(1, 1000)), log(c(1, 1000)), expand=F
-        ) + theme_bw() + guides(
-          fill = guide_legend(title = "density")
-        ) + labs(
-          title = n
-        )
-    )
-  }
-  dev.off()
-  return(c(output_html, output_pdf))
-}
 
 plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
-
   quant = tibble(
     rowname = rownames(Upd_regression_somatic$map),
     log2FC = -Upd_regression_somatic$map[,2] / log(2),
