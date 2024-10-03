@@ -51,47 +51,51 @@ granges_to_normalize_heterochromatin <- substitute(
   )
 )
 
-targets.chic.aligned <- tar_map(
-  bowtie.refs,
-  names = name,
+targets.chic <- list(
+  # Align ChIC BAM script. We do not filter by mapq yet (light filtering), we
+  # will do all of that after reading the BAM file into an R data frame.
   tar_map(
-    chic.samples,
-    names = sample,
-    unlist = FALSE,
-    tar_file(
-      chic.bam,
-      with(
-        list(name=name, group=group, sample=sample) %>%
-          with(
-            list(output_path = str_glue("chic/{name}/{group}/{sample}.bam"), batch=batch, sample=sample)
-          ),
-        {
-          run(
-            "bash",
-            c(
-              "-i",
-              align_chic_lightfiltering,
-              str_replace(bowtie[1], "\\..*", ""),
-              paste0(batch, "/", sample_glob, "_R1_001.fastq.gz"),
-              paste0(batch, "/", sample_glob, "_R2_001.fastq.gz"),
-              output_path
+    bowtie.refs,
+    names = name,
+    tar_map(
+      chic.samples,
+      names = sample,
+      unlist = FALSE,
+      tar_file(
+        chic.bam,
+        with(
+          list(name=name, group=group, sample=sample) %>%
+            with(
+              list(
+                output_path = str_glue("chic/{name}/{group}/{sample}.bam"),
+                batch=batch,
+                sample=sample
+              )
+            ),
+          {
+            run(
+              "bash",
+              c(
+                "-i",
+                align_chic_lightfiltering,
+                str_replace(bowtie[1], "\\..*", ""),
+                paste0(batch, "/", sample_glob, "_R1_001.fastq.gz"),
+                paste0(batch, "/", sample_glob, "_R2_001.fastq.gz"),
+                output_path
+              )
             )
-          )
-          output_path
-        }
-      ),
-      cue = tar_cue("never"),
-      packages = c(
-        "dplyr",
-        "processx",
-        "stringr"
+            output_path
+          }
+        ),
+        cue = tar_cue("never"),
+        packages = c(
+          "dplyr",
+          "processx",
+          "stringr"
+        )
       )
     )
-  )
-)
-
-targets.chic <- list(
-  targets.chic.aligned,
+  ),
 
   tar_map(
     mutate(
