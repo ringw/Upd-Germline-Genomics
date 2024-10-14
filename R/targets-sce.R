@@ -37,6 +37,34 @@ targets.sce <- list(
   # the parameters in this function are what really matter for exactly
   # reproducing our clustering of the cells.
   tar_target(Upd_sc, filter_integrate_data(list(nos.1,nos.2,tj.1,tj.2))),
+  
+  # Write the seurat[["RNA"]]@meta.data data frame to a CSV.
+  tar_file(h3.gfp.gtf, "scRNA-seq/H3-GFP-transcript-descriptive.gtf"),
+  tar_file(
+    assay.data.sc,
+    create_assay_data_sc(
+      tenx_file_nos.1, sce.features,
+      flybase.annotations, flybase.gtf, h3.gfp.gtf, sce.present.features,
+      'scRNA-seq-Assay-Metadata.csv')
+  ),
+  # Later, we will need the CDS starts in a GenomicRanges.
+  tar_target(
+    tss_location,
+    read.csv(assay.data.sc) %>%
+      with(
+        setNames(
+          GRanges(
+            chr %>% replace(is.na(chr), "Y"),
+            IRanges(
+              ifelse(strand == "+", start, end) %>%
+                replace(is.na(chr), -10000),
+              width = 1
+            )
+          ),
+          X
+        )
+      )
+  ),
 
   # Store Seurat cell cycle feature result, as we didn't put this into the
   # Upd_sc target.

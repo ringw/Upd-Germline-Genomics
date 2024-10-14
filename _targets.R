@@ -153,14 +153,6 @@ list(
     Rle(factor(names(feature.lengths), names(feature.lengths)), as.numeric(feature.lengths))
   ),
  
-  tar_file(h3.gfp.gtf, "scRNA-seq/H3-GFP-transcript-descriptive.gtf"),
-  tar_file(
-    assay.data.sc,
-    create_assay_data_sc(
-      tenx_file_nos.1, sce.features,
-      flybase.annotations, flybase.gtf, h3.gfp.gtf, sce.present.features,
-      'scRNA-seq-Assay-Metadata.csv')
-  ),
   tar_target(Upd_model_matrix, build_model_matrix(FetchData(Upd_sc, c("ident", "batch")), Upd_decontX_contamination)),
   tar_target(
     shuffle_feature_plot,

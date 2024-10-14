@@ -608,43 +608,28 @@ targets.repli <- list(
 
   # For each repli track, look up gene TSS values.
   tar_target(
-    chic.tile.diameter_1000_genes_location,
-    read.csv(assay.data.sc) %$%
-      setNames(
-        GRanges(
-          chr %>% replace(is.na(chr), "Y"),
-          IRanges(
-            ifelse(strand == "+", start, end) %>%
-              replace(is.na(chr), -10000),
-            width = 1
-          )
-        ),
-        X
-      )
-  ),
-  tar_target(
     chic.tile.diameter_1000_genes,
     GRanges(
-      seqnames(chic.tile.diameter_1000_genes_location),
-      ranges(chic.tile.diameter_1000_genes_location),
+      seqnames(tss_location),
+      ranges(tss_location),
       seqinfo = seqinfo(chic.tile.diameter_1000_chr),
-      lookup = chic.tile.diameter_1000_genes_location %>%
+      lookup = tss_location %>%
         findOverlaps(chic.tile.diameter_1000_chr) %>%
         sapply(\(v) head(c(v, NA), 1))
     ) %>%
-      setNames(names(chic.tile.diameter_1000_genes_location))
+      setNames(names(tss_location))
   ),
   tar_target(
     chic.tile.diameter_500_score_genes,
     GRanges(
-      seqnames(chic.tile.diameter_1000_genes_location),
-      ranges(chic.tile.diameter_1000_genes_location),
+      seqnames(tss_location),
+      ranges(tss_location),
       seqinfo = seqinfo(chic.tile.diameter_500_score_chr),
-      lookup = chic.tile.diameter_1000_genes_location %>%
+      lookup = tss_location %>%
         findOverlaps(chic.tile.diameter_500_score_chr) %>%
         sapply(\(v) head(c(v, NA), 1))
     ) %>%
-      setNames(names(chic.tile.diameter_1000_genes_location))
+      setNames(names(tss_location))
   ),
 
   # Repli graphic for dmel-all-chromosomes, not the masked bowtie reference.
