@@ -1,3 +1,4 @@
+# Line-plotting of a feature on chr X/2/3/4/Y. ----
 plot_track <- function(
     track,
     positive_color = "#e0eff9",
@@ -28,13 +29,13 @@ plot_track <- function(
     annotate(
       "rect",
       xmin=-Inf, xmax=Inf,
-      ymin=-Inf, ymax=0,
+      ymin=-Inf, ymax=mean(limits),
       fill=negative_color
     ) +
     annotate(
       "rect",
       xmin=-Inf, xmax=Inf,
-      ymin=Inf, ymax=0,
+      ymin=Inf, ymax=mean(limits),
       fill=positive_color
     ) +
     geom_line(linewidth = 0.25) +
@@ -55,6 +56,150 @@ plot_track <- function(
     ) +
     theme_bw() +
     theme(
+      panel.background = element_rect(fill = NA),
+      panel.border = element_blank(),
+      panel.grid = element_blank()
+    )
+  ggplot_build_panel_absolute <- function(gg, height, width, margin_right = unit(5.5, "points")) {
+    gr <- as_grob(gg)
+    gr$heights[7] <- height
+    gr$widths[5] <- width
+    gr$widths[9] <- margin_right
+    gr <- gr
+  }
+  # Contents width will be 5.25 in. Two-column (chromosome arms) layout will be
+  # handled by the two arms having precisely 2 * default margins (5.5 pt) in
+  # between the columns, and no other middle content (axis title, axis text).
+  chrX <- (
+    plot_chr("X") +
+      labs(title = "Chromosome X")
+  ) %>%
+    ggplot_build_panel_absolute(
+      unit(0.35, "in"), unit(4.5, "in"), unit(0.55, "in") + unit(11, "points")
+    )
+  chr2 <- cbind(
+    (plot_chr("2L") + labs(title = "Chromosome 2")) %>%
+      ggplot_build_panel_absolute(unit(0.35, "in"), unit(2.5, "in")),
+    (
+      plot_chr("2R") +
+        theme(
+          axis.title = element_blank(),
+          axis.text = element_blank()
+        )
+    ) %>%
+      ggplot_build_panel_absolute(
+        unit(0.35, "in"), unit(2.5, "in"), unit(0.05, "in")
+      )
+  )
+  chr3 <- cbind(
+    (plot_chr("3L") + labs(title = "Chromosome 3")) %>%
+      ggplot_build_panel_absolute(unit(0.35, "in"), unit(2.5, "in")),
+    (
+      plot_chr("3R") +
+        theme(
+          axis.title = element_blank(),
+          axis.text = element_blank()
+        )
+    ) %>%
+      ggplot_build_panel_absolute(
+        unit(0.35, "in"), unit(2.5, "in"), unit(0.05, "in")
+      )
+  )
+  chr4 <- (
+    plot_chr("4") +
+      labs(title = "Chromosome 4")
+  ) %>%
+    ggplot_build_panel_absolute(
+      unit(0.35, "in"), unit(2, "in"), unit(3.05, "in") + unit(11, "points")
+    )
+  chrY <- (
+    plot_chr("Y") +
+      labs(title = "Chromosome Y")
+  ) %>%
+    ggplot_build_panel_absolute(
+      unit(0.35, "in"), unit(2, "in"), unit(3.05, "in") + unit(11, "points")
+    )
+  mylayout <- gtable(
+    widths = unit(1, 'null'), heights = unit(rep(0.75, 5), 'in')
+  ) %>%
+    gtable_add_grob(
+      list(
+        chrX, chr2, chr3, chr4, chrY
+      ),
+      1:5,
+      1
+    )
+  plot_grid(mylayout)
+}
+
+# Plot two tracks, col names score_1 and score_2, overlaid.
+plot_track_2score <- function(
+    track,
+    positive_color = "#e0eff9",
+    negative_color = "#f7f9e7",
+    score_1 = chic_line_track_colors$germline,
+    score_2 = chic_line_track_colors$somatic,
+    impute_score = T,
+    name = "Timing",
+    limits = c(-1, 1),
+    breaks = c(-1, 0, 1)) {
+  df <- tibble(
+    chr = rep(as.factor(seqnames(track)), 2),
+    pos = rep(mid(track), 2),
+    value = c(track$score_1, track$score_2),
+    group = rep(c("1", "2"), each=length(track))
+  ) %>%
+    subset(chr %in% names(chr.lengths))
+  chr_lookup <- as.numeric(df$chr)
+  chr_levels <- list(`2` = 1, `3` = 2, `4` = 3, `X` = 4, `Y` = 5)
+  # Impute geom_line: Remove all NA values before further subsampling the track
+  # if needed. Gaps in the track will only be evident at the start and end of
+  # the sequence. Otherwise, it is a geom_line where we draw a line segment
+  # connecting the values which are non-NA.
+  if (impute_score)
+    df <- df %>% subset(!is.na(value))
+  df <- df %>%
+    dplyr::slice(
+      df %>%
+        group_by(chr) %>%
+        reframe(
+          keep = seq(length(pos)) %in% round(seq(1, length(pos), length.out=1000)) |
+            chr == "4"
+        ) %>%
+        pull(keep) %>%
+        which()
+    )
+  plot_chr <- function(chr.) ggplot(subset(df, chr == chr.), aes(pos, value, color=group, group=group)) +
+    annotate(
+      "rect",
+      xmin=-Inf, xmax=Inf,
+      ymin=-Inf, ymax=mean(limits),
+      fill=negative_color
+    ) +
+    annotate(
+      "rect",
+      xmin=-Inf, xmax=Inf,
+      ymin=Inf, ymax=mean(limits),
+      fill=positive_color
+    ) +
+    geom_line(linewidth = 0.45) +
+    scale_x_continuous(
+      name = NULL,
+      breaks = c(1, 1000000 * seq(2, 100, by=2)),
+      minor_breaks = 1000000 * seq(1, 101, by=2),
+      labels = NULL
+    ) +
+    scale_y_continuous(
+      name = name,
+      breaks = breaks
+    ) +
+    scale_color_manual(values = c(`1`=score_1, `2`=score_2)) +
+    coord_cartesian(
+      NULL, limits, expand=F
+    ) +
+    theme_bw() +
+    theme(
+      legend.position = "none",
       panel.background = element_rect(fill = NA),
       panel.border = element_blank(),
       panel.grid = element_blank()

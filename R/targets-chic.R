@@ -1011,9 +1011,6 @@ targets.chic <- list(
         )
       ),
       packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
-      # We are going to edit the PDF and arrange the track line in front of the
-      # panel. In ggplot, to make the grid visible at all, it was placed in the
-      # foreground of the content.
     ),
     tar_target(
       enriched.chromosomes.data,
@@ -1608,65 +1605,40 @@ targets.chic <- list(
     )
   ),
   # Figure of nucleosome spacing estimate track.
-  tar_target(
-    gg.chic.nucleosome.est,
-    tibble(
-      celltype = rep(c("Germline", "Somatic"), each=length(nucleosome.repeat.length_Germline)),
-      chr = rep(as.factor(seqnames(nucleosome.repeat.length_Germline)), 2) %>%
-        fct_recode(`2`="2L", `2`="2R", `3`="3L", `3`="3R") %>%
-        relevel("X"),
-      chr.orig = rep(as.factor(seqnames(nucleosome.repeat.length_Germline)), 2),
-      pos = rep(
-        mid(nucleosome.repeat.length_Germline) +
-          ifelse(
-            seqnames(nucleosome.repeat.length_Germline) == "2R", chr.lengths["2L"],
-            ifelse(
-              seqnames(nucleosome.repeat.length_Germline) == "3R", chr.lengths["3L"],
-              0
-            )
-          ),
-        2
-      ),
-      value = c(nucleosome.repeat.length_Germline$score, nucleosome.repeat.length_Somatic$score) %>%
-        replace(!between(., 160, 250), NA)
-    ) %>%
-      subset(chr != "rDNA") %>%
-      ggplot(
-        aes(pos, value, group=interaction(celltype, chr.orig), color=celltype, fill=celltype)
-      ) +
-        facet_wrap(vars(chr), scales = "free_x", nrow=1) +
-        geom_smooth() +
-        scale_color_manual(values=setNames(unlist(chic_line_track_colors), NULL)) +
-        scale_fill_manual(
-          values = setNames(unlist(chic_line_track_colors), NULL) %>%
-            muted(c = 50, l = 70)
-        ) +
-        scale_x_continuous(
-          breaks = c(1, seq(1, 80) * 2000000),
-          minor_breaks = 1000000 + seq(0, 80) * 2000000,
-          labels = NULL
-        ) +
-        coord_cartesian(NULL, c(160, 200), expand=F) +
-        labs(x = NULL, y = "Mode Nucleosome Spacing")
-  ),
   tar_file(
     fig.chic.nucleosome.est,
     save_figures(
       "figure/Both-Cell-Types",
       ".pdf",
-      tibble(
-        rowname="Nucleosome-Spacing",
-        orig_fig=gg.chic.nucleosome.est %>% list,
-        figure={
-          gg <- as_grob(orig_fig[[1]])
-          gg$widths[c(5, 9, 13, 17, 21)] <- unit(c(0.8, 1, 1, 0.3, 0.5), "null")
-          gg
-        } %>%
-          list,
-        width=8,
-        height=3
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "Nucleosome-Repeat-Length-Periodicity",
+        plot_track_2score(
+          GRanges(
+            seqnames(nucleosome.repeat.length_Germline),
+            ranges(nucleosome.repeat.length_Germline),
+            score_1 = nucleosome.repeat.length_Germline$score %>%
+              replace(
+                nucleosome.repeat.length_Germline$n == 1 &
+                  !as.logical(seqnames(nucleosome.repeat.length_Germline) %in% c("4", "Y")),
+                NA
+              ),
+            score_2 = nucleosome.repeat.length_Somatic$score %>%
+              replace(
+                nucleosome.repeat.length_Somatic$n == 1 &
+                  !as.logical(seqnames(nucleosome.repeat.length_Somatic) %in% c("4", "Y")),
+                NA
+              )
+          ),
+          name = "bp",
+          limits = c(140, 220),
+          breaks = c(140, 180, 220)
+        ),
+        5.75,
+        4
       )
-    )
+    ),
+    packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
   ),
 
   # Binning of chic H3 fragments by length and by mapq.
@@ -2405,12 +2377,16 @@ targets.chic <- list(
         GRanges(
           seqlengths = pull(bulk_reads_idxstats, rlength, rname)
         ) %>%
-        nucleosome_repeat_length_analysis()
+        sliding_nucleosome_qc_for_histogram_usability() %>%
+        sliding_nucleosome_repeat_length_analysis(
+          width = 2.5 * 1000 * 1000,
+          step = 0.5 * 1000 * 1000
+        )
     )
   ),
   tar_target(
-    nucleosome.repeat.length_Germline,
-    granges_mean_score(
+    nucleosome.repeat.length.list_Germline,
+    list(
       c(
         nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_2L,
         nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_2R,
@@ -2441,8 +2417,20 @@ targets.chic <- list(
     )
   ),
   tar_target(
-    nucleosome.repeat.length_Somatic,
-    granges_mean_score(
+    nucleosome.repeat.length_Germline,
+    nucleosome.repeat.length.list_Germline %>%
+      nucleosome_repeat_length_calling()
+  ),
+  tar_target(
+    nucleosome.repeat.length.peaks_Germline,
+    nucleosome.repeat.length.list_Germline %>%
+      nucleosome_repeat_length_peak_analysis() %>%
+      GenomicRanges::resize(500000, fix="center") %>%
+      GenomicRanges::reduce()
+  ),
+  tar_target(
+    nucleosome.repeat.length.list_Somatic,
+    list(
       c(
         nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_2L,
         nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_2R,
@@ -2472,84 +2460,17 @@ targets.chic <- list(
       )
     )
   ),
-
-  # Nucleosome positioning analysis.
-  tar_file(
-    nucleosome_normal_bin,
-    tibble(
-      make_cmd = processx::run("make", wd="NOrMAL")$status,
-      make_test_cmd = processx::run("make", "test", wd="NOrMAL")$status,
-      bin = "NOrMAL/NOrMAL"
-    )$bin
+  tar_target(
+    nucleosome.repeat.length_Somatic,
+    nucleosome.repeat.length.list_Somatic %>%
+      nucleosome_repeat_length_calling()
   ),
-  tar_file(
-    nucleosome_normal_config, "NOrMAL/config.txt"
-  ),
-  tar_map(
-    tibble(
-      cross_join(experiment.driver, tibble(chr = names(chr.lengths))),
-      bulk_reads = mapply(
-        \(driver, chr) str_glue(
-          "bulk_reads_",
-          chr,
-          "_chic.bam_{chic.samples$sample[chic.samples$driver == driver & chic.samples$molecule == 'H3' & chic.samples$group == 'H3K27']}_chr"
-        ) %>%
-          rlang::syms(),
-        driver,
-        chr,
-        SIMPLIFY=FALSE
-      )
-    ),
-    names = chr | celltype,
-    tar_file(
-      nucleosome_analysis,
-      tibble(
-        do.call(rbind, bulk_reads) %>%
-          paired_end_reads_to_fragment_lengths %>%
-          subset(between(length, 100, 200)),
-        forw_file = tempfile("forw"),
-        do_write_forw_file = write.table(data.frame(format(pos, sci=F)), forw_file[1], quote=F, row.names=F, col.names=F),
-        rev_file = tempfile("rev"),
-        do_write_rev_file = write.table(data.frame(format(fragment_end_crick, sci=F)), rev_file[1], quote=F, row.names=F, col.names=F),
-        output_file = str_glue("chic/NOrMAL/", celltype, "/", "Analysis_", chr, ".txt"),
-        mk_output = dir.create(dirname(output_file[1]), showW=F, rec=T),
-        do_run_normal = processx::run(
-          nucleosome_normal_bin,
-          c(
-            nucleosome_normal_config,
-            forw_file[1],
-            rev_file[1],
-            output_file[1]
-          ),
-          stdout="",
-          stderr=""
-        )$status
-      )$output_file[1]
-    )
-  ),
-  tar_map(
-    tibble(
-      experiment.driver,
-      nucleosome_analysis = sapply(
-        celltype,
-        \(celltype) rlang::syms(
-          str_glue("nucleosome_analysis_{names(chr.lengths)}_{celltype}")
-        ),
-        simplify=F
-      )
-    ),
-    names = celltype,
-    tar_target(
-      nucleosome_analysis_bed,
-      nucleosome_normal_to_bed(
-        setNames(nucleosome_analysis, names(chr.lengths)),
-        str_glue("chic/NOrMAL/", celltype, "_Pos.bed")
-      )
-    ),
-    tar_target(
-      nucleosome_analysis_bw,
-      nucleosome_analysis_bed %>% bed_to_mark_bigwig(str_glue("chic/NOrMAL/", celltype, "_Pos.bw"))
-    )
+  tar_target(
+    nucleosome.repeat.length.peaks_Somatic,
+    nucleosome.repeat.length.list_Somatic %>%
+      nucleosome_repeat_length_peak_analysis() %>%
+      GenomicRanges::resize(500000, fix="center") %>%
+      GenomicRanges::reduce()
   ),
 
   # Dimension Reduction.
