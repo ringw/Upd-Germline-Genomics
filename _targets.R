@@ -270,18 +270,6 @@ list(
             )
           ),
           3, 2,
-          "RNAseq-Batch-UMAP-Doublets",
-          plot_multiple_umap_data(
-            list(nos.1=batch_umap_nos.1, nos.2=batch_umap_nos.2, tj.1=batch_umap_tj.1, tj.2=batch_umap_tj.2) %>%
-              bind_rows(.id = "batch")
-          ) + theme(
-            aspect.ratio = 1,
-            axis.text = element_text(size = 8),
-            panel.spacing = unit(1, "lines"),
-            panel.background = element_rect(fill = "white")
-          ),
-          6,
-          6
         )
       ),
       format = "file"

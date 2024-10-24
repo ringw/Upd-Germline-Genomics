@@ -490,37 +490,13 @@ plot_chr_ratio_on_clusters <- function(Upd_sc) {
   )
 }
 
+# Cell cycle scoring ----
 apply_cell_cycle_score <- function(Upd_sc, cell_cycle_drosophila, assay.data.sc) {
   cell_cycle <- load_cell_cycle_score_drosophila(cell_cycle_drosophila, assay.data.sc)
   Upd_sc %>%
     NormalizeData %>%
     CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
 }
-
-plot_multiple_umap_data <- function(data) {
-  ggplot(
-    data,
-    aes(umap_1, umap_2, color=ident)
-  ) + facet_wrap(
-    vars(batch),
-    nrow = 2,
-    scales = "free"
-  ) + rasterize(
-    geom_point(
-      shape = 20, size = 0.001
-    ),
-    dpi = 240,
-    scale = 0.5
-  ) + scale_color_manual(
-    values = c(unlist(cluster_colors), doublet="#cccccc"),
-    guide = guide_none()
-  ) + theme_cowplot() + theme(
-    # For facets with no labels indicating what the facet is.
-    strip.background = element_blank(),
-    strip.text.x = element_blank()
-  )
-}
-
 
 plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
   quant = tibble(
