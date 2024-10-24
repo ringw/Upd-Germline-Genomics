@@ -498,6 +498,20 @@ apply_cell_cycle_score <- function(Upd_sc, cell_cycle_drosophila, assay.data.sc)
     CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
 }
 
+# Standardize the single-cell regression so that for each cluster, the
+# classified phases of the cells are 33% G1, 33% S, 33% G2M (uniformly).
+subsample_ident_normalize_phase <- function(df) {
+  df %>%
+    group_by(ident) %>%
+    mutate(
+      n = min(table(phase))
+    ) %>%
+    group_by(ident, phase) %>%
+    dplyr::slice(sample(length(rowname), n[1])) %>%
+    ungroup() %>%
+    dplyr::slice(order(match(rowname, df$rowname)))
+}
+
 plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
   quant = tibble(
     rowname = rownames(Upd_regression_somatic$map),

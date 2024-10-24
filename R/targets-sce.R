@@ -76,6 +76,20 @@ targets.sce <- list(
       rownames_to_column() %>%
       pull(Phase, rowname)
   ),
+  # Cells which are (for each cluster) 33% G1, 33% S, 33% G2M -classified.
+  tar_target(
+    Upd_cells_by_phase,
+    with(
+      read.csv(metadata),
+      tibble(
+        rowname = X,
+        ident,
+        phase = Upd_phase
+      )
+    ) %>%
+      subsample_ident_normalize_phase() %>%
+      pull(rowname)
+  ),
 
   # Fig. S1. UMAP plots.
   tar_target(

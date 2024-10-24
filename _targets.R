@@ -184,6 +184,26 @@ list(
     )
   ),
   tar_target(
+    Upd_glm_standardize_phase,
+    fit_glm(
+      CreateSeuratObject(Upd_exons) %>%
+        `[`(, Upd_cells_by_phase) %>%
+        GetAssay("RNA"),
+      Upd_model_matrix[Upd_cells_by_phase, ],
+      metadata
+    )
+  ),
+  tar_target(
+    Upd_glm_standardize_phase_reduce_complexity,
+    fit_glm(
+      CreateSeuratObject(Upd_exons) %>%
+        `[`(, Upd_cells_by_phase) %>%
+        GetAssay("RNA"),
+      Upd_model_matrix[Upd_cells_by_phase, 1:8],
+      metadata
+    )
+  ),
+  tar_target(
     Upd_regression_somatic,
     # prior_var was determined by fitting Upd_glm with ident + batch and without
     # the decontX terms (which grow the coef of interest when there is a trend
@@ -202,6 +222,33 @@ list(
       apeglm_coef_timebound(Upd_glm_g1, prior_var = 0.8055104)
     ),
     packages = tar_option_get("packages") %>% c("future.apply", "R.utils")
+  ),
+  tar_target(
+    Upd_regression_standardize_phase_prior_var,
+    apeglm:::priorVar(
+      with(
+        predict(
+          Upd_glm_standardize_phase_reduce_complexity,
+          matrix(
+            seq(ncol(Upd_glm_standardize_phase_reduce_complexity$Beta)) == 2,
+            nrow=1
+          ),
+          offset=0,
+          se.fit=T
+        ),
+        cbind(
+          fit %>% replace(!is.finite(fit) | !is.finite(se.fit), NA),
+          se.fit %>% replace(!is.finite(fit) | !is.finite(se.fit), NA)
+        )
+      )
+    )
+  ),
+  tar_target(
+    Upd_regression_standardize_phase,
+    apeglm_coef_table_sample(
+      Upd_glm_standardize_phase, shrinkage_cutoff = 0,
+      prior_var = Upd_regression_standardize_phase_prior_var
+    )
   ),
   # For cell cycle scoring.
   tar_download(
