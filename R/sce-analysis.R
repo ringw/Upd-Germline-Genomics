@@ -508,8 +508,7 @@ subsample_ident_normalize_phase <- function(df) {
     ) %>%
     group_by(ident, phase) %>%
     dplyr::slice(sample(length(rowname), n[1])) %>%
-    ungroup() %>%
-    dplyr::slice(order(match(rowname, df$rowname)))
+    arrange(match(rowname, df$rowname))
 }
 
 plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
