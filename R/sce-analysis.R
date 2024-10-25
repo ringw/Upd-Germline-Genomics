@@ -344,9 +344,15 @@ fpkm_third_density <- function(
 }
 
 fpkm_simple_violin <- function(
-  data, ylim = c(-2.75, 4.5)
+  data, ylim = c(-2.75, 4.5), ygray = log(5) / log(10)
 ) {
-  melt(data, variable.name = "cluster") %>%
+  gg <- melt(data, variable.name = "cluster") %>%
+    subset(value > ylim[1] - 1) %>%
+    # We would like to set bounds on ydensity... Just add some pseudo-counts
+    # that are out of bounds to be displayed, so that the violins will have the
+    # same bounds.
+    rbind(tibble(cluster = colnames(data), value = ylim[1] - 1)) %>%
+    rbind(tibble(cluster = colnames(data), value = 10)) %>%
     ggplot(aes(cluster, value, fill=cluster)) +
     geom_violin(linewidth = NA) +
     scale_fill_manual(
@@ -354,9 +360,29 @@ fpkm_simple_violin <- function(
         cluster_colors[c("spermatocyte", "somaticprecursor", "muscle")],
         use.names = FALSE
       )
+    )
+  data <- ggplot_build(gg)$data[[1]]
+  data %>%
+    subset(y >= ygray) %>%
+    ggplot(
+      aes(x, y, violinwidth=violinwidth, fill=fill, group=group)
     ) +
-    coord_cartesian(NULL, ylim) + theme_bw() +
+    geom_violin(
+      data=data %>% subset(y <= ygray + 0.02),
+      stat="identity",
+      fill="#cccccc",
+      color="transparent"
+    ) +
+    geom_violin(stat="identity", color="transparent") +
+    coord_cartesian(c(0.4, 3.6), ylim, expand=F) +
+    scale_x_continuous(
+      breaks = 1:3,
+      minor_breaks = NULL,
+      labels = levels(gg$data$cluster)
+    ) +
     scale_y_continuous(breaks = seq(-2, 4)) +
+    scale_fill_identity() +
+    theme_bw() +
     theme(
       panel.grid.major.x = element_blank(),
       panel.grid.minor.x = element_blank(),
