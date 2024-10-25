@@ -1988,6 +1988,78 @@ targets.chic <- list(
     format = "parquet"
   ),
   tar_target(
+    chic.gene.enrichment.l2fc,
+    tibble(
+      read.csv(assay.data.sc),
+      chr.test = chr %>% replace(!(. %in% names(chr.lengths)), "*"),
+      windows.broad = {
+        ov <- findOverlaps(
+          GRanges(
+            chr.test,
+            IRanges(
+              ifelse(
+                chr.test != "*",
+                ifelse(
+                  strand == "+",
+                  start + 250,
+                  end - 250
+                ),
+                1
+              ),
+              width=1
+            ),
+            seqlengths = c(seqlengths(chic.tile.diameter_500_score_chr), `*`=1)
+          ),
+          chic.tile.diameter_500_score_chr
+        )
+        sparseVector(i = from(ov), x = to(ov), length = length(quartile.factor_Germline)) %>%
+          as.numeric() %>%
+          replace(. == 0, NA)
+      },
+      as_tibble(
+        sapply(
+          list(
+            H3K4_Germline=c(
+              chic.experiment.quantify_H3K4_Germline_peakcalling.broad_chr
+            ),
+            H3K27_Germline=c(
+              chic.experiment.quantify_H3K27_Germline_peakcalling.broad_chr
+            ),
+            H3K9_Germline=c(
+              chic.experiment.quantify_H3K9_Germline_peakcalling.broad_chr
+            ),
+            H3K4_Somatic=c(
+              chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_chr
+            ),
+            H3K27_Somatic=c(
+              chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_chr
+            ),
+            H3K9_Somatic=c(
+              chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_chr
+            )
+          ),
+          \(gr) gr$L2FC[windows.broad] %>% replace(!is.finite(.), NA),
+          simplify=FALSE
+        )
+      )
+    ) %>%
+      reframe(
+        symbol = X,
+        flybase,
+        chr,
+        start,
+        end,
+        strand,
+        H3K4_Germline,
+        H3K27_Germline,
+        H3K9_Germline,
+        H3K4_Somatic,
+        H3K27_Somatic,
+        H3K9_Somatic
+      ),
+    format = "parquet"
+  ),
+  tar_target(
     chic.gene.enrichment.broad,
     tibble(
       read.csv(assay.data.sc),
