@@ -365,6 +365,96 @@ fpkm_simple_violin <- function(
     labs(x = 'Cluster', y = bquote(log[10]*"(CPM)"))
 }
 
+gene_group_bar_plot <- function(
+  quartile.factor_Germline, quartile.factor_Somatic, Upd_cpm
+) {
+  data <- rbind(
+    tibble(
+      label = "Both - GSC Level",
+      group = quartile.factor_Germline %>% subset(
+        Upd_cpm[, "germline"] >= 5 & Upd_cpm[, "somatic"] >= 5
+      )
+    ),
+    tibble(
+      label = "Both - CySC Level",
+      group = quartile.factor_Somatic %>% subset(
+        Upd_cpm[, "germline"] >= 5 & Upd_cpm[, "somatic"] >= 5
+      )
+    ),
+    tibble(
+      label = "GSC Exclusive",
+      group = quartile.factor_Germline %>% subset(
+        Upd_cpm[, "germline"] >= 5 & Upd_cpm[, "somatic"] < 5
+      )
+    ),
+    tibble(
+      label = "CySC Exclusive",
+      group = quartile.factor_Somatic %>% subset(
+        Upd_cpm[, "germline"] < 5 & Upd_cpm[, "somatic"] >= 5
+      )
+    )
+  ) %>%
+    mutate(
+      label = label %>% factor(unique(.)),
+      group = group %>% factor() %>% recode(Q2="low", Q3="medium", Q4="high")
+    )
+  data <- as_tibble(
+    data.frame(
+      label = ifelse(
+        Upd_cpm[, "germline"] >= 5,
+        ifelse(
+          Upd_cpm[, "somatic"] >= 5,
+          "Both",
+          "GSC Exclusive"
+        ),
+        ifelse(
+          Upd_cpm[, "somatic"] >= 5,
+          "CySC Exclusive",
+          NA
+        )
+      ) %>%
+        setNames(NULL) %>%
+        factor(c("Both", "GSC Exclusive", "CySC Exclusive")),
+      celltype = factor(
+        rep(c("GSC", "CySC"), each = length(quartile.factor_Germline)),
+        c("GSC", "CySC")
+      ),
+      group = c(
+        quartile.factor_Germline,
+        quartile.factor_Somatic
+      )
+    )
+  ) %>%
+    subset(!is.na(label)) %>%
+    mutate(
+      label = label %>% factor(unique(.)),
+      group = group %>% factor() %>% recode(Q1="off", Q2="low", Q3="medium", Q4="high")
+    )
+  ymax <- data %>% group_by(label, celltype) %>% tally() %>% pull(n) %>% max()
+  data %>%
+    ggplot(aes(celltype, fill = group)) +
+    facet_grid(cols=vars(label), switch="x") +
+    geom_bar(position = position_stack(rev = TRUE)) +
+    scale_fill_manual(values = sc_quartile_colors %>% setNames(NULL)) +
+    coord_cartesian(
+      c(0.4, 2.6),
+      c(0, ymax * 1.05),
+      expand = FALSE
+    ) +
+    labs(
+      x = "Gene Classification",
+      y = "# Genes"
+    ) +
+    theme(
+      aspect.ratio = 3,
+      axis.line = element_line(color = "black", linewidth = 0.5),
+      panel.border = element_rect(color = NA),
+      panel.spacing = unit(-0.01, "cm"),
+      strip.background = element_rect(fill = NA, color = NA),
+      strip.placement = "outside",
+    )
+}
+
 write_Upd_sc_cell_cycle_phases = function(Upd_sc, cell_cycle_drosophila, metafeatures) {
   Upd_sc = Upd_sc %>% NormalizeData
   cell_cycle = load_cell_cycle_score_drosophila(cell_cycle_drosophila, metafeatures)
