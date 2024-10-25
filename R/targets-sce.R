@@ -84,6 +84,7 @@ targets.sce <- list(
       tibble(
         rowname = X,
         ident,
+        batch,
         phase = Upd_phase
       )
     ) %>%
@@ -598,9 +599,9 @@ targets.sce <- list(
       ".pdf",
       tribble(
         ~rowname, ~figure, ~width, ~height,
-        "L2FC-Scatter-G1",
-        plot_apeglm_original_g1(
-          Upd_regression_somatic, Upd_regression_somatic_g1
+        "L2FC-Scatter-Cell-Phase-Invariant-Model",
+        plot_apeglm_async_phase_model(
+          Upd_regression_somatic, Upd_regression_somatic_standardize_phase
         ),
         3.5,
         3.5

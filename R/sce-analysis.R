@@ -502,11 +502,11 @@ apply_cell_cycle_score <- function(Upd_sc, cell_cycle_drosophila, assay.data.sc)
 # classified phases of the cells are 33% G1, 33% S, 33% G2M (uniformly).
 subsample_ident_normalize_phase <- function(df) {
   df %>%
-    group_by(ident) %>%
+    group_by(ident, batch) %>%
     mutate(
       n = min(table(phase))
     ) %>%
-    group_by(ident, phase) %>%
+    group_by(ident, batch, phase) %>%
     dplyr::slice(sample(length(rowname), n[1])) %>%
     arrange(match(rowname, df$rowname))
 }
@@ -585,7 +585,7 @@ l2fc_bar_plot <- function(l2fc_data) {
 
 # Scatter plot of the main regression L2FC values (asynchronous, cell phase not
 # considered) vs G1-phase L2FC values (remove effect of cell phase).
-plot_apeglm_original_g1 <- function(orig_params, new_params_list) {
+plot_apeglm_async_phase_model <- function(orig_params, new_params_list) {
   data <- tibble(
     all = orig_params$map[,2] %>% replace(is.na(.), 0) / -log(2),
     G1 = sapply(new_params_list, \(lst) lst$map[2]) %>% replace(is.na(.), 0) / -log(2)
@@ -611,9 +611,15 @@ plot_apeglm_original_g1 <- function(orig_params, new_params_list) {
       c(-8, 8),
       expand=FALSE
     ) +
+    annotate(
+      "text",
+      -6, 6,
+      label = str_glue("R = {with(data, round(cor(all, G1), 2))}"),
+      hjust = 0
+    ) +
     labs(
       x = bquote(log[2]*"(GSC/CySC) Async"),
-      y = bquote(log[2]*"(GSC/CySC) G1 Only")
+      y = bquote(log[2]*"(GSC/CySC) 33/33/33 Phase Classification    ")
     ) +
     theme(
       aspect.ratio = 1,

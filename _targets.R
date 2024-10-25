@@ -224,31 +224,12 @@ list(
     packages = tar_option_get("packages") %>% c("future.apply", "R.utils")
   ),
   tar_target(
-    Upd_regression_standardize_phase_prior_var,
-    apeglm:::priorVar(
-      with(
-        predict(
-          Upd_glm_standardize_phase_reduce_complexity,
-          matrix(
-            seq(ncol(Upd_glm_standardize_phase_reduce_complexity$Beta)) == 2,
-            nrow=1
-          ),
-          offset=0,
-          se.fit=T
-        ),
-        cbind(
-          fit %>% replace(!is.finite(fit) | !is.finite(se.fit), NA),
-          se.fit %>% replace(!is.finite(fit) | !is.finite(se.fit), NA)
-        )
-      )
-    )
-  ),
-  tar_target(
-    Upd_regression_standardize_phase,
-    apeglm_coef_table_sample(
-      Upd_glm_standardize_phase, shrinkage_cutoff = 0,
-      prior_var = Upd_regression_standardize_phase_prior_var
-    )
+    Upd_regression_somatic_standardize_phase,
+    with_options(
+      list(future.globals.maxSize = 5 * 1024^3),
+      apeglm_coef_timebound(Upd_glm_standardize_phase, prior_var = 0.8027215)
+    ),
+    packages = tar_option_get("packages") %>% c("future.apply", "R.utils")
   ),
   # For cell cycle scoring.
   tar_download(
