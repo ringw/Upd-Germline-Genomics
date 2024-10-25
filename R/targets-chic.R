@@ -1205,6 +1205,142 @@ targets.chic <- list(
       )
     )
   ),
+  tar_target(
+    enriched.transposable.elements.peakcalling.broad.masked,
+    seqnames(chic.experiment.quantify_H3K4_Germline_peakcalling.broad_masked) %>%
+      grep("FBte[0-9]{7}", .) %>%
+      as.integer()
+  ),
+  tar_file(
+    transposable.elements.metadata,
+    "references/transposon_sequence_set_metadata.txt"
+  ),
+  tar_target(
+    enriched.transposable.elements.factor,
+    transposable.elements.metadata %>%
+      read.table(sep="\t", quote="", skip=1, comment="") %>%
+      as_tibble() %>%
+      factor_transposable_elements(
+        seqnames(chic.experiment.quantify_H3K4_Germline_peakcalling.broad_masked)[
+          enriched.transposable.elements.peakcalling.broad.masked
+        ] %>%
+          as.character(),
+        .
+      )
+  ),
+  tar_file(
+    fig.enriched.transposable.elements,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "Enriched-Transposable-Elements",
+        plot_transposable_element_enrich_chromatin(
+          chic.experiment.quantify_H3K4_Germline_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked
+          ],
+          chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked
+          ],
+          chic.experiment.quantify_H3K27_Germline_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked
+          ],
+          chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked
+          ],
+          chic.experiment.quantify_H3K9_Germline_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked
+          ],
+          chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked
+          ]
+        ) %>%
+          `+`(
+            theme(plot.margin = margin(5.5, 130, 5.5, 5.5))
+          ) %>%
+          set_panel_size(w = unit(2.5, "in"), h = unit(3.75, "in")),
+        5, 5,
+        "Enriched-Transposable-Elements-DNA",
+        plot_transposable_element_enrich_chromatin(
+          chic.experiment.quantify_H3K4_Germline_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "DNA transposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "DNA transposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K27_Germline_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "DNA transposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "DNA transposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K9_Germline_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "DNA transposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "DNA transposon")
+            ]
+          ]
+        ) %>%
+          `+`(
+            theme(plot.margin = margin(5.5, 130, 5.5, 5.5))
+          ) %>%
+          set_panel_size(w = unit(2.5, "in"), h = unit(3.75, "in")),
+        5, 5,
+        "Enriched-Transposable-Elements-Retrotransposon",
+        plot_transposable_element_enrich_chromatin(
+          chic.experiment.quantify_H3K4_Germline_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "retrotransposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "retrotransposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K27_Germline_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "retrotransposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "retrotransposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K9_Germline_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "retrotransposon")
+            ]
+          ],
+          chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_masked[
+            enriched.transposable.elements.peakcalling.broad.masked[
+              which(enriched.transposable.elements.factor == "retrotransposon")
+            ]
+          ]
+        ) %>%
+          `+`(
+            theme(plot.margin = margin(5.5, 130, 5.5, 5.5))
+          ) %>%
+          set_panel_size(w = unit(2.5, "in"), h = unit(3.75, "in")),
+        5, 5,
+      )
+    ),
+    packages = tar_option_get("packages") %>% c("egg")
+  ),
 
   tar_target(
     chic.experiment.nucleosomes,

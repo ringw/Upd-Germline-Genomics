@@ -1,3 +1,9 @@
+# Wrapper for regression for our ChIC experiment ----
+# Wraps glmGamPoi for our bulk HTS regression. We generally set overdispersion
+# to "global" as this is fast and we don't see evidence of different dispersion
+# in different genomic windows. Our two-tailed test option that we wrap is
+# test_de (likelihood ratio test). Our one-tailed test option will be a Wald
+# test using predict.glmGamPoi.
 chic_quantify <- function(
     chic_experiment,
     molecule,
@@ -151,6 +157,10 @@ chic_quantify <- function(
     )
 }
 
+# One-tailed p-value calling. We ended up with tracks with two levels of
+# granularity: window width 500bp or 40bp. For each window being tested, we can
+# paint the entire width covered by the window as enriched, then reduce these
+# windows at the end.
 reduce_peaks_2_tracks <- function(
     broad_track,
     rough_track,
@@ -216,6 +226,7 @@ peaks_to_genome_coverage <- function(object_granges) {
     GRanges(seqinfo = seqinfo(object_granges))
 }
 
+# Cleaning up visualization of stat. signif nucleosomes. ----
 nucleosomes_cleanup_tracks <- function(granges, p_nuc, p_enriched, nuc_size = 147, step_size = 20) {
   p_enriched <- p_enriched %>%
     replace(which(p_nuc >= 0.05), 1) %>%
@@ -288,6 +299,7 @@ nucleosomes_cleanup_tracks <- function(granges, p_nuc, p_enriched, nuc_size = 14
   )
 }
 
+# Genomic ranges with width 500 at the head of the CDS (TSS). ----
 gtf_granges_extended_from_tss <- function(granges, genes) {
   seqlevels(granges) <- seqlevels(granges) %>% c("*")
   overlaps <- GRanges(
@@ -316,6 +328,7 @@ gtf_granges_extended_from_tss <- function(granges, genes) {
     setNames(pull(genes, 1))
 }
 
+# Violin plots of histone code L2FC. ----
 # Plot the combined chr feature violins once. Cannot use the same
 # position = dodge on a boxplot as we used on the violin, so this is going to be
 # a plainer plot.
@@ -501,5 +514,122 @@ enriched_chromosomes_compare_signif <- function(data) {
     nrow = nrow(pvalues),
     ncol = ncol(pvalues),
     dimnames = dimnames(pvalues)
+  )
+}
+
+# Masked Transposable Elements Analysis ----
+factor_transposable_elements <- function(
+  te_ids,
+  transposon_sequence_set_metadata
+) {
+  stopifnot(all(te_ids %in% transposon_sequence_set_metadata$V1))
+  transposon_sequence_set_metadata <- transposon_sequence_set_metadata[
+    match(te_ids, transposon_sequence_set_metadata$V1),
+  ]
+  specific_type <- (
+    transposon_sequence_set_metadata$V15 %>%
+      sapply(
+        \(n) n %>%
+          strsplit(" <newline> ") %>%
+          unlist(use.names = F) %>%
+          setdiff("transposable_element ; SO:0000101") %>%
+          `[`(value = 1)
+      )
+  )
+  ifelse(
+    grepl("retrotransposon", specific_type),
+    "retrotransposon",
+    ifelse(
+      grepl("foldback_element|terminal_inverted_repeat_element", specific_type),
+      "DNA transposon",
+      NA
+    )
+  ) %>%
+    factor() %>%
+    setNames(te_ids)
+}
+
+plot_transposable_element_enrich_chromatin <- function(
+  H3K4_Germline, H3K4_Somatic, H3K27_Germline, H3K27_Somatic, H3K9_Germline, H3K9_Somatic
+) {
+  plot_features <- which(
+    H3K4_Germline$score.molH3 >= 0.5 &
+      H3K27_Germline$score.molH3 >= 0.5 &
+      H3K9_Germline$score.molH3 >= 0.5 &
+      H3K4_Somatic$score.molH3 >= 0.5 &
+      H3K27_Somatic$score.molH3 >= 0.5 &
+      H3K9_Somatic$score.molH3 >= 0.5
+  )
+  data <- tribble(
+    ~mark, ~celltype, ~track,
+    "H3K4", "Germline", H3K4_Germline,
+    "H3K27", "Germline", H3K27_Germline,
+    "H3K9", "Germline", H3K9_Germline,
+    "H3K4", "Somatic", H3K4_Somatic,
+    "H3K27", "Somatic", H3K27_Somatic,
+    "H3K9", "Somatic", H3K9_Somatic,
+  ) %>%
+    rowwise() %>%
+    reframe(
+      mark = mark %>% factor(chic.mark.data$mark),
+      celltype,
+      value = track$L2FC[plot_features] %>% subset(between(., -5, 5))
+    )
+  data_dodge <- data %>%
+    rowwise() %>%
+    mutate(
+      x = list(
+        H3K4 = c(Germline=0.775, Somatic=1.225),
+        H3K27 = c(Germline=1.775, Somatic=2.225),
+        H3K9 = c(Germline=2.775, Somatic=3.225)
+      )[[mark]][celltype] +
+        runif(1, min = -0.175, max = 0.175)
+    )
+  (
+    data %>%
+      ggplot(aes(mark, value, fill=celltype)) +
+      geom_violin(
+        scale = "width",
+        adjust = 0.5,
+        width = 0.8,
+        position = position_dodge(width = 0.9)
+      ) +
+      rasterise(
+        geom_point(
+          aes(x=x, fill=NULL),
+          data = data_dodge,
+          stroke = NA,
+          size = 0.6
+        ),
+        dpi = 300
+      ) +
+      annotate(
+        "rect",
+        xmin = -0.02 + c(0.575, 1.025) + rep(0:2, each=2),
+        xmax = 0.02 + c(0.975, 1.425) + rep(0:2, each=2),
+        ymin = summarise(group_by(data, mark, celltype), y = quantile(value, 0.25))$y,
+        ymax = summarise(group_by(data, mark, celltype), y = quantile(value, 0.75))$y,
+        color = "black",
+        fill = "transparent"
+      ) +
+      annotate(
+        "segment",
+        x = -0.02 + c(0.575, 1.025) + rep(0:2, each=2),
+        xend = 0.02 + c(0.975, 1.425) + rep(0:2, each=2),
+        y = summarise(group_by(data, mark, celltype), y = median(value))$y,
+        yend = summarise(group_by(data, mark, celltype), y = median(value))$y,
+        linewidth = 1.5
+      ) +
+      scale_fill_manual(values = cell_type_violin_colors) +
+      coord_cartesian(c(0.5, 3.5), c(-1.55, 1.55), expand = FALSE) +
+      labs(
+        title = "Transposable Elements",
+        subtitle = str_glue("Presence Filter: H3 FPKM >= 0.5 * H3 Autosome Median. n = {length(plot_features)}"),
+        y = "L2FC"
+      ) +
+      theme(
+        aspect.ratio = 3/2,
+        legend.position = "none"
+      )
   )
 }
