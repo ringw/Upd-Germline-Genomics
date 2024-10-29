@@ -78,7 +78,11 @@ targets.chic.align <- tar_map(
   )
 )
 
-targets.chic.refs <- tar_map(
+# Sliding Windows based on the chromosomes or masked chr lengths ----
+# First, we create a GRanges list covering the ref seqs from 1 to the length,
+# per the "samtools idxstats" command result from any one of the bam files.
+# Second, we use a variety of slidingWindows which will be applied later.
+targets.chic.sliding <- tar_map(
   mutate(
     bowtie.refs,
     idxstats = rlang::syms(str_glue("bulk_reads_idxstats_chic.bam_GC3772016_S1_L002_{name}"))
@@ -273,8 +277,16 @@ targets.chic.refs <- tar_map(
   )
 )
 
-# ChIC loaded BAM files to KDE and the bandwidth-equivalent rectangular windows.
+# Coverage proceeds using GRanges for each sample independently ----
 targets.chic.coverage <- tar_map(
+  # For each chic sample and reference:
+  # Generate the names of targets split by 7 chrs and "misc".
+  # Generate the name of the "sharp" GRanges (40bp diameter, 20bp step size)
+  # and "broad" GRanges (500bp diameter, 100bp step size).
+  # Parameters for ChIC: Fragment length including both 5' end base pairs is to
+  # be in [100, 200] bp (this is our monosome length, generous to the DNA being
+  # digested a bit too much).
+  # For ChIC, we are only to look at fragments filtered by MAPQ >= 20.
   cross_join(
     bowtie.refs,
     chic.samples %>% subset(str_starts(molecule, "H3"))
@@ -465,6 +477,7 @@ targets.chic.coverage <- tar_map(
   )
 )
 
+# Fragment length histogram of H3 input digested DNA ----
 # H3-GFP ChIC experiment (extract some statistics - fragment size - from some
 # H3 samples which are representative of all of the H3 samples overall).
 targets.chic.fragments <- tar_map(
@@ -512,6 +525,7 @@ targets.chic.fragments <- tar_map(
   )
 )
 
+# Regression, Gaussian kernel, and L2FC computation ----
 targets.chic.tracks <- list(
   # Chromatin Mark Experiments (H3 and mark ChIP paired samples -> estimate
   # effect i.e. chromatin mark L2FC and apply post-hoc processing i.e. quantify
@@ -867,6 +881,47 @@ targets.chic.tracks <- list(
         )
     )
   ),
+  tar_map(
+    dplyr::rename(chic.experiments, celltype="name") %>%
+      mutate(
+        chic.bw.track.wide = rlang::syms(
+          str_glue("chic.bw.track.wide_{experiment_name}_CN_chr")
+        )
+      ),
+    names = mark | celltype,
+    tar_file(
+      fig.track,
+      save_figures(
+        paste0("figure/", celltype),
+        ".pdf",
+        tribble(
+          ~rowname, ~figure, ~width, ~height,
+          paste0("Track-Plot-", mark),
+          plot_track(
+            import(BigWigFile(chic.bw.track.wide)),
+            name = "L2FC",
+            limits = c(-1, 1),
+            breaks = c(-1, 0, 1)
+          ),
+          5.75,
+          4
+        )
+      ),
+      packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
+    )
+  )
+)
+
+# Histone Code Summary Targeting Non-Coding Pericentromere ----
+# Most interested in the 5-state chromatin model to identify heterochromatin,
+# then extend the large heterochromatin feature all the way in the centromere
+# direction (where the limitation was just sparse coverage; the newer 9-state
+# chromatin model may be even finer/less covered).
+# For a statistical test, quickly further condense our 40-bp sliding window 
+# samples (we know that they have 50% overlap in windows; double-counting) and
+# use those GRanges to get new GRanges for chromosome arms windows.
+# Then test DE (glmGamPoi).
+targets.chic.pericentromere <- list(
   # Pericentromere / chromosome arms reference. This can be generated from the
   # 5-state chromatin model by searching for classic heterochromatin (GREEN)
   # near the Watson or Crick end (whichever is flanking the centromere). The
@@ -969,34 +1024,6 @@ targets.chic.tracks <- list(
         "rtracklayer",
         "S4Vectors"
       )
-    ),
-    tar_target(
-      chic.gene.enrichment.head,
-      reduce_peaks_2_tracks(
-        chic.experiment.quantify_peakcalling.broad,
-        chic.experiment.quantify_peakcalling.sharp
-      ) %>%
-        gtf_granges_extended_from_tss(as_tibble(read.csv(assay.data.sc)))
-    ),
-    tar_file(
-      fig.track,
-      save_figures(
-        paste0("figure/", celltype),
-        ".pdf",
-        tribble(
-          ~rowname, ~figure, ~width, ~height,
-          paste0("Track-Plot-", mark),
-          plot_track(
-            import(BigWigFile(chic.bw.track.wide)),
-            name = "L2FC",
-            limits = c(-1, 1),
-            breaks = c(-1, 0, 1)
-          ),
-          5.75,
-          4
-        )
-      ),
-      packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
     ),
     tar_target(
       enriched.chromosomes.data,
@@ -1190,7 +1217,11 @@ targets.chic.tracks <- list(
         3, 3,
       )
     )
-  ),
+  )
+)
+
+# Transposon / Masked FASTA Reference Analysis ----
+targets.chic.transposon <- list(
   tar_target(
     enriched.transposable.elements.peakcalling.broad.masked,
     seqnames(chic.experiment.quantify_H3K4_Germline_peakcalling.broad_masked) %>%
@@ -1326,8 +1357,11 @@ targets.chic.tracks <- list(
       )
     ),
     packages = tar_option_get("packages") %>% c("egg")
-  ),
+  )
+)
 
+# Analysis of an H3 experiment (coverage analysis of monosomes). ----
+targets.chic.h3 <- list(
   tar_target(
     chic.experiment.nucleosomes,
     chic.tile.diameter_40_score_chr %>%
@@ -1762,7 +1796,6 @@ targets.chic.tracks <- list(
     ),
     packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
   ),
-
   # Binning of chic H3 fragments by length and by mapq.
   tar_target(
     chic.nucleosome.fragment.stats.cut.bounds,
@@ -1858,9 +1891,11 @@ targets.chic.tracks <- list(
         mutate(n = n %>% replace_na(0)),
       packages = tar_option_get("packages") %>% c("tidyr")
     )
-  ),
-  
-  # Peak calling at TSS using regression of ChIC samples.
+  )
+)
+
+# Peak calling at TSS using regression of ChIC samples. ----
+targets.chic.peakcalling <- list(
   tar_target(
     chic.gene.enrichment,
     tibble(
@@ -1972,6 +2007,35 @@ targets.chic.tracks <- list(
         H3K9_Somatic
       ),
     format = "parquet"
+  ),
+  # Head of CDS analysis for peak calling:
+  # bp from TSS into CDS such that the window is all positively enriched in the
+  # histone mark.
+  tar_map(
+    tibble(
+      dplyr::rename(chic.experiments, celltype="name"),
+      chic.experiment.quantify_peakcalling.sharp = rlang::syms(
+        str_glue("chic.experiment.quantify_{mark}_{celltype}_peakcalling.sharp_chr")
+      ),
+      chic.experiment.quantify_peakcalling.broad = rlang::syms(
+        str_glue("chic.experiment.quantify_{mark}_{celltype}_peakcalling.broad_chr")
+      ),
+      chic.bw.track.wide = rlang::syms(
+        str_glue("chic.bw.track.wide_{mark}_{celltype}_CN_chr")
+      ),
+      chic.experiment.quantify.smooth_bw2000 = rlang::syms(
+        str_glue("chic.experiment.quantify.smooth_bw2000_{mark}_{celltype}_CN_chr")
+      )
+    ),
+    names = mark | celltype,
+    tar_target(
+      chic.gene.enrichment.head,
+      reduce_peaks_2_tracks(
+        chic.experiment.quantify_peakcalling.broad,
+        chic.experiment.quantify_peakcalling.sharp
+      ) %>%
+        gtf_granges_extended_from_tss(as_tibble(read.csv(assay.data.sc)))
+    )
   ),
   tar_target(
     chic.gene.enrichment.l2fc,
@@ -2105,7 +2169,6 @@ targets.chic.tracks <- list(
       ),
     format = "parquet"
   ),
-
   tar_file(
     sd_chic_fragments,
     publish_chic_fragments(
@@ -2128,9 +2191,11 @@ targets.chic.tracks <- list(
       ),
       "Supplemental_Data/SD03_Bulk_Sequence_Stats.xlsx"
     )
-  ),
+  )
+)
 
-  # Profiles of ChIC faceted by quantification
+# ChIC-seq querying track by gene, grouping genes, compute mean line plot ----
+targets.chic.lineplot <- list(
   tar_map(
     experiment.driver %>%
       cross_join(tibble(plot_name=c("TSS", "Paneled"))) %>%
@@ -2540,8 +2605,11 @@ targets.chic.tracks <- list(
         )
       )
     )
-  ),
+  )
+)
 
+# Nucleosome Repeat Length (autocorrelation) of H3 ----
+targets.chic.h3.nuctools <- list(
   # Nucleosome repeat length analysis.
   tar_map(
     tibble(
@@ -2665,9 +2733,11 @@ targets.chic.tracks <- list(
       nucleosome_repeat_length_peak_analysis() %>%
       GenomicRanges::resize(500000, fix="center") %>%
       GenomicRanges::reduce()
-  ),
+  )
+)
 
-  # Dimension Reduction.
+# Dimension Reduction ----
+targets.chic.pca <- list(
   tar_target_raw(
     "chic.dimension.reduction",
     call(
@@ -2754,8 +2824,15 @@ targets.chic.tracks <- list(
 
 targets.chic <- list(
   targets.chic.align,
-  targets.chic.refs,
+  targets.chic.sliding,
   targets.chic.coverage,
   targets.chic.fragments,
-  targets.chic.tracks
+  targets.chic.tracks,
+  targets.chic.pericentromere,
+  targets.chic.transposon,
+  targets.chic.h3,
+  targets.chic.peakcalling,
+  targets.chic.lineplot,
+  targets.chic.h3.nuctools,
+  targets.chic.pca
 )
