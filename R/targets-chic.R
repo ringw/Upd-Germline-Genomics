@@ -2,6 +2,10 @@ library(dplyr)
 
 cell_type_violin_colors <- c(Germline="#96C586", Somatic="#A97AAC")
 
+# ChIC Sample Sheet after Demultiplexing of Reads ----
+# "ident": An R symbol-like name to be used in target names for the sample. It
+# may be empty and defaults to the same as "sample".
+# "sample": Either R symbol-like filename/accession name, or a glob of such.
 chic.samples = read.csv('chic/chic_samples.csv') %>%
   subset(sample != "" & !sapply(rejected, isTRUE)) %>%
   mutate(
@@ -12,525 +16,503 @@ chic.samples = read.csv('chic/chic_samples.csv') %>%
         ident[str_length(ident) != 0]
       )
   )
+# Which chic.samples to analyze in PCA. We will elide our alternative "ChIP"
+# samples, including the IgG or whole chromatin samples. The molecules that we
+# are interested in are: H3, H3K4me3, H3K27me3, H3K9me3.
 chic.samples.dimreduc <- chic.samples %>%
   subset(!grepl("ChIP", group) & grepl("H3", molecule))
 
-chic.fpkm.data <- tribble(
-  ~name, ~contrast, ~driver,
-  'Germline', c(1,0,0,0,0,0,0), 'nos',
-  'Somatic', c(1,1,0,0,0,0,0), 'tj'
-)
-# We are going to pull a "bed" target in the cross product below, which defines
-# the genomic features shown in a heatmap for this particular experiment.
-chic.fpkm.data$bed_sym <- rlang::syms(paste0("bed_", chic.fpkm.data$name))
+# The cell types.
+chic.fpkm.data <- tibble(name=c("Germline", "Somatic"), driver=c("nos", "tj"))
 
-chic.mark.data = tribble(~mark, 'H3K4', 'H3K27', 'H3K9')
+# The ChIC experiment conditions (antibody to H3 with mark).
+chic.mark.data = tribble(~mark, "H3K4", "H3K27", "H3K9")
 
 # ChIC experiments: For every driver x mark.
-chic.experiments <- chic.fpkm.data %>% cross_join(chic.mark.data)
-# Pull the "chic" (track) target by name for the driver x mark targets.
-chic.experiments <- chic.experiments %>% within({
-  experiment_name <- paste(mark, name, sep="_")
-})
+chic.experiments <- chic.fpkm.data %>%
+  cross_join(chic.mark.data) %>%
+  # Pull the "chic" (track) target by name for the driver x mark targets.
+  mutate(experiment_name = paste(mark, name, sep="_"))
 
-granges_to_normalize_euchromatin <- substitute(
-  which(as.logical(seqnames(chic.tile.diameter_40_score) %in% c("2L", "2R", "3L", "3R", "4")))
-)
-# granges_to_normalize_heterochromatin <- substitute(
-#   rep(
-#     grep("[23]Cen", as.character(seqnames(chic.tile.diameter_40_score))),
-#     seqlengths(seqinfo(chic.tile.diameter_40_score)[grep("[23]Cen", as.character(seqnames(chic.tile.diameter_40_score)), val=T)])
-#   )
-# )
-granges_to_normalize_heterochromatin <- substitute(
-  which(
-    as.logical(
-      seqnames(chic.tile.diameter_40_score) %in%
-        grep("[23]Cen", names(chr.lengths), value=T)
+# Alignment Job, producing all of the mapped fragments from bowtie2 ----
+targets.chic.align <- tar_map(
+  bowtie.refs,
+  names = name,
+  tar_map(
+    chic.samples,
+    names = sample,
+    unlist = FALSE,
+    tar_file(
+      chic.bam,
+      with(
+        list(name=name, group=group, sample=sample) %>%
+          with(
+            list(
+              output_path = str_glue("chic/{name}/{group}/{sample}.bam"),
+              batch=batch,
+              sample=sample
+            )
+          ),
+        {
+          run(
+            "bash",
+            c(
+              "-i",
+              align_chic_lightfiltering,
+              str_replace(bowtie[1], "\\..*", ""),
+              paste0(batch, "/", sample_glob, "_R1_001.fastq.gz"),
+              paste0(batch, "/", sample_glob, "_R2_001.fastq.gz"),
+              output_path
+            )
+          )
+          output_path
+        }
+      ),
+      cue = tar_cue("never"),
+      packages = c(
+        "dplyr",
+        "processx",
+        "stringr"
+      )
     )
   )
 )
 
-targets.chic <- list(
-  # Align ChIC BAM script. We do not filter by mapq yet (light filtering), we
-  # will do all of that after reading the BAM file into an R data frame.
-  tar_map(
+targets.chic.refs <- tar_map(
+  mutate(
     bowtie.refs,
-    names = name,
-    tar_map(
-      chic.samples,
-      names = sample,
-      unlist = FALSE,
-      tar_file(
-        chic.bam,
-        with(
-          list(name=name, group=group, sample=sample) %>%
-            with(
-              list(
-                output_path = str_glue("chic/{name}/{group}/{sample}.bam"),
-                batch=batch,
-                sample=sample
-              )
-            ),
-          {
-            run(
-              "bash",
-              c(
-                "-i",
-                align_chic_lightfiltering,
-                str_replace(bowtie[1], "\\..*", ""),
-                paste0(batch, "/", sample_glob, "_R1_001.fastq.gz"),
-                paste0(batch, "/", sample_glob, "_R2_001.fastq.gz"),
-                output_path
+    idxstats = rlang::syms(str_glue("bulk_reads_idxstats_chic.bam_GC3772016_S1_L002_{name}"))
+  ),
+  names = name,
+  tar_target(
+    chic.tile_chr_granges_list,
+    GRanges(idxstats$rname %>% setdiff("*") %>% factor(., .), IRanges(1, width = idxstats$rlength[idxstats$rname != "*"])) %>%
+      split(seqnames(.))
+  ),
+  tar_target(
+    chic.tile_all_chr_diameter_20_granges_list,
+    slidingWindows(
+      unlist(chic.tile_chr_granges_list), w=20L, s=20L
+    )
+  ),
+  tar_target(
+    chic.tile_all_chr_diameter_100_granges_list,
+    unlist(chic.tile_chr_granges_list, use.names=F) %>%
+      slidingWindows(w=100L, s=100L) %>%
+      setNames(names(chic.tile_chr_granges_list))
+  ),
+  tar_target(
+    chic.tile_all_chr_diameter_1000_granges_list,
+    slidingWindows(
+      unlist(chic.tile_chr_granges_list), w=1000L, s=1000L
+    )
+  ),
+  tar_target(
+    chic.tile_all_chr_diameter_40_granges_list,
+    # Windows should be centered on the diameter-20 windows:
+    # First 1-40, then 11-50, 31-70, ...
+    tibble(
+      granges = slidingWindows(
+        unlist(chic.tile_chr_granges_list), w=40L, s=10L
+      ) %>%
+        sapply(
+          \(gr) gr[c(1, seq(2, length(gr), by=2))] %>%
+            setNames(NULL) %>%
+            append(
+              str_glue(
+                as.character(seqnames(gr)[1]),
+                ":",
+                gr[length(gr) - (length(gr) %% 2)]@ranges@start + 20,
+                "-",
+                idxstats$rlength[idxstats$rname == as.character(seqnames(gr)[1])]
               )
             )
-            output_path
-          }
         ),
-        cue = tar_cue("never"),
-        packages = c(
-          "dplyr",
-          "processx",
-          "stringr"
-        )
-      )
-    )
-  ),
-
-  tar_map(
-    mutate(
-      bowtie.refs,
-      idxstats = rlang::syms(str_glue("bulk_reads_idxstats_chic.bam_GC3772016_S1_L002_{name}"))
-    ),
-    names = name,
-    tar_target(
-      chic.tile_chr_granges_list,
-      GRanges(idxstats$rname %>% setdiff("*") %>% factor(., .), IRanges(1, width = idxstats$rlength[idxstats$rname != "*"])) %>%
-        split(seqnames(.))
-    ),
-    tar_target(
-      chic.tile_all_chr_diameter_20_granges_list,
-      slidingWindows(
-        unlist(chic.tile_chr_granges_list), w=20L, s=20L
-      )
-    ),
-    tar_target(
-      chic.tile_all_chr_diameter_100_granges_list,
-      unlist(chic.tile_chr_granges_list, use.names=F) %>%
-        slidingWindows(w=100L, s=100L) %>%
-        setNames(names(chic.tile_chr_granges_list))
-    ),
-    tar_target(
-      chic.tile_all_chr_diameter_1000_granges_list,
-      slidingWindows(
-        unlist(chic.tile_chr_granges_list), w=1000L, s=1000L
-      )
-    ),
-    tar_target(
-      chic.tile_all_chr_diameter_40_granges_list,
-      # Windows should be centered on the diameter-20 windows:
-      # First 1-40, then 11-50, 31-70, ...
-      tibble(
-        granges = slidingWindows(
-          unlist(chic.tile_chr_granges_list), w=40L, s=10L
-        ) %>%
-          sapply(
-            \(gr) gr[c(1, seq(2, length(gr), by=2))] %>%
-              setNames(NULL) %>%
-              append(
-                str_glue(
-                  as.character(seqnames(gr)[1]),
-                  ":",
-                  gr[length(gr) - (length(gr) %% 2)]@ranges@start + 20,
-                  "-",
-                  idxstats$rlength[idxstats$rname == as.character(seqnames(gr)[1])]
-                )
-              )
-          ),
-        testgranges = stopifnot(all.equal(sapply(granges, length), sapply(chic.tile_all_chr_diameter_20_granges_list, length)))
-      ) %>%
-        pull(granges)
-    ),
-    # Fix to the all chr diameter 100 track! Use resize/restrict which is much
-    # simpler than new slidingWindows call/slice into the result to get the
-    # desired step size.
-    tar_target(
-      chic.tile_all_chr_diameter_500_granges_list,
-      chic.tile_all_chr_diameter_100_granges_list %>%
-        sapply(\(gr) gr %>% resize(500L, "center") %>% restrict(1L, max(end(gr))))
-    ),
-    tar_target(
-      chic.tile.diameter_40,
-      sapply(
-        levels(seqnames(chic.tile_chr_granges_list[[1]])),
-        \(n) if (n %in% names(masked.feature.lengths))
-          chic.tile_all_chr_diameter_40_granges_list[[n]]
-        else
-          chic.tile_chr_granges_list[[n]],
-        USE.NAMES = FALSE
-      ) %>%
-        GRangesList %>%
-        unlist %>%
-        GRanges(
-          seqlengths = idxstats %>%
-            subset(
-              rname != "*",
-              select = c(rname, rlength)
-            ) %>%
-            deframe
-        )
-    ),
-    tar_target(
-      chic.tile.diameter_40_score,
-      sapply(
-        levels(seqnames(chic.tile_chr_granges_list[[1]])),
-        \(n) if (n %in% names(masked.feature.lengths))
-          chic.tile_all_chr_diameter_20_granges_list[[n]]
-        else
-          chic.tile_chr_granges_list[[n]],
-        USE.NAMES = FALSE
-      ) %>%
-        GRangesList %>%
-        unlist %>%
-        GRanges(
-          seqlengths = idxstats %>%
-            subset(
-              rname != "*",
-              select = c(rname, rlength)
-            ) %>%
-            deframe
-        )
-    ),
-    tar_target(
-      chic.tile.diameter_500,
-      sapply(
-        levels(seqnames(chic.tile_chr_granges_list[[1]])),
-        \(n) if (n %in% names(masked.feature.lengths))
-          chic.tile_all_chr_diameter_500_granges_list[[n]]
-        else
-          chic.tile_chr_granges_list[[n]],
-        USE.NAMES = FALSE
-      ) %>%
-        GRangesList %>%
-        unlist %>%
-        GRanges(
-          seqlengths = idxstats %>%
-            subset(
-              rname != "*",
-              select = c(rname, rlength)
-            ) %>%
-            deframe
-        )
-    ),
-    tar_target(
-      chic.tile.diameter_500_score,
-      sapply(
-        levels(seqnames(chic.tile_chr_granges_list[[1]])),
-        \(n) if (n %in% names(masked.feature.lengths))
-          chic.tile_all_chr_diameter_100_granges_list[[n]]
-        else
-          chic.tile_chr_granges_list[[n]],
-        USE.NAMES = FALSE
-      ) %>%
-        GRangesList %>%
-        unlist %>%
-        GRanges(
-          seqlengths = idxstats %>%
-            subset(
-              rname != "*",
-              select = c(rname, rlength)
-            ) %>%
-            deframe
-        )
-    ),
-    tar_target(
-      chic.tile.diameter_1000,
-      sapply(
-        levels(
-          seqnames(chic.tile_chr_granges_list[[1]]) %>%
-            as.factor() %>%
-            # We are going to split chic.tile.diameter_1000_masked and then
-            # expect the first elements in the list to be masked.lengths!
-            fct_relevel("2L_Histone_Repeat_Unit", after=7L)
-        ),
-        \(n) if (n %in% names(masked.feature.lengths))
-          chic.tile_all_chr_diameter_1000_granges_list[[n]]
-        else
-          chic.tile_chr_granges_list[[n]],
-        USE.NAMES = FALSE
-      ) %>%
-        GRangesList %>%
-        unlist %>%
-        GRanges(
-          seqlengths = idxstats %>%
-            subset(
-              rname != "*",
-              select = c(rname, rlength)
-            ) %>%
-            deframe
-        )
-    ),
-    tar_target(
-      chic.tile.diameter_1000_lookup,
-      tibble(
-        rname = as.factor(seqnames(chic.tile.diameter_40)),
-        ind = seq_along(chic.tile.diameter_40),
-        loc = chic.tile.diameter_40@ranges@start + 1/2 * chic.tile.diameter_40@ranges@width
-      ) %>%
-        group_by(rname) %>%
-        reframe(
-          dest = list(chic.tile.diameter_1000[as.logical(seqnames(chic.tile.diameter_1000) == rname[1])]),
-          lookup = ind[
-            findInterval(
-              dest[[1]]@ranges@start + 1/2 * dest[[1]]@ranges@width,
-              loc
-            ) %>%
-              pmin(length(loc))
-          ]
-        ) %>%
-        pull(lookup)
-    )
-  ),
-
-  # ChIC loaded BAM files to KDE and the bandwidth-equivalent rectangular windows.
-  tar_map(
-    cross_join(
-      bowtie.refs,
-      chic.samples %>% subset(str_starts(molecule, "H3"))
+      testgranges = stopifnot(all.equal(sapply(granges, length), sapply(chic.tile_all_chr_diameter_20_granges_list, length)))
     ) %>%
-      cross_join(
-        tribble(
-          ~bp_suffix, ~pos_fixer_callable,
-          "CN", rlang::sym("paired_end_pos_to_midpoint") # ,
-          # "FE", rlang::sym("paired_end_pos_to_5_prime")
-        )
-      ) %>%
-      rowwise %>%
-      mutate(
-        suffix = str_glue("{sample}_{bp_suffix}_{name}"),
-        bulk_reads_misc = rlang::syms(str_glue("bulk_reads_misc_chic.bam_{sample}_{name}")),
-        bulk_reads_idxstats = rlang::syms(str_glue("bulk_reads_idxstats_chic.bam_{sample}_{name}")),
-        bulk_reads_split = mapply(
-          \(ref_name, n) rlang::syms(
-            str_glue(
-              "bulk_reads_{names(if (name == \"masked\") masked.lengths else chr.lengths)}_{n}"
-            )
-          ) %>%
-            setNames(names(if (name == "masked") masked.lengths else chr.lengths)) %>%
-            append(list("list"), .) %>%
-            do.call(call, ., quote=T),
-          name,
-          str_glue("chic.bam_{sample}_{name}"),
-          SIMPLIFY=F
-        ),
-        chic.tile.diameter_40 = rlang::syms(str_glue("chic.tile.diameter_40_{name}")),
-        chic.tile.diameter_500 = rlang::syms(str_glue("chic.tile.diameter_500_{name}")),
-        max_fragment_length = c(`20240628`=500)[as.character(rep)] %>%
-          replace(is.na(.), 200)
-      ),
-    names = suffix,
-
-    tar_target(
-      chic.granges.diameter_40,
-      tibble(
-        reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
-          sapply(
-            \(df) df %>%
-              pos_fixer_callable %>%
-              filter(between(length, 100, max_fragment_length), mapq >= 20),
-            simplify=F
-          ) %>%
-          setNames(NULL),
-        tile_granges = reads %>%
-          sapply(
-            \(df) chic.tile.diameter_40[
-              if (!nrow(df))
-                integer(0)
-              else if (df$rname[1] %in% names(masked.lengths))
-                seqnames(chic.tile.diameter_40) == df$rname[1]
-              else
-                !(seqnames(chic.tile.diameter_40) %in% names(masked.lengths))
-            ]
-          ),
-        partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_40)),
-        granges = mapply(
-          count_overlaps_bases, tile_granges, reads
-        )
-      ) %>%
-        with(
-          granges %>%
-            GRangesList %>%
-            unlist %>%
-            `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
-        )
-    ),
-    tar_target(
-      chic.granges.dinucleosome.diameter_40,
-      tibble(
-        reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
-          sapply(
-            \(df) df %>%
-              pos_fixer_callable %>%
-              filter(between(length, 200, 500), mapq >= 20),
-            simplify=F
-          ) %>%
-          setNames(NULL),
-        tile_granges = reads %>%
-          sapply(
-            \(df) chic.tile.diameter_40[
-              if (!nrow(df))
-                integer(0)
-              else if (df$rname[1] %in% names(masked.lengths))
-                seqnames(chic.tile.diameter_40) == df$rname[1]
-              else
-                !(seqnames(chic.tile.diameter_40) %in% names(masked.lengths))
-            ]
-          ),
-        partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_40)),
-        granges = mapply(
-          count_overlaps_bases, tile_granges, reads
-        )
-      ) %>%
-        with(
-          granges %>%
-            GRangesList %>%
-            unlist %>%
-            `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
-        )
-    ),
-    tar_target(
-      chic.granges.peakcalling.diameter_40,
-      tibble(
-        reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
-          sapply(
-            \(df) df %>%
-              paired_end_reads_to_fragment_lengths %>%
-              filter(between(length, 100, max_fragment_length), mapq >= 20),
-            simplify=F
-          ) %>%
-          setNames(NULL),
-        tile_granges = reads %>%
-          sapply(
-            \(df) chic.tile.diameter_40[
-              if (!nrow(df))
-                integer(0)
-              else if (df$rname[1] %in% names(masked.lengths))
-                seqnames(chic.tile.diameter_40) == df$rname[1]
-              else
-                !(seqnames(chic.tile.diameter_40) %in% names(masked.lengths))
-            ]
-          ),
-        partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_40)),
-        granges = mapply(
-          \(tile_granges, reads) GRanges(
-            tile_granges,
-            score = countOverlaps(
-              tile_granges,
-              reads %>% paired_end_reads_to_granges
-            )
-          ),
-          tile_granges,
-          reads
-        )
-      ) %>%
-        with(
-          granges %>%
-            GRangesList %>%
-            unlist %>%
-            `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
-        )
-    ),
-    tar_target(
-      chic.granges.peakcalling.diameter_500,
-      tibble(
-        reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
-          sapply(
-            \(df) df %>%
-              paired_end_reads_to_fragment_lengths %>%
-              filter(between(length, 100, max_fragment_length), mapq >= 20),
-            simplify=F
-          ) %>%
-          setNames(NULL),
-        tile_granges = reads %>%
-          sapply(
-            \(df) chic.tile.diameter_500[
-              if (!nrow(df))
-                integer(0)
-              else if (df$rname[1] %in% names(masked.lengths))
-                seqnames(chic.tile.diameter_500) == df$rname[1]
-              else
-                !(seqnames(chic.tile.diameter_500) %in% names(masked.lengths))
-            ]
-          ),
-        partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_500)),
-        granges = mapply(
-          \(tile_granges, reads) GRanges(
-            tile_granges,
-            score = countOverlaps(
-              tile_granges,
-              reads %>% paired_end_reads_to_granges
-            )
-          ),
-          tile_granges,
-          reads
-        )
-      ) %>%
-        with(
-          granges %>%
-            GRangesList %>%
-            unlist %>%
-            `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
-        )
-    )
+      pull(granges)
   ),
+  # Fix to the all chr diameter 100 track! Use resize/restrict which is much
+  # simpler than new slidingWindows call/slice into the result to get the
+  # desired step size.
+  tar_target(
+    chic.tile_all_chr_diameter_500_granges_list,
+    chic.tile_all_chr_diameter_100_granges_list %>%
+      sapply(\(gr) gr %>% resize(500L, "center") %>% restrict(1L, max(end(gr))))
+  ),
+  tar_target(
+    chic.tile.diameter_40,
+    sapply(
+      levels(seqnames(chic.tile_chr_granges_list[[1]])),
+      \(n) if (n %in% names(masked.feature.lengths))
+        chic.tile_all_chr_diameter_40_granges_list[[n]]
+      else
+        chic.tile_chr_granges_list[[n]],
+      USE.NAMES = FALSE
+    ) %>%
+      GRangesList %>%
+      unlist %>%
+      GRanges(
+        seqlengths = idxstats %>%
+          subset(
+            rname != "*",
+            select = c(rname, rlength)
+          ) %>%
+          deframe
+      )
+  ),
+  tar_target(
+    chic.tile.diameter_40_score,
+    sapply(
+      levels(seqnames(chic.tile_chr_granges_list[[1]])),
+      \(n) if (n %in% names(masked.feature.lengths))
+        chic.tile_all_chr_diameter_20_granges_list[[n]]
+      else
+        chic.tile_chr_granges_list[[n]],
+      USE.NAMES = FALSE
+    ) %>%
+      GRangesList %>%
+      unlist %>%
+      GRanges(
+        seqlengths = idxstats %>%
+          subset(
+            rname != "*",
+            select = c(rname, rlength)
+          ) %>%
+          deframe
+      )
+  ),
+  tar_target(
+    chic.tile.diameter_500,
+    sapply(
+      levels(seqnames(chic.tile_chr_granges_list[[1]])),
+      \(n) if (n %in% names(masked.feature.lengths))
+        chic.tile_all_chr_diameter_500_granges_list[[n]]
+      else
+        chic.tile_chr_granges_list[[n]],
+      USE.NAMES = FALSE
+    ) %>%
+      GRangesList %>%
+      unlist %>%
+      GRanges(
+        seqlengths = idxstats %>%
+          subset(
+            rname != "*",
+            select = c(rname, rlength)
+          ) %>%
+          deframe
+      )
+  ),
+  tar_target(
+    chic.tile.diameter_500_score,
+    sapply(
+      levels(seqnames(chic.tile_chr_granges_list[[1]])),
+      \(n) if (n %in% names(masked.feature.lengths))
+        chic.tile_all_chr_diameter_100_granges_list[[n]]
+      else
+        chic.tile_chr_granges_list[[n]],
+      USE.NAMES = FALSE
+    ) %>%
+      GRangesList %>%
+      unlist %>%
+      GRanges(
+        seqlengths = idxstats %>%
+          subset(
+            rname != "*",
+            select = c(rname, rlength)
+          ) %>%
+          deframe
+      )
+  ),
+  tar_target(
+    chic.tile.diameter_1000,
+    sapply(
+      levels(
+        seqnames(chic.tile_chr_granges_list[[1]]) %>%
+          as.factor() %>%
+          # We are going to split chic.tile.diameter_1000_masked and then
+          # expect the first elements in the list to be masked.lengths!
+          fct_relevel("2L_Histone_Repeat_Unit", after=7L)
+      ),
+      \(n) if (n %in% names(masked.feature.lengths))
+        chic.tile_all_chr_diameter_1000_granges_list[[n]]
+      else
+        chic.tile_chr_granges_list[[n]],
+      USE.NAMES = FALSE
+    ) %>%
+      GRangesList %>%
+      unlist %>%
+      GRanges(
+        seqlengths = idxstats %>%
+          subset(
+            rname != "*",
+            select = c(rname, rlength)
+          ) %>%
+          deframe
+      )
+  ),
+  tar_target(
+    chic.tile.diameter_1000_lookup,
+    tibble(
+      rname = as.factor(seqnames(chic.tile.diameter_40)),
+      ind = seq_along(chic.tile.diameter_40),
+      loc = chic.tile.diameter_40@ranges@start + 1/2 * chic.tile.diameter_40@ranges@width
+    ) %>%
+      group_by(rname) %>%
+      reframe(
+        dest = list(chic.tile.diameter_1000[as.logical(seqnames(chic.tile.diameter_1000) == rname[1])]),
+        lookup = ind[
+          findInterval(
+            dest[[1]]@ranges@start + 1/2 * dest[[1]]@ranges@width,
+            loc
+          ) %>%
+            pmin(length(loc))
+        ]
+      ) %>%
+      pull(lookup)
+  )
+)
 
-  # H3-GFP ChIC experiment (extract some statistics - fragment size - from some
-  # H3 samples which are representative of all of the H3 samples overall).
-  tar_map(
-    tribble(
-      ~celltype, ~bulk_reads,
-      "Germline",
-      rlang::syms(
-        with(
-          expand.grid(
-            n = c(names(chr.lengths), "misc"),
-            sample = c("GC3768007_S7_L001", "GC3768009_S9_L001", "GC76045515_S5_L001")
-          ),
-          str_glue("bulk_reads_{n}_chic.bam_{sample}_chr")
-        )
+# ChIC loaded BAM files to KDE and the bandwidth-equivalent rectangular windows.
+targets.chic.coverage <- tar_map(
+  cross_join(
+    bowtie.refs,
+    chic.samples %>% subset(str_starts(molecule, "H3"))
+  ) %>%
+    cross_join(
+      tribble(
+        ~bp_suffix, ~pos_fixer_callable,
+        "CN", rlang::sym("paired_end_pos_to_midpoint") # ,
+        # "FE", rlang::sym("paired_end_pos_to_5_prime")
+      )
+    ) %>%
+    rowwise %>%
+    mutate(
+      suffix = str_glue("{sample}_{bp_suffix}_{name}"),
+      bulk_reads_misc = rlang::syms(str_glue("bulk_reads_misc_chic.bam_{sample}_{name}")),
+      bulk_reads_idxstats = rlang::syms(str_glue("bulk_reads_idxstats_chic.bam_{sample}_{name}")),
+      bulk_reads_split = mapply(
+        \(ref_name, n) rlang::syms(
+          str_glue(
+            "bulk_reads_{names(if (name == \"masked\") masked.lengths else chr.lengths)}_{n}"
+          )
+        ) %>%
+          setNames(names(if (name == "masked") masked.lengths else chr.lengths)) %>%
+          append(list("list"), .) %>%
+          do.call(call, ., quote=T),
+        name,
+        str_glue("chic.bam_{sample}_{name}"),
+        SIMPLIFY=F
       ),
-      "Somatic",
-      rlang::syms(
-        with(
-          expand.grid(
-            n = c(names(chr.lengths), "misc"),
-            sample = c("GC3768010_S10_L001", "GC3768013_S13_L001", "GC3768014_S14_L001")
-          ),
-          str_glue("bulk_reads_{n}_chic.bam_{sample}_chr")
-        )
-      ),
+      chic.tile.diameter_40 = rlang::syms(str_glue("chic.tile.diameter_40_{name}")),
+      chic.tile.diameter_500 = rlang::syms(str_glue("chic.tile.diameter_500_{name}")),
+      max_fragment_length = c(`20240628`=500)[as.character(rep)] %>%
+        replace(is.na(.), 200)
     ),
-    names = celltype,
-    tar_file(
-      fig.fragment.size,
-      save_figures(
-        str_glue("figure/", celltype),
-        ".pdf",
-        tribble(
-          ~rowname, ~figure, ~width, ~height,
-          "CHIC-H3-Fragment-Size",
-          histogram_paired_end_fragment_size(bulk_reads),
-          4,
-          2.5,
-          "CHIC-H3-Fragment-Size-Chr",
-          histogram_paired_end_fragment_size(bulk_reads, faceted=TRUE),
-          4,
-          11,
-        )
+  names = suffix,
+
+  tar_target(
+    chic.granges.diameter_40,
+    tibble(
+      reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
+        sapply(
+          \(df) df %>%
+            pos_fixer_callable %>%
+            filter(between(length, 100, max_fragment_length), mapq >= 20),
+          simplify=F
+        ) %>%
+        setNames(NULL),
+      tile_granges = reads %>%
+        sapply(
+          \(df) chic.tile.diameter_40[
+            if (!nrow(df))
+              integer(0)
+            else if (df$rname[1] %in% names(masked.lengths))
+              seqnames(chic.tile.diameter_40) == df$rname[1]
+            else
+              !(seqnames(chic.tile.diameter_40) %in% names(masked.lengths))
+          ]
+        ),
+      partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_40)),
+      granges = mapply(
+        count_overlaps_bases, tile_granges, reads
+      )
+    ) %>%
+      with(
+        granges %>%
+          GRangesList %>%
+          unlist %>%
+          `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
+      )
+  ),
+  tar_target(
+    chic.granges.dinucleosome.diameter_40,
+    tibble(
+      reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
+        sapply(
+          \(df) df %>%
+            pos_fixer_callable %>%
+            filter(between(length, 200, 500), mapq >= 20),
+          simplify=F
+        ) %>%
+        setNames(NULL),
+      tile_granges = reads %>%
+        sapply(
+          \(df) chic.tile.diameter_40[
+            if (!nrow(df))
+              integer(0)
+            else if (df$rname[1] %in% names(masked.lengths))
+              seqnames(chic.tile.diameter_40) == df$rname[1]
+            else
+              !(seqnames(chic.tile.diameter_40) %in% names(masked.lengths))
+          ]
+        ),
+      partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_40)),
+      granges = mapply(
+        count_overlaps_bases, tile_granges, reads
+      )
+    ) %>%
+      with(
+        granges %>%
+          GRangesList %>%
+          unlist %>%
+          `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
+      )
+  ),
+  tar_target(
+    chic.granges.peakcalling.diameter_40,
+    tibble(
+      reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
+        sapply(
+          \(df) df %>%
+            paired_end_reads_to_fragment_lengths %>%
+            filter(between(length, 100, max_fragment_length), mapq >= 20),
+          simplify=F
+        ) %>%
+        setNames(NULL),
+      tile_granges = reads %>%
+        sapply(
+          \(df) chic.tile.diameter_40[
+            if (!nrow(df))
+              integer(0)
+            else if (df$rname[1] %in% names(masked.lengths))
+              seqnames(chic.tile.diameter_40) == df$rname[1]
+            else
+              !(seqnames(chic.tile.diameter_40) %in% names(masked.lengths))
+          ]
+        ),
+      partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_40)),
+      granges = mapply(
+        \(tile_granges, reads) GRanges(
+          tile_granges,
+          score = countOverlaps(
+            tile_granges,
+            reads %>% paired_end_reads_to_granges
+          )
+        ),
+        tile_granges,
+        reads
+      )
+    ) %>%
+      with(
+        granges %>%
+          GRangesList %>%
+          unlist %>%
+          `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
+      )
+  ),
+  tar_target(
+    chic.granges.peakcalling.diameter_500,
+    tibble(
+      reads = append(bulk_reads_split, list(bulk_reads_misc)) %>%
+        sapply(
+          \(df) df %>%
+            paired_end_reads_to_fragment_lengths %>%
+            filter(between(length, 100, max_fragment_length), mapq >= 20),
+          simplify=F
+        ) %>%
+        setNames(NULL),
+      tile_granges = reads %>%
+        sapply(
+          \(df) chic.tile.diameter_500[
+            if (!nrow(df))
+              integer(0)
+            else if (df$rname[1] %in% names(masked.lengths))
+              seqnames(chic.tile.diameter_500) == df$rname[1]
+            else
+              !(seqnames(chic.tile.diameter_500) %in% names(masked.lengths))
+          ]
+        ),
+      partition_tiles = stopifnot(sum(sapply(tile_granges, length)) == length(chic.tile.diameter_500)),
+      granges = mapply(
+        \(tile_granges, reads) GRanges(
+          tile_granges,
+          score = countOverlaps(
+            tile_granges,
+            reads %>% paired_end_reads_to_granges
+          )
+        ),
+        tile_granges,
+        reads
+      )
+    ) %>%
+      with(
+        granges %>%
+          GRangesList %>%
+          unlist %>%
+          `metadata<-`(value = list(est_library_size = sum(sapply(reads, nrow))))
+      )
+  )
+)
+
+# H3-GFP ChIC experiment (extract some statistics - fragment size - from some
+# H3 samples which are representative of all of the H3 samples overall).
+targets.chic.fragments <- tar_map(
+  tribble(
+    ~celltype, ~bulk_reads,
+    "Germline",
+    rlang::syms(
+      with(
+        expand.grid(
+          n = c(names(chr.lengths), "misc"),
+          sample = c("GC3768007_S7_L001", "GC3768009_S9_L001", "GC76045515_S5_L001")
+        ),
+        str_glue("bulk_reads_{n}_chic.bam_{sample}_chr")
+      )
+    ),
+    "Somatic",
+    rlang::syms(
+      with(
+        expand.grid(
+          n = c(names(chr.lengths), "misc"),
+          sample = c("GC3768010_S10_L001", "GC3768013_S13_L001", "GC3768014_S14_L001")
+        ),
+        str_glue("bulk_reads_{n}_chic.bam_{sample}_chr")
+      )
+    ),
+  ),
+  names = celltype,
+  tar_file(
+    fig.fragment.size,
+    save_figures(
+      str_glue("figure/", celltype),
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "CHIC-H3-Fragment-Size",
+        histogram_paired_end_fragment_size(bulk_reads),
+        4,
+        2.5,
+        "CHIC-H3-Fragment-Size-Chr",
+        histogram_paired_end_fragment_size(bulk_reads, faceted=TRUE),
+        4,
+        11,
       )
     )
-  ),
+  )
+)
 
+targets.chic.tracks <- list(
   # Chromatin Mark Experiments (H3 and mark ChIP paired samples -> estimate
   # effect i.e. chromatin mark L2FC and apply post-hoc processing i.e. quantify
   # H3 and mark values at each window and then smooth).
@@ -583,19 +565,6 @@ targets.chic <- list(
             "chic.experiment.granges.offset.",
             c(H3K4="euchromatin", H3K27="euchromatin", H3K9="euchromatin")[mark],
             "_{mark}_{name}_{bp_name}_{reference}"
-          )
-        ),
-        granges_to_normalize = list(
-          do.call(
-            substitute,
-            list(
-              list(
-                H3K4=granges_to_normalize_euchromatin,
-                H3K27=granges_to_normalize_euchromatin,
-                H3K9=granges_to_normalize_euchromatin
-              )[[mark]],
-              list(chic.tile.diameter_40_score = chic.tile.diameter_40_score)
-            )
           )
         ),
         generate_chic_tracks = rlang::syms(
@@ -765,7 +734,12 @@ targets.chic <- list(
         chic.experiment.quantify = chic.experiment.quantify,
         chic.experiment.quantify.smooth_bw40 = chic.experiment.quantify.smooth_bw40,
         chic.experiment.quantify.smooth_bw2000 = chic.experiment.quantify.smooth_bw2000,
-        granges_to_normalize = granges_to_normalize
+        granges_to_normalize = (
+          seqnames(chic.tile.diameter_40_score) %in%
+            c("2L", "2R", "3L", "3R", "4")
+        ) %>%
+          as.logical() %>%
+          which()
       ) %>%
         rowwise %>%
         summarise(
@@ -807,7 +781,19 @@ targets.chic <- list(
             elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 2]
             / elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 1]
           ) %>%
-            `/`(enframe(.) %>% dplyr::slice(granges_to_normalize) %>% deframe %>% median(na.rm=T)) %>%
+            `/`(
+              enframe(.) %>%
+                dplyr::slice(
+                  (
+                    seqnames(chic.tile.diameter_40_score) %in%
+                      c("2L", "2R", "3L", "3R", "4")
+                  ) %>%
+                    as.logical() %>%
+                    which()
+                ) %>%
+                deframe() %>%
+                median(na.rm=T)
+            ) %>%
             `[`(chic.tile.diameter_1000_lookup) %>%
             log2 %>%
             replace(is.na(.), 0)
@@ -2764,4 +2750,12 @@ targets.chic <- list(
       )
     )
   )
+)
+
+targets.chic <- list(
+  targets.chic.align,
+  targets.chic.refs,
+  targets.chic.coverage,
+  targets.chic.fragments,
+  targets.chic.tracks
 )
