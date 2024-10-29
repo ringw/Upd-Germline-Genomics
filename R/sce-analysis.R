@@ -456,20 +456,20 @@ gene_group_bar_plot <- function(
       label = label %>% factor(unique(.)),
       group = group %>% factor() %>% recode(Q1="off", Q2="low", Q3="medium", Q4="high")
     )
-  ymax <- data %>% group_by(label, celltype) %>% tally() %>% pull(n) %>% max()
   data %>%
     ggplot(aes(celltype, fill = group)) +
     facet_grid(cols=vars(label), switch="x") +
-    geom_bar(position = position_stack(rev = TRUE)) +
+    geom_bar(position = position_fill(rev = TRUE)) +
     scale_fill_manual(values = sc_quartile_colors %>% setNames(NULL)) +
+    scale_y_continuous(labels = percent) +
     coord_cartesian(
       c(0.4, 2.6),
-      c(0, ymax * 1.05),
+      c(0, 1),
       expand = FALSE
     ) +
     labs(
       x = "Gene Classification",
-      y = "# Genes"
+      y = "% of Selected Genes"
     ) +
     theme(
       aspect.ratio = 3,

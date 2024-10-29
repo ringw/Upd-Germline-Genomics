@@ -177,7 +177,7 @@ targets.sce <- list(
             ncol = 2
           ),
           8, 8,
-          "RNAseq-Quantification-Quarters-Stacked",
+          "RNAseq-Quantification-Quarters-Percentage",
           gene_group_bar_plot(
             quartile.factor_Germline, quartile.factor_Somatic, Upd_cpm
           ),
