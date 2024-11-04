@@ -383,7 +383,8 @@ chic_panel_gtable_binary <- function(
   column_width,
   row_height,
   quartile_color,
-  linewidth
+  linewidth,
+  chic_average_profile_limits
 ) {
   facet_data <- facet_data %>% subset(activity == "active")
   chic_panel_create_grob(facet_data, facet_names, column_width, row_height) %>%
@@ -396,7 +397,7 @@ chic_panel_gtable_binary <- function(
           quartile_color=quartile_color,
           linewidth=linewidth,
           legend_title=NULL,
-          chic_average_profile_limits = c(0.5, 8.5)
+          chic_average_profile_limits = chic_average_profile_limits
         ) +
           theme(legend.position = "none")
       ),
@@ -412,7 +413,7 @@ chic_panel_gtable_binary <- function(
           quartile_color=quartile_color,
           linewidth=linewidth,
           legend_title=NULL,
-          chic_average_profile_limits = c(0.5, 8.5)
+          chic_average_profile_limits = chic_average_profile_limits
         ) +
           theme(legend.position = "none")
       ),
@@ -428,7 +429,7 @@ chic_panel_gtable_binary <- function(
           quartile_color=quartile_color,
           linewidth=linewidth,
           legend_title=NULL,
-          chic_average_profile_limits = c(0.5, 8.5)
+          chic_average_profile_limits = chic_average_profile_limits
         ) +
           theme(legend.position = "none")
       ),
@@ -444,7 +445,7 @@ chic_panel_gtable_binary <- function(
           quartile_color=quartile_color,
           linewidth=linewidth,
           legend_title=NULL,
-          chic_average_profile_limits = c(0.5, 8.5)
+          chic_average_profile_limits = chic_average_profile_limits
         ) +
           theme(legend.position = "none")
       ),

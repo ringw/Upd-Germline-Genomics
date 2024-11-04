@@ -2525,7 +2525,8 @@ targets.chic.lineplot <- list(
           c(CelltypeK4="H3K4", CelltypeK27="H3K27"),
           6, 2.5,
           unlist(chic_line_track_colors) %>% setNames(NULL),
-          linewidth = rep(0.66, 2)
+          linewidth = rep(0.66, 2),
+          chic_average_profile_limits = c(0.38, 9.8)
         ),
         12.5,
         6.25,
@@ -2539,7 +2540,8 @@ targets.chic.lineplot <- list(
           c(CelltypeK4="H3K4", CelltypeK27="H3K27"),
           8.5, 3,
           unlist(chic_line_track_colors) %>% setNames(NULL),
-          linewidth = rep(0.66, 2)
+          linewidth = rep(0.66, 2),
+          chic_average_profile_limits = c(0.38, 9.8)
         ),
         18,
         7
@@ -2566,7 +2568,8 @@ targets.chic.lineplot <- list(
           c(GermlineK4="GermlineH3K4", SomaticK4="SomaticH3K4"),
           6, 2.5,
           unlist(chic_line_track_colors) %>% setNames(NULL),
-          linewidth = rep(0.66, 2)
+          linewidth = rep(0.66, 2),
+          chic_average_profile_limits = c(0.35, 8.5)
         ),
         12.5,
         6.25
