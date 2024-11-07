@@ -2110,7 +2110,7 @@ targets.chic.peakcalling <- list(
     format = "parquet"
   ),
   tar_target(
-    chic.gene.enrichment.broad,
+    chic.gene.enrichment.broad.rawvalue,
     tibble(
       read.csv(assay.data.sc),
       chr.test = chr %>%
@@ -2168,6 +2168,37 @@ targets.chic.peakcalling <- list(
         H3K9_Somatic
       ),
     format = "parquet"
+  ),
+  tar_target(
+    chic.gene.enrichment.broad.logit.trend.fit,
+    calculate_chic_gene_enrichment_broad_logit_trend_fit(
+      as_tibble(read.csv(assay.data.sc)),
+      Upd_cpm
+    )
+  ),
+  tar_target(
+    chic.gene.enrichment.broad,
+    chic.gene.enrichment.broad.rawvalue %>%
+      calculate_chic_gene_enrichment_broad_correction(chic.gene.enrichment.broad.logit.trend.fit),
+    format = "parquet"
+  ),
+  tar_file(
+    fig.chic.broad.correction.fit,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "Gene-Body-Percent-Enriched-Logit-Trend-Correction",
+        plot_chic_gene_enrichment_broad_logit_trend_fit(
+          chic.gene.enrichment.broad.rawvalue,
+          Upd_cpm,
+          as_tibble(read.csv(assay.data.sc))
+        ),
+        4,
+        3.5
+      )
+    )
   ),
   tar_file(
     sd_chic_fragments,
