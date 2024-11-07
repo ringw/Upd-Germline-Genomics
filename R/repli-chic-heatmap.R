@@ -192,7 +192,9 @@ my_mix_color <- function(mix_columns, mix_colors) {
   result <- result
 }
 
-plot_repli_track_raster <- function(data, log2_limits = c(-0.5, 0.52)) {
+plot_repli_track_raster <- function(
+  data, log2_limits = c(-0.5, 0.52), repli.mode.chr.weights = 1
+) {
   data <- data +
     ifelse(
       is.na(data[, "sample_size_bp"]) |
@@ -219,12 +221,7 @@ plot_repli_track_raster <- function(data, log2_limits = c(-0.5, 0.52)) {
     x = data[, "repli"],
     fill = data[, c("chr2L", "chr2R", "chr3L", "chr3R", "chr4", "chrX", "chrY")] %>%
       cbind(scaffolds = 1 - rowSums(.)) %>%
-      `*`(
-        rep(
-          1000 / c(chr.lengths, scaffolds.length),
-          each = nrow(.)
-        )
-      ) %>%
+      `*`(rep(repli.mode.chr.weights, each = nrow(.))) %>%
       apply(1, \(v) if (any(is.finite(v))) which.max(v) else NA) %>%
       `[`(c(chr.colors, "#ffffff"), value = .)
   )

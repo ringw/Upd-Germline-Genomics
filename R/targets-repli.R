@@ -353,6 +353,13 @@ targets.repli <- list(
         )
       ),
       repli.timing = rlang::syms(str_glue("repli.timing_{celltype}_{reference}")),
+      repli.targets = repli.samples$name %>%
+        subset(repli.samples$genotype == driver) %>%
+        list(),
+      repli.idxstats = rlang::syms(
+        str_glue("bulk_reads_idxstats_repli.bam_{repli.targets}_{reference}")
+      ) %>%
+        list(),
       chic.track = rlang::syms(str_glue("chic.tile.diameter_500_score_{reference}")),
       chic.results = list(
         call(
@@ -436,6 +443,26 @@ targets.repli <- list(
           dimnames = list(timing = NULL, series = colnames(.))
         )
     ),
+    tar_target(
+      repli.mode.chr.weights,
+      repli.idxstats %>%
+        sapply(purrr::partial(pull, var = "mapped_unique_reads", name = "rname")) %>%
+        as.data.frame() %>%
+        group_by(
+          rowname = structure(
+            c(1:7, rep(8, nrow(repli.idxstats[[1]]) - 7)),
+            levels = c(names(chr.lengths), "scaffolds"),
+            class = "factor"
+          )
+        ) %>%
+        summarize_all(sum) %>%
+        column_to_rownames() %>%
+        as.matrix() %>%
+        glm_gp(verbose = TRUE) %>%
+        predict(newdata = matrix(1), offset=0, type="response") %>%
+        apply(1, identity) %>%
+        (function(v) 1 / (1000 * 1000 / sum(v) * v))
+    ),
     tar_file(
       fig.repli.chic,
       save_figures(
@@ -444,7 +471,11 @@ targets.repli <- list(
         tribble(
           ~name, ~figure, ~width, ~height,
           paste0("Repli-CHIC-Whole-Genome-", reference),
-          plot_repli_track_raster(repli.chic.projection.profile, log2_limits = c(-0.65, 0.8)) +
+          plot_repli_track_raster(
+            repli.chic.projection.profile,
+            log2_limits = c(-0.65, 0.8),
+            repli.mode.chr.weights = repli.mode.chr.weights
+          ) +
             annotate(
               # Quartile cuts!
               "segment",
@@ -460,7 +491,15 @@ targets.repli <- list(
       fig.repli.chic.raster,
       save_png(
         str_glue("figure/", celltype, "/Repli-CHIC-Whole-Genome-", reference, ".png"),
-        plot_grid(as_grob(plot_repli_track_raster(repli.chic.projection.profile))$grobs[[6]]),
+        plot_repli_track_raster(
+          repli.chic.projection.profile,
+          log2_limits = c(-0.65, 0.8),
+          repli.mode.chr.weights = repli.mode.chr.weights
+        ) %>%
+          as_grob() %>%
+          `$`(grobs) %>%
+          `[[`(value = 6) %>%
+          plot_grid(),
         w = 750,
         h = 5
       ),
