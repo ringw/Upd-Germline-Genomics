@@ -40,7 +40,6 @@ tar_option_set(
     'irlba',
     'magrittr',
     'Matrix',
-    'normr',
     'OpenImageR',
     'openxlsx',
     'orthogene',
