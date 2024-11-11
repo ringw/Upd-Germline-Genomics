@@ -45,7 +45,6 @@ tar_option_set(
     'orthogene',
     'pillar',
     'processx',
-    'propagate',
     'purrr',
     'readxl',
     'reshape2',
