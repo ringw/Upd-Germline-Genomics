@@ -967,6 +967,54 @@ targets.chic.pericentromere <- list(
     }
   ),
   tar_target(
+    chromosome_arms_diameter_500_score_chr,
+    {
+      overlaps <- as.list(
+        findOverlaps(
+          chromosome_pericetromere_label, chic.tile.diameter_500_score_chr
+        )
+      )
+      GRanges(
+        chic.tile.diameter_500_score_chr,
+        group = factor(
+          seqnames(chic.tile.diameter_500_score_chr),
+          c("2L", "2LC", "2RC", "2R", "3L", "3LC", "3RC", "3R")
+        ) %>%
+          replace(
+            unlist(overlaps),
+            rep(
+              paste0(seqnames(chromosome_pericetromere_label), "C"),
+              sapply(overlaps, length)
+            )
+          )
+      )
+    }
+  ),
+  tar_target(
+    chromosome_arms_diameter_500_score_masked,
+    {
+      overlaps <- as.list(
+        findOverlaps(
+          chromosome_pericetromere_label, chic.tile.diameter_500_score_masked
+        )
+      )
+      GRanges(
+        chic.tile.diameter_500_score_masked,
+        group = factor(
+          seqnames(chic.tile.diameter_500_score_masked),
+          c("2L", "2LC", "2RC", "2R", "3L", "3LC", "3RC", "3R")
+        ) %>%
+          replace(
+            unlist(overlaps),
+            rep(
+              paste0(seqnames(chromosome_pericetromere_label), "C"),
+              sapply(overlaps, length)
+            )
+          )
+      )
+    }
+  ),
+  tar_target(
     chromosome_arms_diameter_40,
     {
       overlaps <- as.list(

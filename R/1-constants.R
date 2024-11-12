@@ -9,6 +9,20 @@ chr.colors <- setNames(
   names(chr.lengths)
 )
 
+arm.colors <- c(
+  "2L" = hcl(126, 100, 65),
+  "2LC" = hcl(126, 80, 35),
+  "2RC" = hcl(173, 80, 35),
+  "2R" = hcl(173, 100, 65),
+  "3L" = hcl(31, 100, 65),
+  "3LC" = hcl(31, 80, 35),
+  "3RC" = hcl(79, 80, 35),
+  "3R" = hcl(79, 100, 65),
+  "4" = hcl(297, 100, 65),
+  "X" = hcl(344, 100, 65),
+  "Y" = hcl(250, 100, 65)
+)
+
 misc.lengths <- c(
   # `2Cen_mapped_Scaffold_10_D1684` = 19956, `2Cen_mapped_Scaffold_43_D1668` = 44411, 
   # `3Cen_mapped_Scaffold_1_D1896_D1895` = 76224, `3Cen_mapped_Scaffold_27_D1777` = 11983, 

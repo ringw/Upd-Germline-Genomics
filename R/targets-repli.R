@@ -352,6 +352,7 @@ targets.repli <- list(
           experiment.driver, dplyr::rename(bowtie.refs, reference = "name")
         )
       ),
+      repli.experiment = rlang::syms(str_glue("repli.experiment_{celltype}_{reference}")),
       repli.timing = rlang::syms(str_glue("repli.timing_{celltype}_{reference}")),
       repli.targets = repli.samples$name %>%
         subset(repli.samples$genotype == driver) %>%
@@ -370,6 +371,9 @@ targets.repli <- list(
           as.character(str_glue("H3K{c(4,27,9)}"))
         )
       ),
+      chromosome_arms_diameter_500_score = rlang::syms(
+        str_glue("chromosome_arms_diameter_500_score_{reference}")
+      ),
       quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}")),
       celltype_lower = tolower(celltype),
     ),
@@ -386,6 +390,30 @@ targets.repli <- list(
     tar_target(
       repli.value.projection,
       granges_bin_to_projection(GRanges(chic.track, bin = repli.value.bindata$bin, size_of_bin_bp = repli.value.bindata$size_of_bin_bp))
+    ),
+    tar_target(
+      repli.chromosome.arms.factor_diameter_500_score,
+      repli_chromosome_arms_factor_scaffolds(chromosome_arms_diameter_500_score)
+    ),
+    tar_target(
+      repli.chromosome.arms.factor_diameter_1000,
+      repli_chromosome_arms_factor_scaffolds(chromosome_arms_diameter_1000)
+    ),
+    tar_target(
+      repli.chromosome.arms.profile,
+      repli.value.bindata$bin %>%
+        factor(seq(max(repli.value.bindata$bin))) %>%
+        split(
+          repli.chromosome.arms.factor_diameter_500_score,
+          .
+        ) %>%
+        sapply(
+          \(chr) chr %>%
+            table() %>%
+            prop.table()
+        ) %>%
+        t() %>%
+        `colnames<-`(value = str_glue("chr{colnames(.)}"))
     ),
     tar_target(
       repli.chic.projection.profile,
@@ -422,18 +450,7 @@ targets.repli <- list(
               c("TSS_off", "TSS_low", "TSS_medium", "TSS_high")
             )
           ),
-        # For 7 dm6 ref seqs, write out % of 1kb windows that are from the seq.
-        split(
-          as.factor(seqnames(chic.tile.diameter_500_score_chr)),
-          factor(
-            repli.value.bindata$bin,
-            seq(max(repli.value.bindata$bin))
-          )
-        ) %>%
-          sapply(
-            \(chr) colMeans(model.matrix(~ 0 + chr)[, 1:7, drop=F])
-          ) %>%
-          t(),
+        repli.chromosome.arms.profile,
         sample_size_bp = repli.value.bindata$size_of_bin_bp[
           match(seq(nrow(repli.value.projection[[1]])), repli.value.bindata$bin)
         ]
@@ -445,23 +462,7 @@ targets.repli <- list(
     ),
     tar_target(
       repli.mode.chr.weights,
-      repli.idxstats %>%
-        sapply(purrr::partial(pull, var = "mapped_unique_reads", name = "rname")) %>%
-        as.data.frame() %>%
-        group_by(
-          rowname = structure(
-            c(1:7, rep(8, nrow(repli.idxstats[[1]]) - 7)),
-            levels = c(names(chr.lengths), "scaffolds"),
-            class = "factor"
-          )
-        ) %>%
-        summarize_all(sum) %>%
-        column_to_rownames() %>%
-        as.matrix() %>%
-        glm_gp(verbose = TRUE) %>%
-        predict(newdata = matrix(1), offset=0, type="response") %>%
-        apply(1, identity) %>%
-        (function(v) 1 / (1000 * 1000 / sum(v) * v))
+      weight_repli_mode_prop_table(repli.experiment, repli.chromosome.arms.factor_diameter_1000)
     ),
     tar_file(
       fig.repli.chic,

@@ -97,13 +97,6 @@ violin_plot_repli_chic <- function(df) {
     theme(aspect.ratio = 1.25)
 }
 
-rank_track <- function(track) {
-  rnk <- track$score
-  rnk[!is.na(rnk)] <- rank(rnk[!is.na(rnk)], ties="random")
-  track$rank <- as.integer(rnk)
-  track
-}
-
 bin_track_by_rank <- function(track, nbins = 1000) {
   # newnames <- with(
   #   attributes(track[!is.na(track$rank)]),
@@ -164,6 +157,40 @@ apply_granges_projection <- function(projs, granges) {
   )
 }
 
+repli_chromosome_arms_factor_scaffolds <- function(chromosome.arms) {
+  fct.to.replace <- seqnames(chromosome.arms) %in%
+    c("4", "X", "Y")
+  fct.to.scaffold <- !(
+    seqnames(chromosome.arms) %in% names(chr.lengths)
+  )
+  fct <- chromosome.arms$group %>%
+    factor(c(levels(.), "4", "X", "Y", "scaffolds")) %>%
+    replace(
+      which(fct.to.replace),
+      as.character(seqnames(chromosome.arms)[fct.to.replace])
+    ) %>%
+    replace(which(fct.to.scaffold), "scaffolds")
+}
+
+# Plotting functions for Repli ChIC heatmap ----
+weight_repli_mode_prop_table <- function(
+  repli.experiment,
+  chromosome.arms
+) {
+  Y <- repli.experiment %>%
+    assay() %>%
+    as.data.frame() %>%
+    group_by(rowname = chromosome.arms) %>%
+    summarize_all(sum) %>%
+    column_to_rownames() %>%
+    as.matrix()
+  g <- glm_gp(Y, verbose = TRUE)
+  Yhat <- g %>% predict(newdata = matrix(1), offset = 0, type = "response") %>%
+    apply(1, identity)
+  other_margin <- 1000 * 1000 * Yhat / sum(Yhat)
+  1 / other_margin
+}
+
 my_mix_color_correct_overplotting <- function(mix_columns) {
   # sums <- rowSums(mix_columns)
   # mix_columns <- mix_columns *
@@ -219,11 +246,10 @@ plot_repli_track_raster <- function(
   chr_track <- tibble(
     series = "Mode Chr.",
     x = data[, "repli"],
-    fill = data[, c("chr2L", "chr2R", "chr3L", "chr3R", "chr4", "chrX", "chrY")] %>%
-      cbind(scaffolds = 1 - rowSums(.)) %>%
+    fill = data[, c("chr2L", "chr2LC", "chr2RC", "chr2R", "chr3L", "chr3LC", "chr3RC", "chr3R", "chr4", "chrX", "chrY", "chrscaffolds")] %>%
       `*`(rep(repli.mode.chr.weights, each = nrow(.))) %>%
       apply(1, \(v) if (any(is.finite(v))) which.max(v) else NA) %>%
-      `[`(c(chr.colors, "#ffffff"), value = .)
+      `[`(c(arm.colors, "#ffffff"), value = .)
   )
   sample_size_mb <- round(sum(data[-match(0, data[, "repli"]), "sample_size_bp"], na.rm=T) / 1000 / 1000, 1)
   data[, grep("^H", colnames(data))] <- (
