@@ -328,3 +328,47 @@ plot_repli_track_raster <- function(
       panel.grid.major.y = element_blank()
     )
 }
+
+# Plotting with chromosome arms legend wrapped along the bottom edge ----
+plot_tile_example_arm_colors <- function() {
+  ggplot(
+    tibble(
+      name = names(arm.colors) %>% factor(., .),
+      x = seq_along(name)
+    ),
+    aes(x, 0, fill=name)
+  ) +
+    geom_tile() +
+    scale_fill_manual(
+      NULL,
+      labels = \(text) paste0(
+        text,
+        rep(
+          c(
+            strrep(" ", 3),
+            ""
+          ),
+          c(length(text) - 1, 1)
+        )
+      ),
+      values = arm.colors,
+      guide = guide_legend(nrow = 1)
+    ) +
+    theme(
+      legend.key.size = unit(0.12, "in"),
+      legend.position = "bottom",
+    )
+}
+
+grob_add_arm_colors_legend <- function(p, width, height) {
+  arm.colors.legend.height <- unit(0.5, "in")
+  gr <- gtable(
+    width,
+    unit.c(height, arm.colors.legend.height)
+  ) %>%
+    gtable_add_grob(
+      list(ggplotGrob(p), get_legend(plot_tile_example_arm_colors())),
+      t = 1:2,
+      l = 1
+    )
+}

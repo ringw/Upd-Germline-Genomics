@@ -479,17 +479,22 @@ targets.repli <- list(
             repli.chic.projection.profile,
             log2_limits = c(-0.65, 0.8),
             repli.mode.chr.weights = repli.mode.chr.weights
-          ) +
-            annotate(
-              # Quartile cuts!
-              "segment",
-              c(0.5, 0, -0.5), 5.5, xend=c(0.5, 0, -0.5), yend=6.5
-            ),
+          ) %>%
+            grob_add_arm_colors_legend(w = unit(1, "null"), h = unit(4, "in")),
+          6,
+          4.5,
+          paste0("Repli-CHIC-Whole-Genome-", reference, "-Naive-Mode"),
+          plot_repli_track_raster(
+            repli.chic.projection.profile,
+            log2_limits = c(-0.65, 0.8),
+            repli.mode.chr.weights = 1
+          ) %>%
+            grob_add_arm_colors_legend(w = unit(1, "null"), h = unit(4, "in")),
           6,
           4.5
         )
       ),
-      packages = tar_option_get("packages") %>% c("colorspace")
+      packages = tar_option_get("packages") %>% c("colorspace", "cowplot", "grid", "gtable")
     ),
     tar_file(
       fig.repli.chic.raster,
