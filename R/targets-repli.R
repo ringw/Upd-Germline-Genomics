@@ -374,6 +374,9 @@ targets.repli <- list(
       chromosome_arms_diameter_500_score = rlang::syms(
         str_glue("chromosome_arms_diameter_500_score_{reference}")
       ),
+      chromosome_arms_diameter_1000 = rlang::syms(
+        str_glue("chromosome_arms_diameter_1000_{reference}")
+      ),
       quartile.factor = rlang::syms(str_glue("quartile.factor_{celltype}")),
       celltype_lower = tolower(celltype),
     ),
