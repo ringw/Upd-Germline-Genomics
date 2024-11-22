@@ -928,30 +928,11 @@ targets.repli <- list(
       tribble(
         ~rowname, ~figure, ~width, ~height,
         "Repli-Chromosome-Arm-Violin",
-        ggplot(
-          # Reverse (top to bottom) feature. Reverse again celltype!
-          repli.timing.byfeature %>%
-            mutate(celltype = factor(celltype, c("Somatic", "Germline"))),
-          aes(feature, timing, fill=celltype)
-        ) +
-          facet_wrap(vars(row), ncol=3, scales="free") +
-          geom_violin() +
-          geom_blank(
-            aes(),
-            tibble(
-              feature="", timing=0, celltype=c("Germline", "Somatic"), row=factor("", c("2", "3", ""))
-            )
-          ) +
-          scale_x_discrete(limits = rev) +
-          scale_y_reverse() +
-          scale_fill_manual(values = cell_type_violin_colors) +
-          labs(x = "Genomic Range") +
-          coord_flip() +
-          theme(
-            aspect.ratio = 1.5,
-            panel.grid.major.x = element_blank(),
-            legend.position = "none"
-          ),
+        plot_repli_timing_byfeature(repli.timing.byfeature),
+        6,
+        3,
+        "Repli-Chromosome-Arm-TSS-Violin",
+        plot_repli_timing_byfeature(repli.timing.byfeature, tss_only = TRUE, box_ci = TRUE),
         6,
         3,
         "Repli-Chromosome-Violin",
