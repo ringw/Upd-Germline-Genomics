@@ -682,7 +682,7 @@ targets.repli <- list(
 
   # Repli graphic for dmel-all-chromosomes, not the masked bowtie reference.
   tar_file(
-    fig.repli.skew.difference,
+    fig.repli.skew,
     save_figures(
       "figure/Both-Cell-Types",
       ".pdf",
@@ -704,6 +704,74 @@ targets.repli <- list(
         5.75,
         4
       )
+    ),
+    packages = tar_option_get("packages") %>% c("grid", "gtable")
+  ),
+  tar_target(
+    histone.locus,
+    with(
+      read.csv(assay.data.sc),
+      GRanges(
+        "2L",
+        IRanges(
+          start = start[match("His1:CG33801", X)],
+          end = end[match("His3:CG33866", X)]
+        )
+      )
+    )
+  ),
+  tar_file(
+    fig.repli.timing,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "Repli-Timing",
+        plot_track_2score(
+          GRanges(repli.timing_Germline_chr, score_1=repli.timing_Germline_chr$score, score_2=repli.timing_Somatic_chr$score),
+          "transparent",
+          "transparent",
+          score_1 = "#6D9965",
+          score_2 = "#B377B0",
+          background_color = "#EAEAEB",
+          line_color = "#010101",
+          roi = tibble(
+            subset(as_tibble(repli.peaks_chr), width >= 20000),
+            sgn = subset(grepl("Earlier", names(repli.peaks_chr)), width(repli.peaks_chr) >= 20000),
+            chr = seqnames,
+            xmin = start,
+            xmax = end,
+            ymin = -Inf,
+            ymax = Inf,
+            fill = c(
+              "FALSE" = "#461B56",
+              "TRUE" = "#255529"
+            )[
+              as.character(sgn)
+            ]
+          ) %>%
+            arrange(fill)
+        ),
+        5.75,
+        4,
+      ) %>%
+        mutate(
+          figure = {
+            # Chr 2: after the X (second element of TableGrob)
+            figure[[1]]$grobs[[2]] <- figure[[1]]$grobs[[2]] %>%
+              gtable_add_grob(
+                linesGrob(
+                  rep(mid(histone.locus) / chr.lengths["2L"], 2),
+                  c(0, 1),
+                  gp=gpar(col = "yellow")
+                ),
+                t = 7,
+                l = 5
+              )
+            figure
+          }
+        )
     ),
     packages = tar_option_get("packages") %>% c("grid", "gtable")
   ),

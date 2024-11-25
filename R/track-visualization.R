@@ -137,19 +137,36 @@ plot_track_2score <- function(
     track,
     positive_color = "#e0eff9",
     negative_color = "#f7f9e7",
+    background_color = NA,
+    line_color = NA,
+    line_width = 0.5,
     score_1 = chic_line_track_colors$germline,
     score_2 = chic_line_track_colors$somatic,
+    roi = data.frame(
+      chr = character(0),
+      xmin = numeric(0),
+      xmax = numeric(0),
+      ymin = numeric(0),
+      ymax = numeric(0),
+      fill = character(0)
+    ),
     impute_score = T,
     name = "Timing",
     limits = c(-1, 1),
     breaks = c(-1, 0, 1)) {
-  df <- tibble(
-    chr = rep(as.factor(seqnames(track)), 2),
-    pos = rep(mid(track), 2),
-    value = c(track$score_1, track$score_2),
-    group = rep(c("1", "2"), each=length(track))
+  df <- apply(
+    elementMetadata(track)[, c("score_1", "score_2")],
+    2,
+    \(v) tibble(
+      chr = as.factor(seqnames(track)),
+      pos = mid(track),
+      value = v
+    ) %>%
+      subset(chr %in% names(chr.lengths)),
+    simplify = FALSE
   ) %>%
-    subset(chr %in% names(chr.lengths))
+    setNames(c("1", "2")) %>%
+    bind_rows(.id = "group")
   chr_lookup <- as.numeric(df$chr)
   chr_levels <- list(`2` = 1, `3` = 2, `4` = 3, `X` = 4, `Y` = 5)
   # Impute geom_line: Remove all NA values before further subsampling the track
@@ -161,7 +178,7 @@ plot_track_2score <- function(
   df <- df %>%
     dplyr::slice(
       df %>%
-        group_by(chr) %>%
+        group_by(group, chr) %>%
         reframe(
           keep = seq(length(pos)) %in% round(seq(1, length(pos), length.out=1000)) |
             chr == "4"
@@ -182,7 +199,11 @@ plot_track_2score <- function(
       ymin=Inf, ymax=mean(limits),
       fill=positive_color
     ) +
-    geom_line(linewidth = 0.45) +
+    geom_rect(
+      aes(x = NULL, y = NULL, color = NULL, group = NULL, xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax, fill = fill),
+      data = subset(roi, chr == chr.)
+    ) +
+    geom_line(linewidth = line_width * 25.4 / 72) +
     scale_x_continuous(
       name = NULL,
       breaks = c(1, 1000000 * seq(2, 100, by=2)),
@@ -194,15 +215,23 @@ plot_track_2score <- function(
       breaks = breaks
     ) +
     scale_color_manual(values = c(`1`=score_1, `2`=score_2)) +
+    scale_fill_identity() +
     coord_cartesian(
       NULL, limits, expand=F
     ) +
     theme_bw() +
     theme(
       legend.position = "none",
-      panel.background = element_rect(fill = NA),
-      panel.border = element_blank(),
-      panel.grid = element_blank()
+      panel.background = element_rect(fill = background_color),
+      axis.ticks = if (is.na(line_color))
+          waiver()
+        else
+          element_line(color = line_color),
+      panel.border = if (is.na(line_color))
+          element_blank()
+        else
+          element_rect(color = line_color),
+      panel.grid = element_blank(),
     )
   ggplot_build_panel_absolute <- function(gg, height, width, margin_right = unit(5.5, "points")) {
     gr <- as_grob(gg)
@@ -273,7 +302,7 @@ plot_track_2score <- function(
       1:5,
       1
     )
-  plot_grid(mylayout)
+  # plot_grid(mylayout)
 }
 
 plot_genomic_ranges_score <- function(
