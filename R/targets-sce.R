@@ -478,12 +478,31 @@ targets.sce <- list(
     )
   ),
   tar_target(
-    Upd_volcano_bivalent_genes_colors,
-    list(
-      germline = "#6D9965", somatic = "#A95AA1",
-      both = "#9ef4ff",
-      other = "#DDDDDD"
-    )
+    gg_volcano_bivalent,
+    Upd_regression_somatic[
+      c("map", "svalue")
+    ] %>%
+      sapply(\(arr) arr[Upd_volcano_bivalent_genes,, drop=F], simplify=F) %>%
+      plot_volcano_apeglm(
+        color_column = chic.gene.enrichment %>%
+          tibble(., quartile.factor_Germline, quartile.factor_Somatic) %>%
+          group_by(symbol) %>%
+          reframe(
+            color = if (isTRUE(H3K4_Germline < 1e-3) & isTRUE(H3K27_Germline < 1e-3) & quartile.factor_Germline != "Q1") {
+              if (isTRUE(H3K4_Somatic < 1e-3) & isTRUE(H3K27_Somatic < 1e-3) & quartile.factor_Somatic != "Q1")
+                classification_colors_fig4$both
+              else
+                classification_colors_fig4$germline
+            } else {
+              if (isTRUE(H3K4_Somatic < 1e-3) & isTRUE(H3K27_Somatic < 1e-3) & quartile.factor_Somatic != "Q1")
+                classification_colors_fig4$somatic
+              else
+                ""
+            }
+          ) %>%
+          deframe() %>%
+          subset(. != "")
+      )
   ),
   tar_file(
     Upd_volcano_bivalent,
@@ -491,34 +510,35 @@ targets.sce <- list(
       "figure/Integrated-scRNAseq", ".pdf",
       tibble(
         name="Bivalent-Germline-Somatic-Volcano",
-        figure=Upd_regression_somatic[
-          c("map", "svalue")
-        ] %>%
-          sapply(\(arr) arr[Upd_volcano_bivalent_genes,, drop=F], simplify=F) %>%
-          plot_volcano_apeglm(
-            color_column = chic.gene.enrichment %>%
-              group_by(symbol) %>%
-              reframe(
-                color = if (isTRUE(H3K4_Germline < 1e-3) & isTRUE(H3K27_Germline < 1e-3)) {
-                  if (isTRUE(H3K4_Somatic < 1e-3) & isTRUE(H3K27_Somatic < 1e-3))
-                    Upd_volcano_bivalent_genes_colors$both
-                  else
-                    Upd_volcano_bivalent_genes_colors$germline
-                } else {
-                  if (isTRUE(H3K4_Somatic < 1e-3) & isTRUE(H3K27_Somatic < 1e-3))
-                    Upd_volcano_bivalent_genes_colors$somatic
-                  else
-                    Upd_volcano_bivalent_genes_colors$other
-                }
+        figure=gtable(unit(c(3, 1), "in"), unit(4, "in")) %>%
+          gtable_add_grob(
+            list(
+              gg_volcano_bivalent %>% rasterise(dpi = 300) %>% ggplotGrob(),
+              (
+                ggplot(
+                  tibble(
+                    x = 1:3,
+                    y = 0,
+                    label = str_to_title(names(classification_colors_fig4)) %>%
+                      factor(., .),
+                  ),
+                  aes(x, y, color=label)
+                ) +
+                  geom_point(size = 3) +
+                  scale_color_manual(values = unlist(classification_colors_fig4, use.names=F)) +
+                  labs(color = "Bivalent in:")
               ) %>%
-              deframe()
+                get_legend()
+            ),
+            1,
+            l = 1:2
           ) %>%
-          rasterise(dpi=300) %>%
-          list,
-        width = 3,
+          list(),
+        width = 4,
         height = 4
       )
-    )
+    ),
+    packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
   ),
   tar_file(
     Upd_genes_heatmap_excel,
