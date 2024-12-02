@@ -627,7 +627,10 @@ subsample_ident_normalize_phase <- function(df) {
     arrange(match(rowname, df$rowname))
 }
 
-plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
+plot_volcano_apeglm <- function(
+  Upd_regression_somatic, log2Threshold = 1.5,
+  color_column = NULL
+) {
   quant = tibble(
     rowname = rownames(Upd_regression_somatic$map),
     log2FC = -Upd_regression_somatic$map[,2] / log(2),
@@ -635,15 +638,18 @@ plot_volcano_apeglm <- function(Upd_regression_somatic, log2Threshold = 1.5) {
   ) %>%
     arrange(runif(nrow(.))) %>%
     mutate(
-      color = ifelse(
-        log2FC >= log2Threshold & log10.svalue <= -4,
-        chic_line_track_colors$germline,
+      color = if (is.character(color_column))
+        color_column[rowname]
+      else
         ifelse(
-          log2FC <= -log2Threshold & log10.svalue <= -4,
-          chic_line_track_colors$somatic,
-          "#dddddd"
+          log2FC >= log2Threshold & log10.svalue <= -4,
+          chic_line_track_colors$germline,
+          ifelse(
+            log2FC <= -log2Threshold & log10.svalue <= -4,
+            chic_line_track_colors$somatic,
+            "#dddddd"
+          )
         )
-      )
     )
 
   ggplot(

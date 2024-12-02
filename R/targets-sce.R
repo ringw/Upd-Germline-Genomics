@@ -468,6 +468,58 @@ targets.sce <- list(
       )
     )
   ),
+  tar_target(
+    Upd_volcano_bivalent_genes,
+    with(
+      chic.gene.enrichment,
+      subset(symbol, H3K4_Germline < 1e-3 & H3K27_Germline < 1e-3) %>%
+        union(subset(symbol, H3K4_Somatic < 1e-3 & H3K27_Somatic < 1e-3)) %>%
+        intersect(rownames(Upd_regression_somatic$map))
+    )
+  ),
+  tar_target(
+    Upd_volcano_bivalent_genes_colors,
+    list(
+      germline = "#6D9965", somatic = "#A95AA1",
+      both = "#9ef4ff",
+      other = "#DDDDDD"
+    )
+  ),
+  tar_file(
+    Upd_volcano_bivalent,
+    save_figures(
+      "figure/Integrated-scRNAseq", ".pdf",
+      tibble(
+        name="Bivalent-Germline-Somatic-Volcano",
+        figure=Upd_regression_somatic[
+          c("map", "svalue")
+        ] %>%
+          sapply(\(arr) arr[Upd_volcano_bivalent_genes,, drop=F], simplify=F) %>%
+          plot_volcano_apeglm(
+            color_column = chic.gene.enrichment %>%
+              group_by(symbol) %>%
+              reframe(
+                color = if (isTRUE(H3K4_Germline < 1e-3) & isTRUE(H3K27_Germline < 1e-3)) {
+                  if (isTRUE(H3K4_Somatic < 1e-3) & isTRUE(H3K27_Somatic < 1e-3))
+                    Upd_volcano_bivalent_genes_colors$both
+                  else
+                    Upd_volcano_bivalent_genes_colors$germline
+                } else {
+                  if (isTRUE(H3K4_Somatic < 1e-3) & isTRUE(H3K27_Somatic < 1e-3))
+                    Upd_volcano_bivalent_genes_colors$somatic
+                  else
+                    Upd_volcano_bivalent_genes_colors$other
+                }
+              ) %>%
+              deframe()
+          ) %>%
+          rasterise(dpi=300) %>%
+          list,
+        width = 3,
+        height = 4
+      )
+    )
+  ),
   tar_file(
     Upd_genes_heatmap_excel,
     publish_heatmap_named_cuts(
