@@ -884,19 +884,19 @@ list(
           "CHIC-TSS-H3-RNAseq-Quartile",
           chic_plot_h3_enrichment(
             tibble(sc_nucleosome_quartile_data_TSS, genes=quant, mark="H3"),
-            "Quant.",
-            setNames(sc_quartile_annotations, NULL),
-            seq(0.5, 0.85, length.out=4),
-            facet_wrap(vars(mark))
+            legend_title = "Quant.",
+            quartile_colors = setNames(sc_quartile_annotations, NULL),
+            linewidth = seq(0.5, 0.85, length.out=4),
+            faceter = facet_wrap(vars(mark))
           ),
           4, 4,
           paste0("CHIC-TSS-H3-RNAseq-", name, "Exclusive-Quartile"),
           chic_plot_h3_enrichment(
             tibble(sc_nucleosome_exclusive_quartile_data_TSS, genes=quant, mark="H3"),
-            "Quant.",
-            setNames(sc_quartile_annotations, NULL),
-            seq(0.5, 0.85, length.out=4),
-            facet_wrap(vars(mark))
+            legend_title = "Quant.",
+            quartile_colors = setNames(sc_quartile_annotations, NULL),
+            linewidth = seq(0.5, 0.85, length.out=4),
+            faceter = facet_wrap(vars(mark))
           ),
           4, 4,
         )

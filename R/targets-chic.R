@@ -2350,6 +2350,64 @@ targets.chic.lineplot <- list(
       )
     ),
     tar_target(
+      facet_genes_bivalent,
+      reframe(
+        chic.gene.enrichment,
+        gene = symbol,
+        bivalent = interaction(
+          cbind(H3K4_Germline, H3K27_Germline) %>%
+            `<`(1e-3) %>%
+            replace(is.na(.), FALSE) %>%
+            rowAlls() %>%
+            `&`(quartile.factor_Germline != "Q1"),
+          cbind(H3K4_Somatic, H3K27_Somatic) %>%
+            `<`(1e-3) %>%
+            replace(is.na(.), FALSE) %>%
+            rowAlls() %>%
+            `&`(quartile.factor_Somatic != "Q1")
+        ) %>%
+          `levels<-`(
+            value = c(
+              "off",
+              "GSC",
+              "CySC",
+              "both"
+            )
+          )
+      )
+    ),
+    tar_target(
+      facet_genes_valency,
+      reframe(
+        chic.gene.enrichment,
+        gene = symbol,
+        valency = sapply(
+          c("H3K4", "H3K27"),
+          \(n) get(paste(n, celltype, sep="_")) %>%
+            `<`(1e-3) %>%
+            replace(is.na(.), FALSE),
+          simplify = FALSE
+        ) %>%
+          do.call(interaction, .) %>%
+          replace(
+            list(
+              Germline = quartile.factor_Germline,
+              Somatic = quartile.factor_Somatic
+            )[[celltype]] ==
+              "Q1",
+            "FALSE.FALSE"
+          ) %>%
+          `levels<-`(
+            value = c(
+              "~",
+              "H3K4",
+              "H3K27",
+              "bivalent"
+            )
+          )
+      )
+    ),
+    tar_target(
       sc_chr_quartile_data,
       mapply(
         chic_heatmap_facet_genes,
@@ -2533,6 +2591,15 @@ targets.chic.lineplot <- list(
       ),
       format = "parquet"
     ),
+    # H3 profile. By ChIC TSS enrichment K4 & K27.
+    tar_target(
+      sc_nucleosome_valency_data,
+      chic_heatmap_facet_genes(
+        chic.heatmap.tss.nucleosome,
+        facet_genes_valency
+      ),
+      format = "parquet"
+    ),
     # H3 profile. Filtered so that the other cell type's gene classification
     # must be the "off" level.
     tar_target(
@@ -2652,6 +2719,41 @@ targets.chic.lineplot <- list(
       )
     ),
     packages = tar_option_get("packages") %>% c("grid", "gtable")
+  ),
+  tar_file(
+    fig.h3.valency,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        rowname="CHIC-TSS-H3-Valency",
+        figure=chic_plot_h3_enrichment(
+          bind_rows(
+            list(
+              Germline=sc_nucleosome_valency_data_Germline_TSS,
+              Somatic=sc_nucleosome_valency_data_Somatic_TSS
+            ),
+            .id = "genes"
+          ) %>%
+            mutate(
+              valency = valency %>%
+              fct_relevel(
+                c("H3K4", "bivalent", "~", "H3K27")
+              ),
+            ),
+          NULL,
+          unlist(
+            classification_colors_fig4[c("germline", "somatic")], use.names=F
+          ),
+          rep(0.85, 2),
+          facet_wrap(vars(valency)),
+          limits = c(0, 5.5)
+        ) %>%
+          list(),
+        width=6.75,
+        height=6.75,
+      )
+    )
   ),
   tar_file(
     fig.celltype.k4.tss,

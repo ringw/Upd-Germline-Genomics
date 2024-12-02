@@ -110,15 +110,23 @@ chic_plot_average_profiles_facet_grid <- function(
 # H3 plot. The absolute panel size here is an arbitrary number, from the RNAseq
 # Quartile plot being 4 inches high, because we didn't set more specific
 # absolute units on the plot.
-chic_plot_h3_enrichment <- function(facet_data, ...) {
+chic_plot_h3_enrichment <- function(facet_data, limits = c(0, 5.25), ...) {
   y_axis_h3 <- scale_y_continuous(
     "Enrichment (vs Auto Monosome Median)",
-    limits = c(0, 5.25),
+    limits = limits,
     expand = FALSE
   )
   gg <- chic_plot_average_profiles_facet_grid(facet_data, ...) + y_axis_h3
   gr <- as_grob(gg)
-  gr$widths[5] <- gr$heights[8] <- unit(2.471, "in")
+  fig3PlotSize <- unit(2.471, "in")
+  gr$heights[
+    grid::unitType(gr$heights) == "null" &
+      as.numeric(gr$heights) == 1
+  ] <- fig3PlotSize
+  gr$widths[
+    grid::unitType(gr$widths) == "null" &
+      as.numeric(gr$widths) == 1
+  ] <- fig3PlotSize
   plot_grid(gr)
 }
 

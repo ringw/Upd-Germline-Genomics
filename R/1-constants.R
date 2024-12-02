@@ -41,6 +41,12 @@ experiment.driver <- tribble(
   "tj", "Somatic"
 )
 
+classification_colors_fig4 <- list(
+  germline = "#6D9965",
+  somatic = "#A95AA1",
+  both = "#dbd81f"
+)
+
 repli_level_colors <- list(
   E="#2FEBF0", # hcl(196, 65, 85)
   EM="#AC7CDA", # hcl(284, 72, 60)
