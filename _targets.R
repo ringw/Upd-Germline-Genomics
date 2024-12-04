@@ -390,6 +390,16 @@ list(
       packages = tar_option_get("packages") %>% c("tidyr")
     )
   ),
+  tar_target(
+    expression.factor,
+    interaction(
+      quartile.factor_Germline != "Q1",
+      quartile.factor_Somatic != "Q1"
+    ) %>%
+      `levels<-`(value = c("off", "GSC", "CySC", "both")) %>%
+      fct_relevel("off", after=4) %>%
+      setNames(names(quartile.factor_Germline))
+  ),
 
   # Paths to bowtie2-calling scripts. Used by the chic and repli targets.
   tar_file(align_chic_lightfiltering, "scripts/align_chic_lightfiltering.sh"),
