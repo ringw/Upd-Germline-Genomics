@@ -1,3 +1,11 @@
+repli_posterior_bar_colors <- append(
+  chic_line_track_colors,
+  list(
+    Kc167 = "#C27A00",
+    S2 = "#4087F4"
+  )
+)
+
 beta_prior_draws <- function(n = 200, shape = 4, rate = 0.5) {
   alpha <- rgamma(n * 2, shape, rate) %>%
     subset(. > 1) %>%
@@ -348,4 +356,50 @@ bayes_factor_repli_experiment <- function(prob1, prob2, prior) {
   )
   reduced_model <- sum(prob1 * prob2 * d_timing_d_angle * prior)
   full_model / reduced_model
+}
+
+plot_posterior <- function(repli.posterior, repli.polar.coordinates) {
+  angle <- repli.polar.coordinates$X[1, ]
+  d_timing_d_angle <- 2/(1 + sin(2*angle))
+  timing <- 1 - 2 * (sin(angle)/(sin(angle)+cos(angle)))
+  x <- c(
+    1,
+    1,
+    rep(timing[-1] - 0.5 * diff(timing), each = 2),
+    -1,
+    -1
+  )
+  polygons <- repli.posterior %>%
+    group_by(celltype) %>%
+    reframe(
+      x,
+      y = c(
+        0,
+        prob %>% `/`(sum(.)*2) %>% rep(each = 2),
+        0
+      )
+    )
+  ymax <- max(polygons$y) * 1.05
+  ggplot(
+    polygons,
+    aes(x, y, fill = celltype)
+  ) +
+    geom_polygon(alpha = 0.75) +
+    scale_fill_manual(
+      values = repli_posterior_bar_colors %>% setNames(str_to_title(names(.))),
+      guide = guide_legend(NULL, override.aes = list(alpha = 1))
+    ) +
+    coord_cartesian(
+      c(1, -1), c(0, ymax), expand = FALSE
+    ) +
+    labs(
+      x = "Timing",
+      y = "P(Timing)"
+    ) +
+    theme(
+      aspect.ratio = 1/2,
+      legend.margin = margin(0, 10, 0, 0),
+      legend.position = "bottom",
+      plot.margin = margin(0, 10, 0, 5.5),
+    )
 }

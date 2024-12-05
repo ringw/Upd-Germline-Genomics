@@ -156,6 +156,45 @@ targets.repli <- list(
         )
     )
   ),
+  # Histone-mapped reads analysis: These are put into a specific
+  # SummarizedExperiment that gets analyzed with 5.1 kb window (otherwise we
+  # used as little input as possible for Repliseq analysis and arrived at a
+  # 3 kb window).
+  tar_target(
+    repli.tile.diameter_1000_histone_repeat_unit,
+    GRanges(
+      "2L_Histone_Repeat_Unit",
+      IRanges(
+        start = seq(1, 4001, by=1000),
+        end = c(
+          seq(1000, 4000, by=1000),
+          setNames(masked.feature.lengths["2L_Histone_Repeat_Unit"], NULL)
+        )
+      ),
+      seqlengths = masked.feature.lengths
+    )
+  ),
+  tar_map(
+    mutate(
+      rowwise(dplyr::rename(repli.samples, repli_target = "name")),
+      bulk_reads_2L_Histone_Repeat_Unit = rlang::syms(str_glue("bulk_reads_2L_Histone_Repeat_Unit_repli.bam_{repli_target}_masked")),
+      markdup = isTRUE(is_paired_end),
+      df_pos_midpoint_callable = list(
+        if (isTRUE(is_paired_end)) quote(paired_end_pos_to_midpoint) else quote(single_end_pos_to_midpoint)
+      ),
+      count_overlaps_bases_callable = list(
+        if (markdup) quote(count_overlaps_bases) else quote(count_overlaps_bases_no_markdup)
+      )
+    ),
+    names = repli_target,
+    tar_target(
+      histone.repeat.unit.granges,
+      count_overlaps_bases_callable(
+        repli.tile.diameter_1000_histone_repeat_unit,
+        df_pos_midpoint_callable(bulk_reads_2L_Histone_Repeat_Unit)
+      )
+    )
+  ),
   # Sliding plate in regression. We need multiple independent observations of
   # replication coverage which are not too overdispersed.
   tar_target(repli.sliding.weights, rep(1, 3)),
@@ -341,6 +380,100 @@ targets.repli <- list(
     tar_target(
       repli.autocorrelation.beta,
       repli.timing %>% autocorrelate_centered_granges(1001)
+    )
+  ),
+  # From each masked reference: Apply 2L_Histone_Repeat_Unit
+  tar_map(
+    mutate(
+      rowwise(
+        tibble(
+          rbind(
+            experiment.driver,
+            tibble(driver = c("Kc167", "S2")) %>%
+              mutate(celltype = driver)
+          ),
+          reference = "masked",
+        )
+      ),
+      samples = list(parse(text = deparse(subset(repli.samples, genotype == driver)))),
+      sample_granges = rlang::syms(
+        with(
+          subset(repli.samples, genotype == driver),
+          paste0(str_glue("histone.repeat.unit.granges_{name}"))
+        )
+      ) %>%
+        list(),
+      repli.experiment = rlang::syms(str_glue("repli.experiment_{celltype}_{reference}")),
+      repli.posterior.unscaled = rlang::syms(str_glue("repli.posterior.unscaled_{celltype}_{reference}")),
+      repli.posterior.xform.centering = rlang::syms(str_glue("repli.posterior.xform.centering_{celltype}_{reference}")),
+    ),
+    names = celltype | reference,
+    tar_target(
+      repli.experiment_2L_Histone_Repeat_Unit,
+      {
+        exper <- as_bulk_summarized_experiment(
+          sample_granges,
+          colData = mutate(as_tibble(eval(samples)), rep = rep %>% as.factor())
+        ) %>%
+          # As we will use Beta dist Bayesian Inference, create the metadata ahead
+          # of time.
+          init_beta_dm_experiment()
+        exper@metadata$beta_regression_size_factors <- repli.experiment@metadata$beta_regression_size_factors
+        exper
+      }
+    ),
+    tar_target(
+      repli.posterior_2L_Histone_Repeat_Unit,
+      beta_dm_regression_post_probability(
+        repli.experiment_2L_Histone_Repeat_Unit,
+        3,
+        # 5 kb of observations!
+        rep(1, 3),
+        repli.polar.coordinates,
+        repli.prior.distribution,
+        xform_scale = 1,
+        xform_center = repli.posterior.xform.centering["center"]
+      ),
+      packages = tar_option_get("packages") %>% c("extraDistr", "future.apply", "pracma")
+    )
+  ),
+  tar_file(
+    fig.histone.timing,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        rowname="Repli-Histone-Locus-Posterior-Dist",
+        figure=bind_rows(
+          list(
+            Germline=repli.posterior_2L_Histone_Repeat_Unit_Germline_masked,
+            Somatic=repli.posterior_2L_Histone_Repeat_Unit_Somatic_masked,
+            Kc167=repli.posterior_2L_Histone_Repeat_Unit_Kc167_masked,
+            S2=repli.posterior_2L_Histone_Repeat_Unit_S2_masked
+          ),
+          .id = "celltype"
+        ) %>%
+          mutate(celltype = celltype %>% factor(str_to_title(names(repli_posterior_bar_colors)))) %>%
+          plot_posterior(repli.polar.coordinates) %>%
+          list(),
+        width=4,
+        height=3
+      )
+    )
+  ),
+  tar_target(
+    histone.timing.bayes.factor,
+    sapply(
+      list(
+        Somatic=repli.posterior_2L_Histone_Repeat_Unit_Somatic_masked,
+        Kc167=repli.posterior_2L_Histone_Repeat_Unit_Kc167_masked,
+        S2=repli.posterior_2L_Histone_Repeat_Unit_S2_masked
+      ),
+      \(df) bayes_factor_repli_experiment(
+        repli.posterior_2L_Histone_Repeat_Unit_Germline_masked$prob,
+        df$prob,
+        repli.prior.distribution$X
+      )
     )
   ),
 
