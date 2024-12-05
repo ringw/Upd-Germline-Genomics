@@ -305,7 +305,7 @@ targets.repli <- list(
           value = quantify_repli_experiment(prob, prior = repli.prior.distribution$X),
           .by = "rowname"
         ) %>%
-        pull(value) %>%
+        with(value[match(seq_along(chic.tile.diameter_1000), rowname)]) %>%
         repli_logistic_beta_to_tanh() %>%
         GRanges(chic.tile.diameter_1000, score = .) # %>%
         # repli_logistic_link_apply_scale(
