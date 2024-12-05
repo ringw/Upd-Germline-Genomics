@@ -620,6 +620,7 @@ targets.repli <- list(
       diff.replication.progression.gene,
       Upd_cpm[, "germline"],
       Upd_cpm[, "somatic"],
+      chromosome_pericetromere_label,
       "Supplemental_Data/SD04_Repliseq.xlsx"
     ),
     packages = tar_option_get("packages") %>% c("tidyr")

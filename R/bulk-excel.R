@@ -240,6 +240,7 @@ publish_peaks_contingency_tables <- function(
 publish_repli_analysis <- function(
     assay.data.sc, repli_Germline, repli_Somatic, repli_Bayes_Factor,
     window_name, CPM_Germline, CPM_Somatic,
+    chromosome_pericetromere_label,
     output_path) {
   wb <- createWorkbook()
 
@@ -250,16 +251,22 @@ publish_repli_analysis <- function(
     read.csv() %>%
     dplyr::rename(symbol = "X")
   seqlevels(repli_Germline) <- seqlevels(repli_Germline) %>% c("*")
-  gene_lookup <- findOverlaps(
-    with(
-      assay.data.sc,
-      GRanges(chr %>% replace_na("*"), IRanges(ifelse(strand == "+", start, end) %>% replace(is.na(chr), 1), width = 1), names = symbol)
-    ),
-    repli_Germline
-  ) %>%
+  TSS <- with(
+    assay.data.sc,
+    GRanges(
+      chr %>% replace_na("*"),
+      IRanges(
+        ifelse(strand == "+", start, end) %>% replace(is.na(chr), 1), width = 1
+      ),
+      names = symbol
+    )
+  )
+  gene_lookup <- findOverlaps(TSS, repli_Germline) %>%
     sapply(\(v) if (length(v)) v[1] else NA)
   df <- tibble(
     assay.data.sc,
+    region = rep("", nrow(assay.data.sc)) %>%
+      replace(from(findOverlaps(TSS, chromosome_pericetromere_label)), "Pericentromere"),
     GSC = repli_Germline$score[gene_lookup],
     CySC = repli_Somatic$score[gene_lookup],
     `Bayes Factor` = repli_Bayes_Factor$score[gene_lookup],
@@ -287,7 +294,7 @@ publish_repli_analysis <- function(
       ),
       nrow = 1
     ),
-    startCol = 11, startRow = 1,
+    startCol = 12, startRow = 1,
     colNames = F
   )
   writeDataTable(
