@@ -652,6 +652,25 @@ list(
       )
     )
   ),
+  tar_file(
+    fig.repli.chic.diff.timing,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "CHIC-TSS-Diff-Replication-Program",
+        list(
+          Germline=repli_diff_timing_data_Germline_TSS,
+          Somatic=repli_diff_timing_data_Somatic_TSS
+        ) %>%
+          bind_rows(.id = "celltype") %>%
+          facet_diff_replication_program(),
+        8,
+        8
+      )
+    )
+  ),
   tar_map(
     tribble(
       ~celltype, ~sc_chr_nucleosome_data_TSS, ~granges,

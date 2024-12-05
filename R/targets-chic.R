@@ -2408,6 +2408,16 @@ targets.chic.lineplot <- list(
       )
     ),
     tar_target(
+      facet_genes_diff_timing,
+      tibble(
+        gene = names(diff.timing.factor),
+        timing = diff.timing.factor,
+        # activity = diff.timing.isactive,
+        activity = quartile.factor %>%
+          fct_recode(off="Q1", active="Q2", active="Q3", active="Q4")
+      )
+    ),
+    tar_target(
       sc_chr_quartile_data,
       mapply(
         chic_heatmap_facet_genes,
@@ -2473,6 +2483,18 @@ targets.chic.lineplot <- list(
         chic_heatmap_facet_genes,
         named_tss_data,
         list(subset(facet_genes, select=c(repli.active, gene))),
+        SIMPLIFY=F
+      ) %>%
+        bind_rows(.id = "mark") %>%
+        mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3"))),
+      format = "parquet"
+    ),
+    tar_target(
+      repli_diff_timing_data,
+      mapply(
+        chic_heatmap_facet_genes,
+        named_tss_data,
+        list(facet_genes_diff_timing),
         SIMPLIFY=F
       ) %>%
         bind_rows(.id = "mark") %>%

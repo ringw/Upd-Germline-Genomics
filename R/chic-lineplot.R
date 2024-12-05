@@ -1177,3 +1177,24 @@ chic_multi_genes_paneled_profile <- function(
     aspect.ratio = 1
   )
 }
+
+facet_diff_replication_program <- function(data) {
+  p <- data %>%
+    tibble(
+      genes = interaction(activity, celltype),
+      row = relevel(timing, "GermlineEarlier")
+    ) %>%
+    chic_plot_average_profiles_facet_grid(
+      NULL,
+      c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
+      linewidth = c(0.33, 0.66, 0.33, 0.66),
+      faceter = facet_grid(vars(row), vars(mark)),
+      x_intercept = NA
+    ) +
+    theme(
+      legend.position = "none",
+      panel.spacing.y = unit(36, "pt"),
+      strip.background.y = element_blank(),
+      strip.text.y = element_blank(),
+    )
+}

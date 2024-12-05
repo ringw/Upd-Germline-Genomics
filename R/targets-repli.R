@@ -850,6 +850,31 @@ targets.repli <- list(
     ) %>%
       setNames(names(tss_location))
   ),
+  tar_target(
+    diff.timing.factor,
+    rep("null", length(chic.tile.diameter_500_score_genes)) %>%
+      replace(
+        !is.na(chic.tile.diameter_500_score_genes$lookup),
+        findOverlaps(
+          chic.tile.diameter_500_score_chr[chic.tile.diameter_500_score_genes$lookup %>% subset(!is.na(.))],
+          repli.peaks_chr
+        ) %>%
+          as.list() %>%
+          sapply(
+            \(peak_inds) ifelse(
+              grepl("GermlineEarlier", names(repli.peaks_chr)[peak_inds]),
+              1,
+              -1
+            ) %>%
+              median()
+          )
+      ) %>%
+      replace(is.na(.), "null") %>%
+      factor() %>%
+      fct_recode(GermlineEarlier="1", GermlineLater="-1") %>%
+      fct_relevel("null", after=4) %>%
+      setNames(names(chic.tile.diameter_500_score_genes))
+  ),
 
   # Repli graphic for dmel-all-chromosomes, not the masked bowtie reference.
   tar_file(
