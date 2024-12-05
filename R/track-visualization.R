@@ -224,7 +224,7 @@ plot_track_2score <- function(
       legend.position = "none",
       panel.background = element_rect(fill = background_color),
       axis.ticks = if (is.na(line_color))
-          waiver()
+          NULL
         else
           element_line(color = line_color),
       panel.border = if (is.na(line_color))
