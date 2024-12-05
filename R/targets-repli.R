@@ -1142,6 +1142,18 @@ targets.repli <- list(
       ),
       .id = "celltype"
     ) %>%
+      tibble(
+        occur_tss = assay.data.sc %>%
+          read.csv() %>%
+          with(
+            GRanges(
+              chr %>% replace(is.na(chr), "Y"),
+              IRanges(ifelse(strand == "+", start, end) %>% replace(is.na(chr), -1), width = 1)
+            )
+          ) %>%
+          countOverlaps(chic.tile.diameter_1000_chr, .) %>%
+          rep(2)
+      ) %>%
       subset(!is.na(feature)) %>%
       tibble(
         row = feature %>%
