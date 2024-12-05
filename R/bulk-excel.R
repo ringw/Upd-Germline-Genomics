@@ -237,6 +237,115 @@ publish_peaks_contingency_tables <- function(
   )
 }
 
+detail_repli_analysis <- function(
+    assay.data.sc,
+    flybase.sequence.ontology,
+    repli_Germline, repli_Somatic, repli_Bayes_Factor,
+    CPM_Germline, CPM_Somatic,
+    Upd_regression_somatic,
+    chic.gene.enrichment,
+    chromosome_pericetromere_label, transcriptome_integrate = 25000
+) {
+  assay.data.sc <- assay.data.sc %>%
+    read.csv() %>%
+    dplyr::rename(symbol = "X")
+  flybase.sequence.ontology <- flybase.sequence.ontology %>%
+    read.table(col.names = c("gene_primary_id", "gene_symbol", "so_term_name", "so_term_id")) %>%
+    as_tibble()
+  genes <- with(
+    assay.data.sc,
+    GRanges(chr %>% replace_na("*"), IRanges(ifelse(strand == "+", start, end) %>% replace(is.na(chr), 1), width = 1), names = symbol)
+  )
+  gene_lookup <- genes %>%
+    findOverlaps(repli_Germline) %>%
+    sapply(\(v) if (length(v)) v[1] else NA)
+  feature <- flybase.sequence.ontology %>%
+    mutate(
+      so_term_name = so_term_name %>%
+        factor(
+          c(
+            "pseudogene", "retrogene", "protein_coding_gene",
+            "antisense_lncRNA_gene",
+            "lncRNA_gene", "miRNA_gene", "ncRNA_gene",
+            "snoRNA_gene", "snRNA_gene", "tRNA_gene",
+            "C_D_box_scaRNA_gene", "C_D_box_snoRNA_gene",
+            "gene_array_member"
+          )
+        ) %>%
+        dplyr::recode(
+          C_D_box_scaRNA_gene="CDbox_gene",
+          C_D_box_snoRNA_gene="CDbox_gene"
+        )
+    ) %>%
+    group_by(gene_primary_id) %>%
+    summarise(
+      so_term_name = factor(
+        levels(so_term_name)[min(c(Inf, as.numeric(so_term_name)), na.rm=T)],
+        levels(so_term_name)
+      )
+    )
+  df <- tibble(
+    assay.data.sc[c(1, 3, 6)],
+    region = chr %>%
+      mapply(
+        \(n, matches) paste0(
+          n,
+          if (length(matches)) "C"
+        ),
+        .,
+        findOverlaps(genes, chromosome_pericetromere_label) %>%
+          as("List")
+      ) %>%
+      factor(
+        c(
+          "2L", "2LC", "2RC", "2R", "3L", "3LC", "3RC", "3R", "4",
+          "X", "Y",
+          "rDNA"
+        )
+      ),
+    TSS = ifelse(assay.data.sc$strand == "+", assay.data.sc$start, assay.data.sc$end),
+    feature = deframe(feature)[flybase],
+    timing = cbind(
+      GSC = repli_Germline$score[gene_lookup],
+      CySC = repli_Somatic$score[gene_lookup]
+    ),
+    bayes_factor = repli_Bayes_Factor$score[gene_lookup],
+  )
+  gene_neighbor <- findOverlaps(
+    GenomicRanges::resize(genes, transcriptome_integrate, "center"),
+    genes
+  ) %>%
+    as("List") %>%
+    as.list() %>%
+    replace(
+      which(!(assay.data.sc$chr %in% names(chr.lengths))),
+      as.list(which(!(assay.data.sc$chr %in% names(chr.lengths))))
+    )
+  quant_raw <- cbind(
+    GSC = (log(CPM_Germline) / log(10)) %>% replace(!is.finite(.), NA),
+    CySC = (log(CPM_Somatic) / log(10)) %>% replace(!is.finite(.), NA)
+  )
+  quant_region <- sapply(
+    gene_neighbor,
+    \(v) colMeans(quant_raw[v,, drop=F], na.rm=T)
+  ) %>%
+    t()
+  df <- tibble(
+    df,
+    quant_raw,
+    quant_region,
+    L2FC = -Upd_regression_somatic$map[
+      match(symbol, rownames(Upd_regression_somatic$map)), 2
+    ] / log(2),
+    logp = -log(as.matrix(chic.gene.enrichment[7:12])) / log(10),
+    logp_region = sapply(
+      gene_neighbor,
+      \(v) colMeans(logp[v,, drop=F], na.rm=T)
+    ) %>%
+      t()
+  )
+}
+
 publish_repli_analysis <- function(
     assay.data.sc, repli_Germline, repli_Somatic, repli_Bayes_Factor,
     window_name, CPM_Germline, CPM_Somatic,

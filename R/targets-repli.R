@@ -743,6 +743,24 @@ targets.repli <- list(
     )
   ),
 
+  # Replication main-figure gene-wise analysis
+  tar_target(
+    genewise,
+    detail_repli_analysis(
+      assay.data.sc,
+      flybase.sequence.ontology,
+      repli.timing_Germline_chr,
+      repli.timing_Somatic_chr,
+      repli.bayes.factor_chr,
+      Upd_cpm[, "germline"],
+      Upd_cpm[, "somatic"],
+      Upd_regression_somatic,
+      chic.gene.enrichment,
+      chromosome_pericetromere_label
+    ),
+    packages = tar_option_get("packages") %>% c("tidyr")
+  ),
+
   # Repliseq dmel-all-chromosomes supplementary data
   tar_file(
     sd_repliseq,

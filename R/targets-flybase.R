@@ -14,6 +14,10 @@ targets.flybase <- list(
     'references/transposon_sequence_set.fa.gz'
   ),
   tar_file(
+    flybase.sequence.ontology,
+    "dmel_gene_sequence_ontology_annotations_fb_2022_04.tsv.gz"
+  ),
+  tar_file(
     flybase.genome,
     tibble(input_file=c(flybase.fa, flybase.transposon)) %>%
       rowwise() %>%
