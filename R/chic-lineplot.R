@@ -3,6 +3,17 @@ chic_line_track_colors <- list(
   somatic = "#D845E8"
 )
 
+chic_lineplot_limit_data_TSS <- tribble(
+  ~mark_name, ~value,
+  "H3K4me3", 0.67,
+  "H3K4me3", 4.88,
+  "H3K27me3", 0.57,
+  "H3K27me3", 3.73,
+  "H3K9me3", 0.5,
+  "H3K9me3", 1.35,
+) %>%
+  tibble(mark = mark_name %>% factor(., unique(.)))
+
 quant_quartile_factor <- function(v, q1_threshold) {
   chop_lower = (v < q1_threshold) %>% replace_na(TRUE) %>% which
   vals <- v[-chop_lower]
@@ -92,15 +103,14 @@ chic_plot_average_profiles_facet_grid <- function(
     values = linewidth,
     guide = guide_legend(title = legend_title)
   ) + scale_x_continuous(
-    labels = \(n) break_labels$label[match(n, break_labels$pos)]
+    labels = \(n) break_labels$label[match(n, break_labels$pos)],
+    expand = c(0, 0)
   ) + scale_y_continuous(
     trans = "log",
     labels = \(v) round(log(v) / log(2), 1),
-    limits = chic_average_profile_limits,
     breaks = chic_average_breaks,
-    minor_breaks = chic_average_minor_breaks,
-    expand = c(0, 0)
-  ) + coord_cartesian(expand=FALSE) + labs(
+    minor_breaks = chic_average_minor_breaks
+  ) + labs(
     x = "bp (from TSS)", y = "log2(mean(mark/input))"
   ) + theme(
     aspect.ratio = 1
@@ -114,7 +124,7 @@ chic_plot_h3_enrichment <- function(facet_data, limits = c(0, 5.25), ...) {
   y_axis_h3 <- scale_y_continuous(
     "Enrichment (vs Auto Monosome Median)",
     limits = limits,
-    expand = FALSE
+    expand = c(0, 0)
   )
   gg <- chic_plot_average_profiles_facet_grid(facet_data, ...) + y_axis_h3
   gr <- as_grob(gg)
@@ -1182,19 +1192,68 @@ facet_diff_replication_program <- function(data) {
   p <- data %>%
     tibble(
       genes = interaction(activity, celltype),
-      row = relevel(timing, "GermlineEarlier")
+      row = relevel(timing, "GermlineEarlier"),
+      newfacet = interaction(mark, row) %>%
+        `levels<-`(
+          levels(.) %>%
+            replace(1:3, c("H3K4me3", "H3K27me3", "H3K9me3"))
+        )
     ) %>%
     chic_plot_average_profiles_facet_grid(
       NULL,
       c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
       linewidth = c(0.33, 0.66, 0.33, 0.66),
-      faceter = facet_grid(vars(row), vars(mark)),
+      faceter = facet_wrap(vars(newfacet), scales="free"),
       x_intercept = NA
+    ) +
+    geom_blank(
+      aes(x=0, y=value, color=NULL, linewidth=NULL, group=NULL),
+      \(data) tibble(
+        dplyr::slice(
+          chic_lineplot_limit_data_TSS,
+          rep(1:6, 3)
+        ),
+        newfacet = levels(data$newfacet) %>%
+          rep(each = 2) %>%
+          factor(., unique(.)),
+      )
     ) +
     theme(
       legend.position = "none",
-      panel.spacing.y = unit(36, "pt"),
+      panel.spacing.y = unit(29.5, "pt"),
+      plot.margin = margin(24, 5.5, 5.5, 5.5, "pt"),
       strip.background.y = element_blank(),
       strip.text.y = element_blank(),
+    )
+  g <- ggplotGrob(p)
+  # Shrink away the facet wraps that we are not interested in
+  g$heights[12] <- g$heights[17] <- unit(0, "cm")
+  g %>%
+    gtable_add_grob(
+      list(
+        textGrob(
+          "Germline Earlier",
+          0, 0,
+          just = "left",
+          vjust = -0.5,
+          gp = gpar(fontfamily = "Helvetica", fontsize = 12)
+        ),
+        textGrob(
+          "Germline Later",
+          0, 0,
+          just = "left",
+          vjust = -0.5,
+          gp = gpar(fontfamily = "Helvetica", fontsize = 12)
+        ),
+        textGrob(
+          "n.s.",
+          0, 0,
+          just = "left",
+          vjust = -0.5,
+          gp = gpar(fontfamily = "Helvetica", fontsize = 12)
+        )
+      ),
+      t = c(1, 10, 15),
+      l = 5
     )
 }

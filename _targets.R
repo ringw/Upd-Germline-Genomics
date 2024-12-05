@@ -568,8 +568,12 @@ list(
               chic_line_track_colors[[tolower(name)]] %>%
                 c(muted(., c=20, l=80), .),
               c(0.33, 0.66),
-              facet_wrap(vars(mark))
-            )
+              facet_wrap(vars(mark), scales = "free")
+            ) +
+              geom_blank(
+                aes(x=0, y=value, color=NULL, linewidth=NULL, group=NULL),
+                chic_lineplot_limit_data_TSS
+              )
         ),
         paneled_plot = list(
           sc_extended_data_Paneled %>%
@@ -636,7 +640,8 @@ list(
             dplyr::rename(sc_chr_quartile_data_TSS, genes=quant),
             "CPM Quartile",
             setNames(sc_quartile_colors, NULL)
-          ),
+          ) +
+            coord_cartesian(NULL, chic_average_profile_limits, ex=F),
           9,
           12,
           "CHIC-TSS-Chr-AllMarks-RNAseq",
@@ -644,8 +649,9 @@ list(
             dplyr::rename(sc_chr_active_data_TSS, genes=activity),
             "CPM Quartile",
             rep(chic_line_track_colors[[tolower(name)]], 2)
-          )
-          + guides(linewidth = guide_none(), color = guide_none()),
+          ) +
+            coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
+            guides(linewidth = guide_none(), color = guide_none()),
           8,
           10
         )
@@ -669,7 +675,8 @@ list(
         8,
         8
       )
-    )
+    ),
+    packages = tar_option_get("packages") %>% c("grid", "gtable")
   ),
   tar_map(
     tribble(
@@ -692,9 +699,11 @@ list(
               rep(chic_line_track_colors[[tolower(celltype)]], 2),
               faceter = facet_wrap(vars(facet)),
               x_intercept = NA
-            ) + labs(
-              y = "Median Autosome Monosome-TSS L2FC"
-            ) + guides(linewidth = guide_none(), color = guide_none())
+            ) +
+              coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
+              labs(
+                y = "Median Autosome Monosome-TSS L2FC"
+              ) + guides(linewidth = guide_none(), color = guide_none())
           ),
           width=6,
           height=6
@@ -716,9 +725,12 @@ list(
             rep(chic_line_track_colors$germline, 2),
             faceter = facet_wrap(vars(facet)),
             x_intercept = NA
-          ) + labs(
-            y = "Median Autosome Monosome-TSS L2FC"
-          ) + guides(linewidth = guide_none(), color = guide_none())
+          ) +
+            coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
+            labs(
+              y = "Median Autosome Monosome-TSS L2FC"
+            ) +
+            guides(linewidth = guide_none(), color = guide_none())
         ),
         width=6,
         height=6
@@ -739,9 +751,11 @@ list(
             rep(chic_line_track_colors$somatic, 2),
             faceter = facet_wrap(vars(facet)),
             x_intercept = NA
-          ) + labs(
-            y = "Median Autosome Monosome-TSS L2FC"
-          ) + guides(linewidth = guide_none(), color = guide_none())
+          ) +
+            coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
+            labs(
+              y = "Median Autosome Monosome-TSS L2FC"
+            ) + guides(linewidth = guide_none(), color = guide_none())
         ),
         width=6,
         height=6
@@ -767,11 +781,13 @@ list(
               linewidth = c(0.33, 0.66, 0.33, 0.66),
               faceter = facet_wrap(vars(facet), ncol=4),
               x_intercept = NA
-            ) + labs(
-              y = "Median Autosome Monosome-TSS L2FC"
-            ) + theme(
-              aspect.ratio = 1
-            )
+            ) +
+              coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
+              labs(
+                y = "Median Autosome Monosome-TSS L2FC"
+              ) + theme(
+                aspect.ratio = 1
+              )
           ) %>%
             replace_legend(germline_somatic_line_plot_legend)
         ),
@@ -809,6 +825,7 @@ list(
             c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
             linewidth = c(0.33, 0.66, 0.33, 0.66)
           ) %>%
+          `+`(coord_cartesian(NULL, chic_average_profile_limits, ex=F)) %>%
           replace_legend(germline_somatic_line_plot_legend),
         12,
         8
@@ -841,17 +858,23 @@ list(
         reframe(
           rowname = str_glue("CHIC-{c('TSS-','')}AllMarks-RNAseq-CPM-{gene_list}") %>% as.character,
           figure = list(
-            chic_plot_average_profiles_facet_grid(
-              tss_plot_data,
-              "",
-              sapply(
-                chic_line_track_colors,
-                \(col) col %>%
-                c(muted(., c=20, l=80), .)
-              ) %>%
-                as.character,
-              c(0.33, 0.66, 0.33, 0.66),
-              facet_wrap(vars(mark))
+            (
+              chic_plot_average_profiles_facet_grid(
+                tss_plot_data,
+                "",
+                sapply(
+                  chic_line_track_colors,
+                  \(col) col %>%
+                  c(muted(., c=20, l=80), .)
+                ) %>%
+                  as.character,
+                c(0.33, 0.66, 0.33, 0.66),
+                facet_wrap(vars(mark), scales="free")
+              ) +
+                geom_blank(
+                  aes(x=0, y=value, color=NULL, linewidth=NULL, group=NULL),
+                  chic_lineplot_limit_data_TSS
+                )
             ) %>%
               replace_legend(germline_somatic_line_plot_legend),
             chic_plot_paneled_profiles_facet_grid(
@@ -866,6 +889,7 @@ list(
               c(0.33, 0.66, 0.33, 0.66),
               facet_wrap(vars(mark))
             ) %>%
+              `+`(coord_cartesian(NULL, chic_average_profile_limits, ex=F)) %>%
               replace_legend(germline_somatic_line_plot_legend)
           ),
           width = c(9, 15),
@@ -898,8 +922,12 @@ list(
             "Quant.",
             setNames(sc_quartile_annotations, NULL),
             seq(0.5, 0.85, length.out=4),
-            facet_wrap(vars(mark))
-          ),
+            facet_wrap(vars(mark), scales = "free")
+          ) +
+            geom_blank(
+              aes(x=0, y=value, color=NULL, linewidth=NULL, group=NULL),
+              chic_lineplot_limit_data_TSS
+            ),
           9, 4,
           "CHIC-AllMarks-RNAseq-Quartile",
           chic_plot_paneled_profiles_facet_grid(

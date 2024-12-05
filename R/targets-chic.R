@@ -2711,6 +2711,7 @@ targets.chic.lineplot <- list(
             tibble(facet = 1) %>%
             subset(between(as.numeric(pos), match("-500", levels(pos)), match("500", levels(pos)))),
           \(...) chic_plot_average_profiles_facet_grid(...) +
+            coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
             theme(panel.spacing = unit(1.25, "lines"), plot.margin = margin(5.5, 10, 5.5, 5.5)),
           # Pull tlhe chic.gene.enrichment column. The column name is the name
           # of the lysine residue being tested. The modification being tested is
@@ -2792,6 +2793,7 @@ targets.chic.lineplot <- list(
             tibble(facet = 1) %>%
             subset(between(as.numeric(pos), match("-500", levels(pos)), match("500", levels(pos)))),
           \(...) chic_plot_average_profiles_facet_grid(...) +
+            coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
             theme(panel.spacing = unit(1.25, "lines"), plot.margin = margin(5.5, 10, 5.5, 5.5)),
           c(GermlineK4="GermlineH3K4", SomaticK4="SomaticH3K4"),
           6, 2.5,

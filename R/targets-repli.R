@@ -1101,7 +1101,8 @@ targets.repli <- list(
             unlist(rev(repli_level_colors), use.names = FALSE),
             c(0.4, 0.62, 0.73, 0.85),
             facet_wrap(vars(mark))
-          ),
+          ) +
+            coord_cartesian(NULL, chic_average_profile_limits, ex=F),
           10, 3.25,
           "CHIC-TSS-AllMarks-Repli-Timing-Quartile-RNAseq-Active",
           chic_plot_average_profiles_facet_grid(
@@ -1133,7 +1134,8 @@ targets.repli <- list(
             unlist(rev(repli_level_colors), use.names = FALSE),
             c(0.4, 0.62, 0.73, 0.85),
             facet_wrap(vars(mark))
-          ),
+          ) +
+            coord_cartesian(NULL, chic_average_profile_limits, ex=F),
           10, 3.25,
         )
       )
