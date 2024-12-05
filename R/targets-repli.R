@@ -586,6 +586,24 @@ targets.repli <- list(
               c("TSS_off", "TSS_low", "TSS_medium", "TSS_high")
             )
           ),
+        # Expression pattern is not actually examined yet.
+        split(
+          expression.factor[names(chic.tile.diameter_500_score_genes)],
+          factor(
+            repli.value.bindata$bin[chic.tile.diameter_500_score_genes$lookup],
+            seq(max(repli.value.bindata$bin))
+          )
+        ) %>%
+          sapply(table) %>%
+          `/`(rowMaxs(.)) %>%
+          t %>%
+          matrix(
+            ncol = 4,
+            dimnames = list(
+              NULL,
+              c("TSS_GSC", "TSS_CySC", "TSS_both", "TSS_neither")
+            )
+          ),
         repli.chromosome.arms.profile,
         sample_size_bp = repli.value.bindata$size_of_bin_bp[
           match(seq(nrow(repli.value.projection[[1]])), repli.value.bindata$bin)

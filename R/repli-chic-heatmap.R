@@ -222,7 +222,8 @@ my_mix_color <- function(mix_columns, mix_colors) {
 plot_repli_track_raster <- function(
   data, log2_limits = c(-0.5, 0.52), repli.mode.chr.weights = 1
 ) {
-  data <- data +
+  # All columns except for the "repli" column may need to be NA out.
+  data[, -1] <- data[, -1] +
     ifelse(
       is.na(data[, "sample_size_bp"]) |
         data[, "sample_size_bp"] < 500,
@@ -265,7 +266,7 @@ plot_repli_track_raster <- function(
       x = value[which.max(series == "ranking")]
     )
   x_values <- unique(data$value[data$series == "ranking"])
-  range_x <- range(data$x[data$series == "Timing Est." & !is.na(data$value)])
+  range_x <- range(data$x[grepl("^H", data$series) & !is.na(data$value)])
   rnd_x <- round(range_x, 2)
   gg <- (
     ggplot(data, aes(x, series))
@@ -296,10 +297,30 @@ plot_repli_track_raster <- function(
   gg <- gg +
     new_scale_fill() +
     geom_raster(aes(fill=fill), chr_track) +
-    scale_fill_identity()
+    scale_fill_identity() +
+    new_scale_fill()
+  raster_height <- 1.01
+  for (n in grep("^H", levels(data$series), val = TRUE)) {
+    gg <- gg + geom_blank(data = data[head(match(n, data$series), 1),, drop=FALSE])
+    gg <- gg +
+      geom_raster(
+        aes(fill=value2),
+        mutate(
+          cross_join(
+            subset(data, series == n),
+            tibble(heightadjust = c(-0.25, 0.25) * raster_height)
+          ),
+          value2 = value,
+          series = c(
+            H3K4=3,
+            H3K27=2,
+            H3K9=1
+          )[as.character(series)] +
+            heightadjust
+        )
+      )
+  }
   gg <- gg +
-    new_scale_fill() +
-    geom_raster(aes(fill=value2), mutate(subset(data, grepl("^H", series)), value2=value)) +
     create_direction_invert_tss_tile_matrix_gradient(
       invert_tss_limits = if (is.null(log2_limits))
         range(data$value[grepl("^H", data$series)], na.rm=T)
