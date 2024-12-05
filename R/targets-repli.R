@@ -547,9 +547,10 @@ targets.repli <- list(
       )
       seqlengths(peaks) <- NA
       peaks <- peaks %>%
-        GenomicRanges::resize(width(.) + 3000, fix="center") %>%
+        GenomicRanges::resize(width(.) + 10000, fix="center") %>%
         GenomicRanges::reduce() %>%
-        GenomicRanges::resize(width(.) - 3000, fix="center")
+        GenomicRanges::resize(width(.) - 10000, fix="center") %>%
+        subset(width(.) >= 20000)
       diff_timing <- (repli.timing_Germline_chr$score - repli.timing_Somatic_chr$score)
       peaks_timing <- findOverlaps(
         peaks,
@@ -639,12 +640,48 @@ targets.repli <- list(
             end,
             rowname,
             score = ((NegDiff + PosDiff) / 2) %>%
-              max(-1) %>%
-              min(1) %>%
+              pmax(-1) %>%
+              pmin(1) %>%
               `+`(1) %>%
               `*`(1000 / 2) %>%
               round
           ),
+          output_file,
+          quote = F,
+          sep = "\t",
+          row.names = F,
+          col.names = F
+        )
+      )
+    )$output_file
+  ),
+  tar_file(
+    repliseq_bed_earlier,
+    tibble(
+      output_file = "repli/Diff_Rep_Germline_Earlier.bed",
+      do_write = with_options(
+        list(scipen=100),
+        write.table(
+          read.table(repliseq_bed) %>%
+            subset(grepl("GermlineEarlier", V4)),
+          output_file,
+          quote = F,
+          sep = "\t",
+          row.names = F,
+          col.names = F
+        )
+      )
+    )$output_file
+  ),
+  tar_file(
+    repliseq_bed_later,
+    tibble(
+      output_file = "repli/Diff_Rep_Germline_Later.bed",
+      do_write = with_options(
+        list(scipen=100),
+        write.table(
+          read.table(repliseq_bed) %>%
+            subset(grepl("GermlineLater", V4)),
           output_file,
           quote = F,
           sep = "\t",
