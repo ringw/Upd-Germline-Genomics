@@ -379,6 +379,18 @@ plot_posterior <- function(repli.posterior, repli.polar.coordinates) {
         0
       )
     )
+  X <- seq(-0.995, 0.995, by=0.01)
+  Y <- polygons %>%
+    group_by(celltype) %>%
+    reframe(
+      as_tibble(
+        approx(x, y, xout=X)
+      )
+    )
+  unnormalized_posterior <- 0.01 * (split(Y$y, Y$celltype) %>% sapply(sum))
+  polygons <- polygons %>%
+    group_by(celltype) %>%
+    mutate(y = y / unnormalized_posterior[celltype])
   ymax <- max(polygons$y) * 1.05
   ggplot(
     polygons,
@@ -389,6 +401,7 @@ plot_posterior <- function(repli.posterior, repli.polar.coordinates) {
       values = repli_posterior_bar_colors %>% setNames(str_to_title(names(.))),
       guide = guide_legend(NULL, override.aes = list(alpha = 1))
     ) +
+    scale_x_continuous(labels = as.numeric) +
     coord_cartesian(
       c(1, -1), c(0, ymax), expand = FALSE
     ) +
@@ -398,8 +411,7 @@ plot_posterior <- function(repli.posterior, repli.polar.coordinates) {
     ) +
     theme(
       aspect.ratio = 1/2,
-      legend.margin = margin(0, 10, 0, 0),
       legend.position = "bottom",
-      plot.margin = margin(0, 10, 0, 5.5),
+      plot.margin = margin(0, 5.5, 0, 5.5),
     )
 }
