@@ -1201,7 +1201,7 @@ facet_diff_replication_program <- function(data) {
     ) %>%
     chic_plot_average_profiles_facet_grid(
       NULL,
-      c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
+      c(muted(classification_colors_fig4$germline, l=70), classification_colors_fig4$germline, muted(classification_colors_fig4$somatic, l=70), classification_colors_fig4$somatic),
       linewidth = c(0.33, 0.66, 0.33, 0.66),
       faceter = facet_wrap(vars(newfacet), scales="free"),
       x_intercept = NA
