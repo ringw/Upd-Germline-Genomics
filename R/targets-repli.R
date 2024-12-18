@@ -428,7 +428,7 @@ targets.repli <- list(
         repli.experiment_2L_Histone_Repeat_Unit,
         3,
         # 5 kb of observations!
-        rep(1, 3),
+        rep(1, 5),
         repli.polar.coordinates,
         repli.prior.distribution,
         xform_scale = 1,
