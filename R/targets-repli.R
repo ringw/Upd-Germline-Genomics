@@ -866,6 +866,53 @@ targets.repli <- list(
     ),
     packages = tar_option_get("packages") %>% c("tidyr")
   ),
+  tar_target(
+    chromosomewise,
+    mapply(
+      \(name, inds) tibble(
+        timing = factor(str_extract(name, "Germline(Earlier|Later)"), c("GermlineEarlier", "GermlineLater")),
+        chr = as.factor(seqnames(chic.tile.diameter_500_chr)[inds]),
+        start = start(chic.tile.diameter_500_chr)[head(inds, 1)],
+        end = end(chic.tile.diameter_500_chr)[tail(inds, 1)],
+        timing_germline = repli.timing_Germline_chr$score[
+          chic.tile.diameter_500_chr[inds] %>%
+            findOverlaps(repli.timing_Germline_chr) %>%
+            as("List") %>%
+            sapply(median) %>%
+            floor()
+        ],
+        timing_somatic = repli.timing_Somatic_chr$score[
+          chic.tile.diameter_500_chr[inds] %>%
+            findOverlaps(repli.timing_Somatic_chr) %>%
+            as("List") %>%
+            sapply(median) %>%
+            floor()
+        ],
+        chromatin_input_germline = chic.experiment.quantify_H3K27_Germline_peakcalling.broad_chr$score.molH3[inds],
+        chromatin_germline = cbind(
+          H3K4 = chic.experiment.quantify_H3K4_Germline_peakcalling.broad_chr$L2FC[inds],
+          H3K27 = chic.experiment.quantify_H3K27_Germline_peakcalling.broad_chr$L2FC[inds],
+          H3K9 = chic.experiment.quantify_H3K9_Germline_peakcalling.broad_chr$L2FC[inds]
+        ) %>%
+          replace(abs(.) < 1e-3, NA) %>%
+          `*`(ifelse(rowAlls(!is.na(.)), 1, NA)),
+        chromatin_input_somatic = chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_chr$score.molH3[inds],
+        chromatin_somatic = cbind(
+          H3K4 = chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_chr$L2FC[inds],
+          H3K27 = chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_chr$L2FC[inds],
+          H3K9 = chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_chr$L2FC[inds]
+        ) %>%
+          replace(abs(.) < 1e-3, NA) %>%
+          `*`(ifelse(rowAlls(!is.na(.)), 1, NA)),
+      ),
+      names(repli.peaks_chr),
+      repli.peaks_chr %>%
+        findOverlaps(chic.tile.diameter_500_chr) %>%
+        as("List"),
+      SIMPLIFY = FALSE
+    ) %>%
+      do.call(rbind, .)
+  ),
 
   # Repliseq dmel-all-chromosomes supplementary data
   tar_file(
@@ -1359,6 +1406,140 @@ targets.repli <- list(
         6,
       )
     )
+  ),
+  # Flat data frames of subsetting by diff rep program statistical test, then
+  # extracting the scores of the chromatin in the regions.
+  tar_target(
+    chromosomewise_diff_rep_program,
+    tibble(
+      from = findOverlaps(repli.peaks_chr, chic.tile.diameter_1000_chr) %>%
+        from() %>%
+        rep(2),
+      to = findOverlaps(repli.peaks_chr, chic.tile.diameter_1000_chr) %>%
+        to() %>%
+        rep(2),
+      group = factor(
+        str_extract(
+          names(repli.peaks_chr)[from], "GermlineEarlier|GermlineLater"
+        )
+      ),
+      celltype = findOverlaps(repli.peaks_chr, chic.tile.diameter_1000_chr) %>%
+        to() %>%
+        length() %>%
+        rep(c("Germline", "Somatic"), each = .),
+      timing = c(
+        repli.timing_Germline_chr$score[
+          findOverlaps(repli.peaks_chr, chic.tile.diameter_1000_chr) %>%
+            to()
+        ],
+        repli.timing_Somatic_chr$score[
+          findOverlaps(repli.peaks_chr, chic.tile.diameter_1000_chr) %>%
+            to()
+        ]
+      ),
+    ),
+    format = "parquet"
+  ),
+  tar_target(
+    chromosomewise_flat_feature,
+    flatten_diff_rep_program_chromatin(chromosomewise),
+    format = "parquet"
+  ),
+  tar_target(
+    chromosomewise_test_chromatin,
+    chromosomewise_flat_feature %>%
+      chromosomewise_test_t("celltype", "timing")
+  ),
+  tar_target(
+    chromosomewise_test_celltype,
+    chromosomewise_flat_feature %>%
+      chromosomewise_test_t("timing", "celltype")
+  ),
+  tar_file(
+    fig.repli.diff.rep,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        "Repli-Timing-Diff-Rep-Program",
+        figure = (
+          chromosomewise_diff_rep_program %>%
+            # Reverse (top to bottom) feature. Reverse again celltype!
+            mutate(celltype = celltype %>% factor(c("Somatic", "Germline"))) %>%
+            ggplot(aes(group, timing, fill=celltype)) +
+            scale_x_discrete(labels = c("Germline Later", "Germline Earlier"), limits = rev) +
+            scale_fill_manual(values = cell_type_violin_colors) +
+            geom_violin(scale = "width") +
+            coord_flip(c(2.5, 0.5), c(1, -1), expand=F) +
+            labs(x = NULL, y = "Timing") +
+            theme(
+              aspect.ratio = 1/2,
+              legend.position = "none",
+              panel.grid.minor.x = element_blank(),
+              panel.grid.major.y = element_blank(),
+              panel.grid.minor.y = element_blank(),
+              plot.margin = margin(5.5, 15.5, 5.5, 5.5),
+            )
+        ) %>%
+          list(),
+        width = 3,
+        height = 1.75,
+      )
+    )
+  ),
+  tar_file(
+    fig.repli.chic.diff.rep,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        "Repli-CHIC-Diff-Rep-Program",
+        figure = chromosomewise_flat_feature %>%
+          plot_diff_rep_program_chromatin() %>%
+          list(),
+        width = 2.75,
+        height = 8
+      )
+    ),
+    packages = tar_option_get("packages") %>% c("grid", "gtable")
+  ),
+  tar_file(
+    fig.repli.chic.diff.rep.test.chromatin,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        "Repli-CHIC-Diff-Rep-Program-Test-Chromatin",
+        figure = chromosomewise_test_chromatin %>%
+          mutate(
+            mark = mark %>% fct_recode(H3K4me3="H3K4", H3K27me3="H3K27", H3K9me3="H3K9")
+          ) %>%
+          plot_chromosomewise_test_t(c("GermlineEarlier", "GermlineLater")) %>%
+          list(),
+        width = 6,
+        height = 4
+      )
+    ),
+    packages = tar_option_get("packages") %>% c("egg", "grid", "gtable")
+  ),
+  tar_file(
+    fig.repli.chic.diff.rep.test.celltype,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        "Repli-CHIC-Diff-Rep-Program-Test",
+        figure = chromosomewise_test_celltype %>%
+          mutate(
+            mark = mark %>% fct_recode(H3K4me3="H3K4", H3K27me3="H3K27", H3K9me3="H3K9")
+          ) %>%
+          plot_chromosomewise_test_t(c("Germline", "Somatic")) %>%
+          list(),
+        width = 6,
+        height = 4
+      )
+    ),
+    packages = tar_option_get("packages") %>% c("egg", "grid", "gtable")
   ),
 
   # Repli-CHIC graphic for one CHIC track.
