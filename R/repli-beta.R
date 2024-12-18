@@ -415,3 +415,83 @@ plot_posterior <- function(repli.posterior, repli.polar.coordinates) {
       plot.margin = margin(0, 5.5, 0, 5.5),
     )
 }
+
+plot_fpkm_bayes_mmse <- function(
+  fpkm_bars,
+  bayes_mmse_param,
+  repli.posterior,
+  repli.polar.coordinates
+) {
+  barplot <- ggplot(
+    tibble(x = names(repli_level_colors) %>% factor(., .), y = fpkm_bars),
+    aes(x, y, fill = x)
+  ) +
+    geom_bar(stat = "identity") +
+    scale_fill_manual("Fraction", values = unlist(repli_level_colors)) +
+    coord_cartesian(c(0.4, 4.6), c(0, 1.05 * max(fpkm_bars)), expand = FALSE) +
+    labs(
+      x = "Fraction",
+      y = "FPKM"
+    ) +
+    theme(legend.position = "bottom")
+  predict_beta <- tibble(
+    x = seq(0, 1, by = 0.01),
+    y = dbeta(x, 1 + bayes_mmse_param[2] * sin(bayes_mmse_param[1]), 1 + bayes_mmse_param[2] * cos(bayes_mmse_param[1]))
+  )
+  predict_beta <- tibble(
+    x = c(0, predict_beta$x),
+    y = c(
+      0,
+      predict_beta$y[2] - 2 * (predict_beta$y[3] - predict_beta$y[2]),
+      predict_beta$y[-1]
+    )
+  )
+  predict_point <- tibble(
+    x = sin(bayes_mmse_param[1]) / (sin(bayes_mmse_param[1]) + cos(bayes_mmse_param[1])),
+    y = approx(predict_beta$x, predict_beta$y, xout = sin(bayes_mmse_param[1]) / (sin(bayes_mmse_param[1]) + cos(bayes_mmse_param[1])))$y
+  )
+  predict_polygon <- bind_rows(
+    list(
+      E = rbind(
+        subset(predict_beta, x <= 0.25),
+        tibble(x = 0.25, y = 0)
+      ),
+      EM = rbind(
+        tibble(x = 0.25, y = 0),
+        subset(predict_beta, between(x, 0.25, 0.5)),
+        tibble(x = 0.5, y = 0)
+      ),
+      ML = rbind(
+        tibble(x = 0.5, y = 0),
+        subset(predict_beta, between(x, 0.5, 0.75)),
+        tibble(x = 0.75, y = 0)
+      ),
+      L = rbind(
+        tibble(x = 0.75, y = 0),
+        subset(predict_beta, between(x, 0.75, 1))
+      )
+    ),
+    .id = "name"
+  )
+  fitplot <- ggplot(
+    predict_beta,
+    aes(x, y)
+  ) +
+    geom_polygon(aes(fill = name), data = predict_polygon) +
+    geom_line() +
+    geom_point(data = predict_point, size = 2) +
+    scale_x_continuous(
+      labels = \(v) 1 - 2*v
+    ) +
+    scale_fill_manual("Fraction", values = unlist(repli_level_colors)) +
+    labs(x = "Timing", y = "Nascent DNA Density") +
+    coord_cartesian(c(0, 1), c(0, 1.05 * max(predict_beta$y)), expand = FALSE) +
+    theme(legend.position = "bottom")
+  w <- 2.5
+  h <- 1.25
+  cbind(
+    set_panel_size(barplot, w = unit(w, "in"), h = unit(h, "in")),
+    set_panel_size(fitplot, w = unit(w, "in"), h = unit(h, "in")),
+    set_panel_size(plot_posterior(repli.posterior, repli.polar.coordinates), w = unit(w, "in"), h = unit(h, "in"))
+  )
+}

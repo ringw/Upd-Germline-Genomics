@@ -435,6 +435,66 @@ targets.repli <- list(
         xform_center = repli.posterior.xform.centering["center"]
       ),
       packages = tar_option_get("packages") %>% c("extraDistr", "future.apply", "pracma")
+    ),
+    tar_target(
+      repli.likelihood_2L_Histone_Repeat_Unit,
+      beta_dm_regression_likelihood(
+        repli.experiment_2L_Histone_Repeat_Unit,
+        3,
+        # 5 kb of observations!
+        rep(1, 5),
+        repli.polar.coordinates,
+        xform_scale = 1,
+        xform_center = repli.posterior.xform.centering["center"]
+      ),
+      packages = tar_option_get("packages") %>% c("extraDistr", "future.apply", "pracma")
+    ),
+    tar_target(
+      repli.mmse_2L_Histone_Repeat_Unit,
+      with(
+        repli.polar.coordinates %>%
+          append(
+            list(d_timing_d_angle = 1/(1 + sin(2 * .$X)))
+          ),
+        c(
+          weighted.mean(
+            sin(X)/(sin(X)+cos(X)),
+            repli.likelihood_2L_Histone_Repeat_Unit * d_timing_d_angle
+          ),
+          weighted.mean(
+            Y,
+            repli.likelihood_2L_Histone_Repeat_Unit * repli.polar.coordinates$Y * repli.prior.distribution$Y
+          )
+        )
+      )
+    ),
+    tar_target(
+      repli.glm_2L_Histone_Repeat_Unit,
+      SummarizedExperiment(
+        list(
+          counts = repli.experiment_2L_Histone_Repeat_Unit %>%
+            assay() %>%
+            apply(1, identity) %>%
+            matrix(nrow = 1)
+        ),
+        colData = repli.experiment_2L_Histone_Repeat_Unit %>%
+          colData() %>%
+          with(
+            tibble(
+              full = full %>% rep(length(repli.tile.diameter_1000_histone_repeat_unit)),
+              size_factors = repli.experiment %>%
+                assay() %>%
+                colSums() %>%
+                `*`(1 / 1000 / 1000) %>%
+                rep(length(repli.tile.diameter_1000_histone_repeat_unit)),
+            )
+          )
+      ) %>%
+        glm_gp(
+          ~ 0 + full,
+          size_factors = .$size_factors,
+          verbose = TRUE
+        )
     )
   ),
   tar_file(
@@ -455,11 +515,39 @@ targets.repli <- list(
         ) %>%
           mutate(celltype = celltype %>% factor(str_to_title(names(repli_posterior_bar_colors)))) %>%
           plot_posterior(repli.polar.coordinates) %>%
+          `+`(
+            theme(
+              plot.margin = margin(0, 15.5, 0, 5.5)
+            )
+          ) %>%
           list(),
         width=4,
         height=3
       )
     )
+  ),
+  tar_file(
+    fig.model.illustration,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tibble(
+        rowname="Repli-Model-Illustration",
+        figure=plot_fpkm_bayes_mmse(
+          fpkm_bars = repli.glm_2L_Histone_Repeat_Unit_Somatic_masked$Beta %>% as.numeric() %>% exp(),
+          bayes_mmse_param = repli.mmse_2L_Histone_Repeat_Unit_Somatic_masked,
+          tibble(
+            celltype = "Somatic",
+            repli.posterior_2L_Histone_Repeat_Unit_Somatic_masked
+          ),
+          repli.polar.coordinates
+        ) %>%
+          list(),
+        width=9.5,
+        height=2.5
+      )
+    ),
+    packages = tar_option_get("packages") %>% c("egg")
   ),
   tar_target(
     histone.timing.bayes.factor,
