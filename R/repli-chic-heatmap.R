@@ -393,3 +393,144 @@ grob_add_arm_colors_legend <- function(p, width, height) {
       l = 1
     )
 }
+
+kde_conf_contour <- function(data) {
+  data <- data %>% subset(rowAlls(matrix(between(as.matrix(data[, 1:2]), -1, 1), nrow = nrow(data))))
+  Z <- kde2d(
+    data[, 1, drop=T],
+    data[, 2, drop=T],
+    h = c(0.4, 0.4),
+    n = 201,
+    lims = c(-1, 1, -1, 1)
+  )
+  dimnames(Z$z) <- list(Z$x, Z$y)
+  brk <- Z$z %>%
+    as.numeric() %>%
+    sort() %>%
+    `/`(sum(.)) %>%
+    subset(cumsum(.) >= 0.25) %>%
+    head(1) %>%
+    `*`(sum(as.numeric(Z$z)))
+  feature <- Z$z / brk
+  names(dimnames(feature)) <- colnames(data)[1:2]
+  # ggplot(melt(Z$z), aes(Var1, Var2, z=value)) + geom_contour(breaks=brk)
+  feature <- melt(feature)
+}
+
+scale_color_repli_scatter_classification <- quote(
+  scale_color_manual(
+    values = c(
+      unlist(chic_line_track_colors, use.names = FALSE),
+      "steelblue",
+      "#cccccc"
+    )
+  )
+)
+
+scale_color_repli_scatter_l2fc <- quote(
+  scale_color_gradient2(
+    low = "#e9a3c9",
+    mid = "#f7f7f7",
+    high = "#5dc663",
+    limits = c(-4, 4),
+    oob = squish,
+    na.value = "transparent"
+  )
+)
+
+plot_grand_total_genes <- function(genewise, color = "expression", scale_color = scale_color_repli_scatter_classification) {
+  on <- log(5) / log(10)
+  genewise <- genewise %>%
+    subset(feature %in% c("protein_coding_gene", "lncRNA_gene")) %>%
+    tibble(
+      as.data.frame(.$timing),
+      .,
+      expression = interaction(quant_raw[,1] >= on | is.na(quant_raw[,1]), quant_raw[,2] >= on | is.na(quant_raw[,2])) %>%
+        dplyr::recode(
+          "FALSE.FALSE" = "off",
+          "TRUE.FALSE" = "GSC",
+          "FALSE.TRUE" = "CySC",
+          "TRUE.TRUE" = "both"
+        ) %>%
+        fct_relevel(
+          "off", after = 4
+        ),
+      color = get(color),
+    ) %>%
+    mutate(
+      feature = feature %>% factor(c("protein_coding_gene", "lncRNA_gene"))
+    )
+  ggplot(
+    arrange(genewise, openssl::md5(genewise$symbol)),
+    aes(GSC, CySC)
+  ) +
+    facet_wrap(vars(feature)) +
+    annotate(
+      "segment",
+      1, 1, xend = -1, yend = -1
+    ) +
+    rasterise(geom_point(aes(color=color), stroke=NA, size=0.75), dpi=300) +
+    geom_contour(aes(z=value), data=\(data) data %>% split(droplevels(.$feature)) %>% sapply(kde_conf_contour, simplify=F) %>% bind_rows(.id = "feature") %>% mutate(feature = feature %>% factor(levels(genewise$feature))), breaks=1, linewidth=1) +
+    scale_color +
+    coord_cartesian(c(1, -1), c(-1, 1), expand=FALSE) +
+    labs(color = color) +
+    theme(
+      aspect.ratio = 1,
+      panel.spacing = unit(18, "pt")
+    )
+}
+
+plot_pericentromeres <- function(genewise, feature, color = "expression", scale_color = scale_color_repli_scatter_classification) {
+  on <- log(5) / log(10)
+  mypolygon <- ggplot_build(plot_grand_total_genes(genewise))$data[[3]] %>%
+    subset(PANEL == 1) %>%
+    dplyr::rename(GSC="x", CySC="y")
+  genewise <- genewise[genewise$feature == feature, ]
+  genewise$pericentromeres <- genewise$region %>%
+    dplyr::recode("2LC" = "2PC", "2RC" = "2PC", "3LC" = "3PC", "3RC" = "3PC")
+  genewise <- genewise %>%
+    subset(feature %in% c("protein_coding_gene", "lncRNA_gene") & !is.na(region) & region != "rDNA") %>%
+    tibble(
+      as.data.frame(.$timing),
+      .,
+      expression = interaction(quant_raw[,1] >= on | is.na(quant_raw[,1]), quant_raw[,2] >= on | is.na(quant_raw[,2])) %>%
+        dplyr::recode(
+          "FALSE.FALSE" = "off",
+          "TRUE.FALSE" = "GSC",
+          "FALSE.TRUE" = "CySC",
+          "TRUE.TRUE" = "both"
+        ) %>%
+        fct_relevel(
+          "off", after = 4
+        ),
+      color = get(color),
+    )
+  ggplot(arrange(genewise, openssl::md5(genewise$symbol)), aes(GSC, CySC)) +
+    facet_wrap(vars(pericentromeres), ncol=3) +
+    annotate(
+      "segment",
+      1, 1, xend = -1, yend = -1
+    ) +
+    rasterise(geom_point(aes(color = color), stroke=NA, size = 1), dpi = 300) +
+    geom_polygon(
+      aes(group=piece),
+      data=cross_join(mypolygon, tibble(pericentromeres = unique(as.character(genewise$pericentromeres)))),
+      color="blue",
+      fill=NA,
+      linewidth = 1
+    ) +
+    scale_color +
+    coord_cartesian(c(1, -1), c(-1, 1), expand=FALSE) +
+    labs(color = color) +
+    theme(
+      aspect.ratio = 1,
+      panel.spacing = unit(18, "pt")
+    )
+}
+
+render_contour_plots <- function() {
+  ggsave("Repli-Contour-Classification.pdf", set_panel_size(plot_grand_total_genes(tar_read(genewise)), w=unit(1.5,"in"), h=unit(1.5,"in")), w=6, h=4.5)
+  ggsave("Repli-Contour-Classification-Protein-Coding-Heterochromatin.pdf", set_panel_size(plot_pericentromeres(tar_read(genewise), "protein_coding_gene"), w=unit(1.5,"in"), h=unit(1.5,"in")), w=7., h=7.5)
+  ggsave("Repli-Contour-L2FC.pdf", set_panel_size(plot_grand_total_genes(tar_read(genewise), "L2FC", scale_color_repli_scatter_l2fc), w=unit(1.5,"in"), h=unit(1.5,"in")), w=6, h=4.5)
+  ggsave("Repli-Contour-L2FC-Protein-Coding-Heterochromatin.pdf", set_panel_size(plot_pericentromeres(tar_read(genewise), "protein_coding_gene", "L2FC", scale_color_repli_scatter_l2fc), w=unit(1.5,"in"), h=unit(1.5,"in")), w=7., h=7.5)
+}
