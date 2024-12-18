@@ -346,16 +346,119 @@ quantify_repli_experiment <- function(prob, prior) {
   sum(timing * prob * prior * d_timing_d_angle) / sum(prob * prior * d_timing_d_angle)
 }
 
-bayes_factor_repli_experiment <- function(prob1, prob2, prior) {
-  angle <- seq(0, pi/2, length.out=length(prob1))
+bayes_factor_repli_experiment <- function(elementMetadata, prior) {
+  angle <- seq(0, pi/2, length.out=nrow(elementMetadata))
   d_timing_d_angle <- 1/(1 + sin(2*angle))
-  full_model <- sum(
-    prob1 * d_timing_d_angle * prior
-  ) * sum(
-    prob2 * d_timing_d_angle * prior
+  full_model <- prod(
+    apply(
+      elementMetadata,
+      2,
+      \(v) sum(v * d_timing_d_angle * prior)
+    )
   )
-  reduced_model <- sum(prob1 * prob2 * d_timing_d_angle * prior)
+  reduced_model <- sum(
+    rowProds(as.matrix(elementMetadata)) * d_timing_d_angle * prior
+  )
   full_model / reduced_model
+}
+
+repli_posterior_bayes_factor_all_pairs <- function(repli.posterior, prior) {
+  repli.posterior %>%
+    group_by(rowname) %>%
+    summarise(
+      Germline_Somatic = bayes_factor_repli_experiment(cbind(Germline, Somatic), prior),
+      Germline_Kc167 = bayes_factor_repli_experiment(cbind(Germline, Kc167), prior),
+      Germline_S2 = bayes_factor_repli_experiment(cbind(Germline, S2), prior),
+      Somatic_Kc167 = bayes_factor_repli_experiment(cbind(Somatic, Kc167), prior),
+      Somatic_S2 = bayes_factor_repli_experiment(cbind(Somatic, S2), prior),
+      Dynamic_Static_Model = bayes_factor_repli_experiment(cbind(Germline, Somatic, Kc167, S2), prior),
+    ) %>%
+    subset(select = -rowname)
+}
+
+repli_timing_factor_all_pairs <- function(repli_timing) {
+  tile_track <- GRanges(
+    seqnames(repli_timing[[1]]),
+    ranges(repli_timing[[1]]),
+    seqlengths = seqlengths(repli_timing[[1]])
+  )
+  list(
+    Germline_Somatic = GRanges(
+      tile_track,
+      Germline = repli_timing$Germline$score,
+      Somatic = repli_timing$Somatic$score
+    ),
+    Germline_Kc167 = GRanges(
+      tile_track,
+      Germline = repli_timing$Germline$score,
+      Kc167 = repli_timing$Kc167$score
+    ),
+    Germline_S2 = GRanges(
+      tile_track,
+      Germline = repli_timing$Germline$score,
+      S2 = repli_timing$S2$score
+    ),
+    Somatic_Kc167 = GRanges(
+      tile_track,
+      Somatic = repli_timing$Somatic$score,
+      Kc167 = repli_timing$Kc167$score
+    ),
+    Somatic_S2 = GRanges(
+      tile_track,
+      Somatic = repli_timing$Somatic$score,
+      S2 = repli_timing$S2$score
+    ),
+    GRanges(
+      tile_track,
+      Germline = repli_timing$Germline$score,
+      Somatic = repli_timing$Somatic$score
+    )
+  )
+}
+
+repli_timing_nested_peak_calling <- function(bayes_factor, timings, hypothesis_testing_factor) {
+  tile_track <- GRanges(
+    seqnames(timings),
+    ranges(timings),
+    seqlengths = seqlengths(timings)
+  )
+  peaks <- GenomicRanges::reduce(
+    tile_track[bayes_factor >= hypothesis_testing_factor]
+  )
+  seqlengths(peaks) <- NA
+  peaks <- peaks %>%
+    GenomicRanges::resize(width(.) + 10000, fix="center") %>%
+    GenomicRanges::reduce() %>%
+    GenomicRanges::resize(width(.) - 10000, fix="center") %>%
+    subset(width(.) >= 20000)
+  diff_timing <- -rowDiffs(as.matrix(elementMetadata(timings)))
+  peaks_timing <- findOverlaps(
+    peaks,
+    tile_track
+  ) %>%
+    sapply(
+      \(inds) diff_timing[inds]
+    )
+  peaks$NegDiff <- sapply(peaks_timing, min)
+  peaks$PosDiff <- sapply(peaks_timing, max)
+  names(peaks) <- str_replace(
+    make.unique(as.character(seqnames(peaks))),
+    "\\.|$",
+    paste0(
+      ".",
+      sign((peaks$NegDiff + peaks$PosDiff) / 2) %>%
+        factor(c("1", "-1")) %>%
+        `levels<-`(
+          value = paste0(colnames(elementMetadata(timings))[1], c("Earlier", "Later"))
+        ),
+      "."
+    )
+  ) %>%
+    str_replace(
+      "\\.$",
+      ""
+    )
+  peaks
 }
 
 plot_posterior <- function(repli.posterior, repli.polar.coordinates) {

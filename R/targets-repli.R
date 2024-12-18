@@ -558,8 +558,10 @@ targets.repli <- list(
         S2=repli.posterior_2L_Histone_Repeat_Unit_S2_masked
       ),
       \(df) bayes_factor_repli_experiment(
-        repli.posterior_2L_Histone_Repeat_Unit_Germline_masked$prob,
-        df$prob,
+        tibble(
+          Germline = repli.posterior_2L_Histone_Repeat_Unit_Germline_masked$prob,
+          Other = df$prob,
+        ),
         repli.prior.distribution$X
       )
     )
@@ -755,85 +757,71 @@ targets.repli <- list(
     )
   ),
   tar_target(
-    repli.bayes.factor_chr,
-    GRanges(
-      chic.tile.diameter_1000_chr,
-      score = with(
-        repli.posterior_Germline_chr,
-        tibble(
-          rowname,
-          value,
-          p_GSC = prob,
-          p_CySC = repli.posterior_Somatic_chr$prob
-        )
-      ) %>%
-        group_by(rowname) %>%
-        summarise(
-          bayes_factor = bayes_factor_repli_experiment(
-            p_GSC, p_CySC, repli.prior.distribution$X
-          )
+    repli.posterior_chr,
+    with(
+      repli.posterior_Germline_chr,
+      tibble(
+        rowname,
+        sapply(
+          list(
+            Germline = repli.posterior_Germline_chr,
+            Somatic = repli.posterior_Somatic_chr,
+            Kc167 = repli.posterior_Kc167_chr,
+            S2 = repli.posterior_S2_chr
+          ),
+          \(df) df$prob
         ) %>%
-        pull(bayes_factor)
-    )
+          as_tibble()
+      )
+    ),
+    format = "parquet"
+  ),
+  tar_target(
+    repli.bayes.factor_chr,
+    chic.tile.diameter_1000_chr %>%
+      `elementMetadata<-`(
+        value = repli.posterior_chr %>%
+          repli_posterior_bayes_factor_all_pairs(
+            prior = repli.prior.distribution$X
+          )
+      )
   ),
   tar_target(
     repli.peaks_chr,
-    {
-      peaks <- GenomicRanges::reduce(
-        chic.tile.diameter_1000_chr[
-          repli.bayes.factor_chr$score >= 100
-        ]
+    mapply(
+      repli_timing_nested_peak_calling,
+      elementMetadata(repli.bayes.factor_chr),
+      repli_timing_factor_all_pairs(
+        list(
+          Germline = repli.timing_Germline_chr,
+          Somatic = repli.timing_Somatic_chr,
+          Kc167 = repli.timing_Kc167_chr,
+          S2 = repli.timing_S2_chr
+        )
+      ),
+      c(
+        100,
+        100,
+        100,
+        100,
+        100,
+        1e4
       )
-      seqlengths(peaks) <- NA
-      peaks <- peaks %>%
-        GenomicRanges::resize(width(.) + 10000, fix="center") %>%
-        GenomicRanges::reduce() %>%
-        GenomicRanges::resize(width(.) - 10000, fix="center") %>%
-        subset(width(.) >= 20000)
-      diff_timing <- (repli.timing_Germline_chr$score - repli.timing_Somatic_chr$score)
-      peaks_timing <- findOverlaps(
-        peaks,
-        chic.tile.diameter_1000_chr
-      ) %>%
-        sapply(
-          \(inds) diff_timing[inds]
-        )
-      peaks$NegDiff <- sapply(peaks_timing, min)
-      peaks$PosDiff <- sapply(peaks_timing, max)
-      names(peaks) <- str_replace(
-        make.unique(as.character(seqnames(peaks))),
-        "\\.|$",
-        paste0(
-          ".",
-          sign((peaks$NegDiff + peaks$PosDiff) / 2) %>%
-            factor %>%
-            fct_recode(
-              GermlineLater="-1",
-              GermlineEarlier="1"
-            ),
-          "."
-        )
-      ) %>%
-        str_replace(
-          "\\.$",
-          ""
-        )
-      peaks
-    }
+    )
   ),
   tar_target(
     diff.replication.progression.gene,
     with(
       read.csv(assay.data.sc),
-      names(repli.peaks_chr)[
+      names(repli.peaks_chr$Germline_Somatic)[
         findOverlaps(
           GRanges(
             chr %>%
               replace(
-                is.na(chr) | !(chr %in% levels(droplevels(seqnames(repli.peaks_chr)))),
+                is.na(chr) | !(chr %in% levels(droplevels(seqnames(repli.peaks_chr$Germline_Somatic)))),
                 "*"
               ) %>%
-              factor(levels = c(seqlevels(repli.peaks_chr), "*")),
+              factor(levels = c(seqlevels(repli.peaks_chr$Germline_Somatic), "*")),
             IRanges(
               start = ifelse(
                 strand == "+", start, end
@@ -842,7 +830,7 @@ targets.repli <- list(
               width = 1
             )
           ),
-          repli.peaks_chr
+          repli.peaks_chr$Germline_Somatic
         ) %>%
           sapply(\(vec) vec[1])
       ]
@@ -891,7 +879,7 @@ targets.repli <- list(
         list(scipen=100),
         write.table(
           reframe(
-            rownames_to_column(as.data.frame(repli.peaks_chr)),
+            rownames_to_column(as.data.frame(repli.peaks_chr$Germline_Somatic)),
             seqnames,
             start - 1,
             end,
@@ -981,12 +969,12 @@ targets.repli <- list(
         !is.na(chic.tile.diameter_500_score_genes$lookup),
         findOverlaps(
           chic.tile.diameter_500_score_chr[chic.tile.diameter_500_score_genes$lookup %>% subset(!is.na(.))],
-          repli.peaks_chr
+          repli.peaks_chr$Germline_Somatic
         ) %>%
           as.list() %>%
           sapply(
             \(peak_inds) ifelse(
-              grepl("GermlineEarlier", names(repli.peaks_chr)[peak_inds]),
+              grepl("GermlineEarlier", names(repli.peaks_chr$Germline_Somatic)[peak_inds]),
               1,
               -1
             ) %>%
@@ -1014,7 +1002,7 @@ targets.repli <- list(
             chic.tile.diameter_1000_chr,
             score = repli.timing_Germline_chr$score - repli.timing_Somatic_chr$score
           )[
-            to(findOverlaps(repli.peaks_chr, chic.tile.diameter_1000_chr))
+            to(findOverlaps(repli.peaks_chr$Germline_Somatic, chic.tile.diameter_1000_chr))
           ],
           repli_early_late_background$E, repli_early_late_background$L,
           name = "Diff.",
@@ -1057,8 +1045,8 @@ targets.repli <- list(
           background_color = "#EAEAEB",
           line_color = "#010101",
           roi = tibble(
-            subset(as_tibble(repli.peaks_chr), width >= 20000),
-            sgn = subset(grepl("Earlier", names(repli.peaks_chr)), width(repli.peaks_chr) >= 20000),
+            as_tibble(repli.peaks_chr$Germline_Somatic),
+            sgn = grepl("Earlier", names(repli.peaks_chr$Germline_Somatic)),
             chr = seqnames,
             xmin = start,
             xmax = end,

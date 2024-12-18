@@ -309,7 +309,7 @@ detail_repli_analysis <- function(
       GSC = repli_Germline$score[gene_lookup],
       CySC = repli_Somatic$score[gene_lookup]
     ),
-    bayes_factor = repli_Bayes_Factor$score[gene_lookup],
+    bayes_factor = repli_Bayes_Factor$Germline_Somatic[gene_lookup],
   )
   gene_neighbor <- findOverlaps(
     GenomicRanges::resize(genes, transcriptome_integrate, "center"),
@@ -378,7 +378,7 @@ publish_repli_analysis <- function(
       replace(from(findOverlaps(TSS, chromosome_pericetromere_label)), "Pericentromere"),
     GSC = repli_Germline$score[gene_lookup],
     CySC = repli_Somatic$score[gene_lookup],
-    `Bayes Factor` = repli_Bayes_Factor$score[gene_lookup],
+    `Bayes Factor` = repli_Bayes_Factor$Germline_Somatic[gene_lookup],
     `GSC CPM` = CPM_Germline,
     `CySC CPM` = CPM_Somatic,
     OnOff_CPM = structure(
