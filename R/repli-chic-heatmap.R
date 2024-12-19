@@ -294,11 +294,13 @@ plot_repli_track_raster <- function(
       geom_raster(aes(fill=fill), sc_track) +
       scale_fill_identity()
   }
-  gg <- gg +
-    new_scale_fill() +
-    geom_raster(aes(fill=fill), chr_track) +
-    scale_fill_identity() +
-    new_scale_fill()
+  if (length(na.omit(unique(chr_track$fill)) %>% setdiff("#ffffff")) > 1) {
+    gg <- gg +
+      new_scale_fill() +
+      geom_raster(aes(fill=fill), chr_track) +
+      scale_fill_identity()
+  }
+  gg <- gg + new_scale_fill()
   raster_height <- 1.01
   for (n in grep("^H", levels(data$series), val = TRUE)) {
     gg <- gg + geom_blank(data = data[head(match(n, data$series), 1),, drop=FALSE])
