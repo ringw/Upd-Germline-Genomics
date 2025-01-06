@@ -215,3 +215,59 @@ targets.quantification <- list(
       replace(is.na(.), 0)
   )
 )
+
+targets.rnaseq <- list(
+  tar_file(
+    modencode.transcriptome,
+    "transcriptome/gene_count_matrix.csv"
+  ),
+  tar_target(
+    modencode.experiment,
+    SummarizedExperiment(
+      list(
+        counts = modencode.transcriptome %>%
+          read.csv(row.names = 1) %>%
+          as.matrix() %>%
+          `%*%`(
+            matrix(
+              c(
+                1, 1, 1, 0, 0, 0, 0, 0, 0, 0,
+                0, 0, 0, 1, 1, 0, 0, 0, 0, 0,
+                0, 0, 0, 0, 0, 1, 1, 0, 0, 0,
+                0, 0, 0, 0, 0, 0, 0, 1, 1, 1
+              ),
+              ncol = 4,
+              dimnames = list(
+                NULL,
+                c("Kc167.Rep1", "Kc167.Rep2", "S2.Rep1", "S2.Rep2")
+              )
+            )
+          )
+      ),
+      colData = data.frame(celltype = c("Kc167", "Kc167", "S2", "S2"))
+    )
+  ),
+  tar_target(
+    modencode.deseq,
+    modencode.experiment %>% DESeqDataSet(design = ~ 0 + celltype) %>% DESeq(),
+    packages = tar_option_get("packages") %>% c("DESeq2")
+  ),
+  tar_target(
+    modencode.logCPM,
+    cbind(
+      Kc167 = results(modencode.deseq, name = "celltypeKc167")$log2FoldChange[
+        match(read.csv(assay.data.sc)$flybase, rownames(modencode.experiment))
+      ] %>%
+        replace(is.na(.), -Inf) %>%
+        `-`(logSumExp(.) - 2 * log(1000)),
+      S2 = results(modencode.deseq, name = "celltypeS2")$log2FoldChange[
+        match(read.csv(assay.data.sc)$flybase, rownames(modencode.experiment))
+      ] %>%
+        replace(is.na(.), -Inf) %>%
+        `-`(logSumExp(.) - 2 * log(1000))
+    ) %>%
+      `*`(log(2)) %>%
+      `/`(log(10)) %>%
+      `rownames<-`(pull(read.csv(assay.data.sc), 1))
+  )
+)

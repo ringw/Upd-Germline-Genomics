@@ -966,6 +966,7 @@ list(
   targets.flybase,
   targets.quantification,
   targets.repli,
+  targets.rnaseq,
   targets.sce
 )
  
