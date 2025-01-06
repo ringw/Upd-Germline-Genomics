@@ -5,7 +5,8 @@ plot_track <- function(
     negative_color = "#f7f9e7",
     name = "Timing",
     limits = c(-1, 1),
-    breaks = c(-1, 0, 1)) {
+    breaks = c(-1, 0, 1),
+    plot_grid = TRUE) {
   df <- tibble(
     chr = as.factor(seqnames(track)),
     pos = mid(track),
@@ -129,7 +130,11 @@ plot_track <- function(
       1:5,
       1
     )
-  plot_grid(mylayout)
+  if (plot_grid) {
+    plot_grid(mylayout)
+  } else {
+    mylayout
+  }
 }
 
 # Plot two tracks, col names score_1 and score_2, overlaid.
@@ -217,7 +222,7 @@ plot_track_2score <- function(
     scale_color_manual(values = c(`1`=score_1, `2`=score_2)) +
     scale_fill_identity() +
     coord_cartesian(
-      NULL, limits, expand=F
+      NULL, limits, expand=F, clip="off"
     ) +
     theme_bw() +
     theme(
