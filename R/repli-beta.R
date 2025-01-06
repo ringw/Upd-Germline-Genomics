@@ -371,6 +371,7 @@ repli_posterior_bayes_factor_all_pairs <- function(repli.posterior, prior) {
       Germline_S2 = bayes_factor_repli_experiment(cbind(Germline, S2), prior),
       Somatic_Kc167 = bayes_factor_repli_experiment(cbind(Somatic, Kc167), prior),
       Somatic_S2 = bayes_factor_repli_experiment(cbind(Somatic, S2), prior),
+      Kc167_S2 = bayes_factor_repli_experiment(cbind(Kc167, S2), prior),
       Dynamic_Static_Model = bayes_factor_repli_experiment(cbind(Germline, Somatic, Kc167, S2), prior),
     ) %>%
     subset(select = -rowname)
@@ -406,6 +407,11 @@ repli_timing_factor_all_pairs <- function(repli_timing) {
     Somatic_S2 = GRanges(
       tile_track,
       Somatic = repli_timing$Somatic$score,
+      S2 = repli_timing$S2$score
+    ),
+    Kc167_S2 = GRanges(
+      tile_track,
+      Kc167 = repli_timing$Kc167$score,
       S2 = repli_timing$S2$score
     ),
     GRanges(
