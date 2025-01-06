@@ -722,7 +722,8 @@ targets.chic.tracks <- list(
         model_matrix_rep,
         offset = chic.experiment.granges.offset.elementMetadata,
         # global_overdispersion = global_overdispersion,
-        test_de = test_de
+        test_de = test_de,
+        test_wald = test_de
       )
     ),
 
