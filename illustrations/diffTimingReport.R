@@ -5,7 +5,7 @@ library(grobblR)
 library(gtable)
 library(purrr)
 
-tar_load(matches("repli.timing_") | repli.peaks_chr)
+tar_load(matches("repli.timing_") | repli.peaks_chr | repli.static.timing.peaks)
 
 tracks <- list(
   repli.timing_Germline_chr,
@@ -61,21 +61,35 @@ plot_track_custom <- function(i, j) {
     score_1 = line_cmap[i],
     score_2 = line_cmap[j],
     roi = tibble(
-      as_tibble(peaks),
-      sgn = grepl("Earlier", names(peaks)),
+      as_tibble(repli.static.timing.peaks),
+      NegDiff = 0,
+      PosDiff = 0,
+      sgn = FALSE,
       chr = seqnames,
       xmin = start,
       xmax = end,
       ymin = -Inf,
       ymax = Inf,
-      fill = c(
-        "FALSE" = "#461B56",
-        "TRUE" = bg_colors[i]
-      )[
-        as.character(sgn)
-      ]
+      fill = "#f1e1d1",
     ) %>%
-      arrange(fill)
+      rbind(
+        tibble(
+          as_tibble(peaks),
+          sgn = grepl("Earlier", names(peaks)),
+          chr = seqnames,
+          xmin = start,
+          xmax = end,
+          ymin = -Inf,
+          ymax = Inf,
+          fill = c(
+            "FALSE" = "#461B56",
+            "TRUE" = bg_colors[i]
+          )[
+            as.character(sgn)
+          ]
+        ) %>%
+          arrange(fill)
+      )
   ) %>%
     rbind(
       gtable(width, unit(0.5, "in"), respect = FALSE) %>%

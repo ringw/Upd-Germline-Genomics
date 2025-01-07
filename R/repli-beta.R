@@ -422,6 +422,21 @@ repli_timing_factor_all_pairs <- function(repli_timing) {
   )
 }
 
+# Nested peak calling (this version of the function was not integrated back into
+# the cell-type differences but is used for static regions). In the region, at
+# least 50% of the windows must be lit up, or else the region is excluded.
+repli_post_test_nested_peak_calling <- function(wnd) {
+  peaks <- GenomicRanges::reduce(wnd)
+  peaks <- peaks %>%
+    GenomicRanges::resize(width(.) + 10000, fix="center") %>%
+    GenomicRanges::reduce() %>%
+    GenomicRanges::resize(width(.) - 10000, fix="center") %>%
+    subset(width(.) >= 20000)
+  mapping <- findOverlaps(peaks, wnd) %>% as("List")
+  coverage <- sapply(mapping, \(mapping) sum(width(wnd)[mapping])) / width(peaks)
+  peaks[coverage >= 0.5]
+}
+
 repli_timing_nested_peak_calling <- function(bayes_factor, timings, hypothesis_testing_factor) {
   tile_track <- GRanges(
     seqnames(timings),
