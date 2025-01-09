@@ -1,3 +1,5 @@
+source("_targets.R")
+
 tar_load(chic.tile.diameter_1000_chr)
 tar_load(
   c(
