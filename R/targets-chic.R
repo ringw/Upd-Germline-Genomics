@@ -1083,22 +1083,6 @@ targets.chic.pericentromere <- list(
       )
     ),
     names = mark | celltype,
-    tar_file(
-      chic.bw.track.peaks,
-      reduce_peaks_2_tracks(
-        chic.experiment.quantify_peakcalling.broad,
-        chic.experiment.quantify_peakcalling.sharp
-      ) %>%
-        peaks_to_genome_coverage() %>%
-        export(BigWigFile(with(list(mark=mark, celltype=celltype), str_glue("chic/chr/{celltype}_{mark}_CN_Enrichment_Peaks.bw")))) %>%
-        as.character,
-      packages = c(
-        "dplyr",
-        "GenomicRanges",
-        "rtracklayer",
-        "S4Vectors"
-      )
-    ),
     tar_target(
       enriched.chromosomes.data,
       tibble(
