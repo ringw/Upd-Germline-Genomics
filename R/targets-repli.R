@@ -353,23 +353,6 @@ targets.repli <- list(
         ,
       packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
     ),
-    tar_target(
-      repli.standard.error,
-      repli.posterior %>%
-        summarise(
-          value = sqrt(
-            quantify_repli_experiment(
-              prob, prior = repli.prior.distribution$X, power = 2
-            ) -
-              (0.5 - 0.5 * repli.timing$score[rowname[1]])^2
-          ),
-          .by = "rowname"
-        ) %>%
-        with(value[match(seq_along(chic.tile.diameter_1000), rowname)]) %>%
-        repli_logistic_beta_to_tanh() %>%
-        GRanges(chic.tile.diameter_1000, score = .),
-      packages = c(tar_option_get("packages"), "future.apply", "extraDistr", "mvtnorm", "pracma")
-    ),
     tar_file(
       repli.bw,
       repli.timing$score %>%
@@ -772,36 +755,6 @@ targets.repli <- list(
       ),
       packages = tar_option_get("packages") %>% c("colorspace")
     )
-  ),
-  tar_target(
-    repli.timing_chr,
-    GRanges(
-      chic.tile.diameter_1000_chr,
-      Germline = repli.timing_Germline_chr$score,
-      Somatic = repli.timing_Somatic_chr$score,
-      Kc167 = repli.timing_Kc167_chr$score,
-      S2 = repli.timing_S2_chr$score
-    )
-  ),
-  tar_target(
-    repli.embedding_chr,
-    {
-      Y <- as.matrix(elementMetadata(repli.timing_chr))
-      stderr <- sqrt(
-        1/4 * (
-          repli.standard.error_Germline_chr$score^2 +
-            repli.standard.error_Somatic_chr$score^2 +
-            repli.standard.error_Kc167_chr$score^2 +
-            repli.standard.error_S2_chr$score^2
-        )
-      )
-      # Y <- (Y - rowMeans(Y)) / stderr
-      Y <- Y / stderr
-    }
-  ),
-  tar_target(
-    repli.pca_chr,
-    svd(repli.embedding_chr)
   ),
   tar_target(
     repli.posterior_chr,

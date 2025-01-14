@@ -339,12 +339,11 @@ analyze_repli_experiment <- function(
     do.call(rbind, .)
 }
 
-quantify_repli_experiment <- function(prob, prior, power = 1) {
+quantify_repli_experiment <- function(prob, prior) {
   angle <- seq(0, pi/2, length.out=length(prob))
   timing <- sin(angle)/(sin(angle)+cos(angle))
   d_timing_d_angle <- 1/(1 + sin(2*angle))
-  sum(timing^power * prob * prior * d_timing_d_angle) /
-    sum(prob * prior * d_timing_d_angle)
+  sum(timing * prob * prior * d_timing_d_angle) / sum(prob * prior * d_timing_d_angle)
 }
 
 bayes_factor_repli_experiment <- function(elementMetadata, prior) {
