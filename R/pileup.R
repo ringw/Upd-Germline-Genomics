@@ -71,6 +71,29 @@ bam_to_df_multi_ref <- function(bam_file, rname, ...) {
   )
 }
 
+# Watson and Crick end of Sequence Alignment (SAM) information. We need to parse
+# the CIGAR alignment string to determine the Crick end of the alignment,
+# because just the Watson coordinate is given to us.
+cigar_ref_length <- function(cigars) {
+  cigars %>%
+    sapply(
+      \(cigar) cigar %>%
+        gregexpr("[0-9]+[MNDI]", .) %>%
+        `[[`(1) %>%
+        mapply(
+          # Insertion is the only case where we are not counting reference base pairs.
+          \(pos, length) if(substring(cigar, pos + length - 1, pos + length - 1) != "I")
+            as.numeric(
+              substring(cigar, pos, pos + length - 2)
+            )
+            else 0,
+          .,
+          attr(., "match.length")
+        ) %>%
+        sum
+    )
+}
+
 bam_reference_coords <- function(df) {
   df %>%
     mutate(
