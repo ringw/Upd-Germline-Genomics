@@ -16,10 +16,6 @@ source('R/1-constants.R')
 source('R/chic-heatmap.R')
 source('R/repli-chic-heatmap.R')
 source('R/repli-logistic.R')
-repli$score <- repli$score %>%
-  qlogistanh() %>%
-  `/`(1.95) %>%
-  plogistanh()
 
 lift_dm3_to_flybase_dm6 <- \(gr)
   gr %>%
