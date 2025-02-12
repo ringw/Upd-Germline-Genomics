@@ -618,6 +618,10 @@ targets.repli <- list(
       granges_bin_to_projection(GRanges(chic.track, bin = repli.value.bindata$bin, size_of_bin_bp = repli.value.bindata$size_of_bin_bp))
     ),
     tar_target(
+      repli.value.bybin,
+      seq(-0.999, 0.999, by = 0.002) %>% head(max(repli.value.bindata$bin))
+    ),
+    tar_target(
       repli.chromosome.arms.factor_diameter_500_score,
       repli_chromosome_arms_factor_scaffolds(chromosome_arms_diameter_500_score)
     ),
@@ -644,7 +648,7 @@ targets.repli <- list(
     tar_target(
       repli.chic.projection.profile,
       cbind(
-        repli = seq(-1, 1, by = 0.002),
+        repli = repli.value.bybin,
         sapply(
           chic.results,
           \(f) f %>%
