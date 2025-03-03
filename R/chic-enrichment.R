@@ -328,104 +328,206 @@ gtf_granges_extended_from_tss <- function(granges, genes) {
     setNames(pull(genes, 1))
 }
 
-# Violin plots of histone code L2FC. ----
-# Plot the combined chr feature violins once. Cannot use the same
-# position = dodge on a boxplot as we used on the violin, so this is going to be
-# a plainer plot.
-plot_enriched_chromosomes_combined <- function(data, label_pattern, title = label_pattern) {
-  data <- data %>% subset(grepl(label_pattern, label))
-  ggplot(
-    data,
-    aes(label, L2FC, fill = celltype, group = interaction(label, celltype, mark))
-  ) +
-    geom_violin() +
-    # geom_boxplot(outlier.shape = NA, fill = "transparent") +
-    annotate(
-      "text",
-      (1 + seq(3 * length(unique(data$label))))/3, 1.1,
-      label = rep(c("H3K4me3", "H3K27me3", "H3K9me3"), length(unique(data$label))),
-      size = 2
-    ) +
-    scale_fill_manual(values = cell_type_violin_colors) +
-    coord_cartesian(NULL, c(-1.2, 1.2)) +
-    labs(title = title) +
-    theme(
-      legend.position = "none",
-      panel.grid.major.x = element_blank()
+ingest_chic_l2fe <- function(tracks, chromosome_pericetromere_label) {
+  track <- tracks$track[[1]]
+  fct <- as.character(seqnames(track)) %>%
+    replace(
+      to(findOverlaps(chromosome_pericetromere_label, track)),
+      paste0(
+        as.character(seqnames(track)[to(findOverlaps(chromosome_pericetromere_label, track))]),
+        "C"
+      )
+    ) %>%
+    factor(
+      c("2L", "2LC", "2RC", "2R", "3L", "3LC", "3RC", "3R", "4", "X", "Y")
     )
+  data <- tracks %>%
+    rowwise() %>%
+    reframe(
+      celltype = factor(celltype, c("Germline", "Somatic")),
+      mark = factor(mark, c("H3K4me3", "H3K27me3", "H3K9me3")),
+      tibble(
+        region = fct,
+        mid = mid(track),
+        L2FE = track$L2FC,
+        H3.vs.AA = track$score.molH3,
+      )
+    ) %>%
+    group_by(mark, mid) %>%
+    filter(!is.na(region) & all(H3.vs.AA >= 0.1)) %>%
+    ungroup()
 }
 
-# Use a built plot_enriched_chromosomes_combined and add additional information
-# to the plot.
-annotate_enriched_chromosomes_combined <- function(gg) {
-  data <- ggplot_build(gg)$data[[1]]
-  # 75% CI information. We persist the density results in ggplot_build data, as
-  # well as the final coordinate space x and y, so we need to match the quantile
-  # to plot to the cumsum of % density and then get the y value for this
-  # particular variable value.
-  box_data <- data %>%
-    group_by(group) %>%
-    summarise(
-      xmin = xmin[1] + (xmax - xmin)[1] * (1 - width[1]) / 2,
-      xmax = xmax[1] - (xmax - xmin)[1] * (1 - width[1]) / 2,
-      ymin = y[
-        findInterval(
-          0.25,
-          cumsum(density) / sum(density)
-        )
-      ],
-      ymax = y[
-        findInterval(
-          0.75,
-          cumsum(density) / sum(density)
-        )
-      ]
+plot_chic_l2fe <- function(tracks, chromosome_pericetromere_label) {
+  track <- tracks$track[[1]]
+  fct <- as.character(seqnames(track)) %>%
+    replace(
+      to(findOverlaps(chromosome_pericetromere_label, track)),
+      paste0(
+        as.character(seqnames(track)[to(findOverlaps(chromosome_pericetromere_label, track))]),
+        "C"
+      )
+    ) %>%
+    factor(
+      c("2L", "2LC", "2RC", "2R", "3L", "3LC", "3RC", "3R", "4", "X", "Y")
     )
-  median_data <- data %>%
-    group_by(group) %>%
-    summarise(
-      x = xmin[1] + (xmax - xmin)[1] * (1 - width[1]) / 2,
-      x = xmin[1],
-      y = y[
-        findInterval(
-          0.5,
-          cumsum(density) / sum(density)
-        )
-      ],
-      xend = xmax[1] - (xmax - xmin)[1] * (1 - width[1]) / 2,
-      yend = y
+  by <- 0.5
+  by <- by - (by/2) / (length(seq(-4, 0, by=by))-1)
+  by <- 0.16
+  edge <- by/2
+  binedges <- c(
+    seq(-4 - edge, -edge, by=by),
+    -1e-4
+  ) %>%
+    c(-rev(.))
+  rebin <- rbind(
+    diag(nrow = length(seq(-4, -by, by=by)), ncol=length(binedges)-1),
+    rbind(
+      rep(0, length(binedges)-1) %>%
+        replace(c(which.min(abs(binedges - -edge)), match(1e-4, binedges)), 1)
+    ),
+    cbind(
+      matrix(0, nrow = length(seq(-4, -by, by=by)), ncol = length(binedges)-1 - length(seq(-4, -by, by=by))),
+      diag(length(seq(-4, -by, by=by)))
     )
-  # We will set the breaks and labels of the continuous x axis to match the
-  # discrete x axis which we built.
-  labels <- ggplot_build(gg)$layout$panel_params[[1]]$x$limits
-  ggplot(data, aes()) +
-    geom_violin(
-      aes(x, y, fill = fill, xmin = xmin, xmax = xmax, violinwidth = violinwidth, group = group),
-      stat="identity"
-    ) +
+  )
+  binvalues <- seq(-4, 4, by=by)
+  data <- tracks %>%
+    rowwise() %>%
+    reframe(
+      celltype = factor(celltype, c("Germline", "Somatic")),
+      mark = factor(mark, c("H3K4me3", "H3K27me3", "H3K9me3")),
+      tibble(
+        region = fct,
+        mid = mid(track),
+        L2FE = track$L2FC,
+        H3.vs.AA = track$score.molH3,
+      )
+    ) %>%
+    group_by(mark, mid) %>%
+    filter(!is.na(region) & all(H3.vs.AA >= 0.1)) %>%
+    subset(select = -mid) %>%
+    group_by(celltype, mark, region) %>%
+    reframe(
+      median = median(subset(L2FE, !between(L2FE, -1e-4, 1e-4))),
+      lower = quantile(subset(L2FE, !between(L2FE, -1e-4, 1e-4)), 0.25),
+      upper = quantile(subset(L2FE, !between(L2FE, -1e-4, 1e-4)), 0.75),
+      as_tibble(
+        list(
+          L2FE = binvalues,
+          width = (rebin %*% table(cut(L2FE, binedges))) %>%
+            prop.table() %>%
+            as.numeric()
+        )
+      )
+    )
+  polygons <- data %>%
+    group_by(celltype, mark, region) %>%
+    reframe(
+      L2FE = c(L2FE, rev(L2FE)),
+      x = c(-width, rev(width)) %>% `/`(max(.)),
+      xcenter = 0,
+      median = rep(median, each=2),
+      lower = rep(lower, each=2),
+      upper = rep(upper, each=2),
+    ) %>%
+    group_by(celltype, mark) %>%
+    mutate(
+      across(
+        x | xcenter,
+        \(x) 0.075 * 0.9 * x + 0.15 * (as.numeric(interaction(celltype, mark)) - 0.5 * (1 + length(levels(interaction(celltype, mark)))))
+      )
+    ) %>%
+    group_by(region) %>%
+    mutate(
+      across(
+        x | xcenter,
+        \(x) as.numeric(region) + x
+      )
+    )
+  ggplot(
+    polygons,
+    aes(x, L2FE, group = interaction(region, celltype, mark), fill = celltype)
+  ) +
+    geom_polygon(color = "black", linewidth = 0.5 * 25.4 / 72) +
     geom_rect(
-      aes(xmin = xmin, xmax = xmax, ymin = ymin, ymax = ymax),
-      box_data,
+      aes(xmin = xcenter - 0.075, ymin = lower, xmax = xcenter + 0.075, ymax = upper, fill = NULL),
+      data = \(data) data %>% group_by(region, celltype, mark) %>% dplyr::slice(1),
       color = "black",
-      fill = "transparent"
+      fill = "transparent",
     ) +
     geom_segment(
-      aes(x, y, xend = xend, yend = yend),
-      median_data,
-      color = "black",
+      aes(xcenter - 0.075, median, xend = xcenter + 0.075, yend = median),
+      data = \(data) data %>% group_by(region, celltype, mark) %>% dplyr::slice(1),
       linewidth = 1.25
     ) +
-    annotate(
-      "text",
-      rep(c(-0.3, 0, 0.3), length(labels)) + rep(seq_along(labels), each = 3),
-      1.5,
-      label = rep(c("H3K4me3", "H3K27me3", "H3K9me3"), length(labels)),
-      size = 2
+    scale_x_continuous(
+      NULL,
+      breaks = seq_along(levels(polygons$region)),
+      minor_breaks = NULL,
+      labels = \(v) levels(polygons$region)[v]
     ) +
-    scale_x_continuous(breaks = seq_along(labels), labels = labels) +
-    scale_fill_identity() +
+    scale_fill_manual(values = cell_type_violin_colors) +
     coord_cartesian(NULL, c(-1.9, 1.9)) +
-    labs(x = "label", y = "L2FC")
+    theme(legend.position = "none")
+}
+
+report_chic_l2fe <- function(tracks, chromosome_pericetromere_label) {
+  pl <- plot_chic_l2fe(tracks, chromosome_pericetromere_label)
+  wmultiplier <- 1.5
+  redata <- \(obj, value) {
+    obj$data <- value
+    obj
+  }
+  gtable(
+    w = unit(1, "null"),
+    h = unit(rep(3, 3), "in")
+  ) %>%
+    gtable_add_grob(
+      list(
+        set_panel_size(
+          pl %>%
+            redata(
+              value = pl$data %>% subset(between(as.numeric(region), 1, 4))
+            ) +
+            labs("Chromosome 2") +
+            coord_cartesian(c(0.35, 4.65), c(-2.09, 2.09), expand=FALSE) +
+            theme(
+              plot.margin = margin(5.5, 5.5, 5.5, 5.5),
+            ),
+          w = unit(wmultiplier * (4.65 - 0.35), "in"),
+          h = unit(2.5, "in")
+        ),
+        set_panel_size(
+          pl %>%
+            redata(
+              value = pl$data %>% subset(between(as.numeric(region), 5, 8))
+            ) +
+            labs("Chromosome 3") +
+            coord_cartesian(c(4.35, 8.65), c(-2.09, 2.09), expand=FALSE) +
+            theme(
+              plot.margin = margin(5.5, 5.5, 5.5, 5.5),
+            ),
+          w = unit(wmultiplier * (4.65 - 0.35), "in"),
+          h = unit(2.5, "in")
+        ),
+        set_panel_size(
+          pl %>%
+            redata(
+              value = pl$data %>% subset(between(as.numeric(region), 9, 11))
+            ) +
+            labs("Chromosome 3") +
+            coord_cartesian(c(8.35, 11.65), c(-2.09, 2.09), expand=FALSE) +
+            theme(
+              plot.margin = margin(5.5, 5.5 + wmultiplier * 72, 5.5, 5.5),
+            ),
+          w = unit(wmultiplier * (11.65 - 8.35), "in"),
+          h = unit(2.5, "in")
+        )
+      ),
+      t = 1:3,
+      l = 1
+    )
 }
 
 # Counts: Grouped by chromosome_arms_diameter_40 for each sample. The

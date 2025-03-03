@@ -1228,53 +1228,30 @@ targets.chic.pericentromere <- list(
       )
     )
   ),
-  # Enriched Chromosomes significance marks, to be added to the plot later.
-  tar_target(
-    enriched.chromosomes.both.data,
-    rbind(
-      tibble(celltype = "Germline", mark = "H3K4me3", enriched.chromosomes.data_H3K4_Germline),
-      tibble(celltype = "Germline", mark = "H3K27me3", enriched.chromosomes.data_H3K27_Germline),
-      tibble(celltype = "Germline", mark = "H3K9me3", enriched.chromosomes.data_H3K9_Germline),
-      tibble(celltype = "Somatic", mark = "H3K4me3", enriched.chromosomes.data_H3K4_Somatic),
-      tibble(celltype = "Somatic", mark = "H3K27me3", enriched.chromosomes.data_H3K27_Somatic),
-      tibble(celltype = "Somatic", mark = "H3K9me3", enriched.chromosomes.data_H3K9_Somatic)
-    ) %>%
-      group_by(label, start) %>%
-      filter(all(input > 0.1)),
-    format = "parquet"
-  ),
-  tar_target(
-    enriched.chromosomes.both,
-    sapply(
-      c("X", "2", "3", "4", "Y"),
-      purrr::partial(plot_enriched_chromosomes_combined, enriched.chromosomes.both.data),
-      simplify=FALSE
-    )
-  ),
   tar_file(
-    fig.enriched.chromosomes.both,
+    fig.report.enriched.chromosomes,
     save_figures(
       "figure/Both-Cell-Types",
       ".pdf",
       tribble(
         ~rowname, ~figure, ~width, ~height,
-        "Enriched-Chromosome-Regions-X",
-        enriched.chromosomes.both$X %>% annotate_enriched_chromosomes_combined(),
-        3, 3,
-        "Enriched-Chromosome-Regions-2",
-        enriched.chromosomes.both$`2` %>% annotate_enriched_chromosomes_combined(),
-        8, 3,
-        "Enriched-Chromosome-Regions-3",
-        enriched.chromosomes.both$`3` %>% annotate_enriched_chromosomes_combined(),
-        8, 3,
-        "Enriched-Chromosome-Regions-4",
-        enriched.chromosomes.both$`4` %>% annotate_enriched_chromosomes_combined(),
-        3, 3,
-        "Enriched-Chromosome-Regions-Y",
-        enriched.chromosomes.both$Y %>% annotate_enriched_chromosomes_combined(),
-        3, 3,
+        "Enriched-Chromosome-Regions",
+        report_chic_l2fe(
+          tribble(
+            ~celltype, ~mark, ~track,
+            "Germline", "H3K4me3", chic.experiment.quantify_H3K4_Germline_peakcalling.broad_chr,
+            "Germline", "H3K27me3", chic.experiment.quantify_H3K27_Germline_peakcalling.broad_chr,
+            "Germline", "H3K9me3", chic.experiment.quantify_H3K9_Germline_peakcalling.broad_chr,
+            "Somatic", "H3K4me3", chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_chr,
+            "Somatic", "H3K27me3", chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_chr,
+            "Somatic", "H3K9me3", chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_chr,
+          ),
+          chromosome_pericetromere_label
+        ),
+        8.5, 11,
       )
-    )
+    ),
+    packages = tar_option_get("packages") %>% c("egg", "grid", "gtable")
   )
 )
 
