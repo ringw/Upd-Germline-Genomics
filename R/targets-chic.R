@@ -787,41 +787,6 @@ targets.chic.tracks <- list(
         pull(filename),
       packages = tar_option_get("packages") %>% c("tidyr")
     ),
-    tar_file(
-      chic.bw.track.wide,
-      if (!grepl("peakcalling", bp_name))
-        GRanges(
-          chic.tile.diameter_1000,
-          score = (
-            elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 2]
-            / elementMetadata(chic.experiment.quantify.smooth_bw2000)[, 1]
-          ) %>%
-            `/`(
-              enframe(.) %>%
-                dplyr::slice(
-                  (
-                    seqnames(chic.tile.diameter_40_score) %in%
-                      c("2L", "2R", "3L", "3R", "4")
-                  ) %>%
-                    as.logical() %>%
-                    which()
-                ) %>%
-                deframe() %>%
-                median(na.rm=T)
-            ) %>%
-            `[`(chic.tile.diameter_1000_lookup) %>%
-            log2 %>%
-            replace(is.na(.), 0)
-        ) %>%
-          export(
-            with(
-              list(mark=mark, name=name, bp_suffix=bp_suffix, reference=reference),
-              str_glue("chic/{reference}/{name}_{mark}_{bp_suffix}_Wide_Mark_L2FC.bw")
-            ) %>%
-              BigWigFile
-          ) %>%
-          as.character
-    ),
     tar_target(
       chic.heatmap.tss,
       if (!grepl("peakcalling", bp_name))
@@ -885,8 +850,8 @@ targets.chic.tracks <- list(
   tar_map(
     dplyr::rename(chic.experiments, celltype="name") %>%
       mutate(
-        chic.bw.track.wide = rlang::syms(
-          str_glue("chic.bw.track.wide_{experiment_name}_CN_chr")
+        peakcalling.broad = rlang::syms(
+          str_glue("chic.experiment.quantify_{experiment_name}_peakcalling.broad_chr")
         )
       ),
     names = mark | celltype,
@@ -899,7 +864,44 @@ targets.chic.tracks <- list(
           ~rowname, ~figure, ~width, ~height,
           paste0("Track-Plot-", mark),
           plot_track(
-            import(BigWigFile(chic.bw.track.wide)),
+            GRanges(
+              peakcalling.broad,
+              score = elementMetadata(peakcalling.broad) %>%
+                as_tibble() %>%
+                dplyr::rename(
+                  score.mark = matches("score.molH3K[0-9]")
+                ) %>%
+                subset(select = c(score.molH3, score.mark)) %>%
+                split(seqnames(peakcalling.broad)) %>%
+                sapply(
+                  \(df) if (nrow(df) > 1) {
+                    log2(
+                      with(
+                        as.data.frame(
+                          sapply(
+                            df,
+                            \(v) density(
+                              seq_along(v),
+                              weights = v,
+                              # 100 bp -> 1000 bp kernel
+                              bw = 10,
+                              from = 1,
+                              to = length(v),
+                              n = length(v)
+                            )$y,
+                            simplify = FALSE
+                          )
+                        ),
+                        score.mark / score.molH3
+                      )
+                    )
+                  } else {
+                    df$L2FC
+                  },
+                  simplify = FALSE
+                ) %>%
+                do.call(c, .)
+            ),
             name = "L2FC",
             limits = c(-1, 1),
             breaks = c(-1, 0, 1)
