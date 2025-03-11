@@ -412,6 +412,8 @@ plot_chic_l2fe <- function(tracks, chromosome_pericetromere_label) {
       median = median(subset(L2FE, !between(L2FE, -1e-4, 1e-4))),
       lower = quantile(subset(L2FE, !between(L2FE, -1e-4, 1e-4)), 0.25),
       upper = quantile(subset(L2FE, !between(L2FE, -1e-4, 1e-4)), 0.75),
+      lower.keep = sort(L2FE)[5],
+      upper.keep = sort(L2FE, decreasing=TRUE)[5],
       as_tibble(
         list(
           L2FE = binvalues,
@@ -424,12 +426,19 @@ plot_chic_l2fe <- function(tracks, chromosome_pericetromere_label) {
   polygons <- data %>%
     group_by(celltype, mark, region) %>%
     reframe(
-      L2FE = c(L2FE, rev(L2FE)),
-      x = c(-width, rev(width)) %>% `/`(max(.)),
+      {
+        L2FE <- c(L2FE, rev(L2FE))
+        keep <- between(L2FE, lower.keep[1], upper.keep[1])
+        x <- c(-width, rev(width))
+        tibble(
+          L2FE = L2FE[keep],
+          x = x[keep] %>% `/`(max(.)),
+        )
+      },
       xcenter = 0,
-      median = rep(median, each=2),
-      lower = rep(lower, each=2),
-      upper = rep(upper, each=2),
+      median = median[1],
+      lower = lower[1],
+      upper = upper[1],
     ) %>%
     group_by(celltype, mark) %>%
     mutate(
