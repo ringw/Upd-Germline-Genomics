@@ -34,30 +34,3 @@ as_bulk_summarized_experiment <- function(granges, colData, sample_name = "name"
     )
   )
 }
-
-tiles_to_fseq <- function(glm, fct, fctLevels, grangesList, bw) {
-  stopifnot(all(str_glue("{fct}{fctLevels}") %in% colnames(glm$Beta)))
-  Mu <- split(
-    exp(glm$Beta)[, str_glue("{fct}{fctLevels}")],
-    grangesList %>% sapply(length) %>% enframe %>% with(Rle(factor(name, names(grangesList)), value))
-  )
-  for (n in names(Mu)) colnames(Mu[[n]]) <- fctLevels
-  GRangesList(
-    mapply(
-      \(gr, Mu) list(gr) %>%
-        append(
-          if (nrow(Mu) > 1)
-            apply(
-              Mu,
-              2,
-              \(v) ksmooth_sliding_windows(GRanges(gr, score=v), bw=bw)$score,
-              simplify=FALSE
-            )
-          else as.list(as.data.frame(Mu))
-        ) %>%
-        do.call(GRanges, .),
-      grangesList,
-      Mu
-    )
-  )
-}
