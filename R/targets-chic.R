@@ -847,6 +847,8 @@ targets.chic.tracks <- list(
         )
     )
   ),
+  # For each experiment - plot all of the 7 chromosome arm / spanning the
+  # chromosome into both telomeres dm6 sequences.
   tar_map(
     dplyr::rename(chic.experiments, celltype="name") %>%
       mutate(
@@ -912,6 +914,33 @@ targets.chic.tracks <- list(
       ),
       packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
     )
+  ),
+  # Collate the report: Each experiment and the distribution on the dm6
+  # sequences cut by our definition of the pericentromere.
+  tar_file(
+    fig.report.enriched.chromosomes,
+    save_figures(
+      "figure/Both-Cell-Types",
+      ".pdf",
+      tribble(
+        ~rowname, ~figure, ~width, ~height,
+        "Enriched-Chromosome-Regions",
+        report_chic_l2fe(
+          tribble(
+            ~celltype, ~mark, ~track,
+            "Germline", "H3K4me3", chic.experiment.quantify_H3K4_Germline_peakcalling.broad_chr,
+            "Germline", "H3K27me3", chic.experiment.quantify_H3K27_Germline_peakcalling.broad_chr,
+            "Germline", "H3K9me3", chic.experiment.quantify_H3K9_Germline_peakcalling.broad_chr,
+            "Somatic", "H3K4me3", chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_chr,
+            "Somatic", "H3K27me3", chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_chr,
+            "Somatic", "H3K9me3", chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_chr,
+          ),
+          chromosome_pericetromere_label
+        ),
+        8.5, 11,
+      )
+    ),
+    packages = tar_option_get("packages") %>% c("egg", "grid", "gtable")
   )
 )
 
@@ -1065,195 +1094,6 @@ targets.chic.pericentromere <- list(
           )
       )
     }
-  ),
-  # Tracks which are once per experiment. No parameter options, those have been
-  # fixed to particular tracks now!
-  tar_map(
-    tibble(
-      dplyr::rename(chic.experiments, celltype="name"),
-      chic.experiment.quantify_peakcalling.sharp = rlang::syms(
-        str_glue("chic.experiment.quantify_{mark}_{celltype}_peakcalling.sharp_chr")
-      ),
-      chic.experiment.quantify_peakcalling.broad = rlang::syms(
-        str_glue("chic.experiment.quantify_{mark}_{celltype}_peakcalling.broad_chr")
-      ),
-      chic.bw.track.wide = rlang::syms(
-        str_glue("chic.bw.track.wide_{mark}_{celltype}_CN_chr")
-      ),
-      chic.experiment.quantify.smooth_bw2000 = rlang::syms(
-        str_glue("chic.experiment.quantify.smooth_bw2000_{mark}_{celltype}_CN_chr")
-      )
-    ),
-    names = mark | celltype,
-    tar_target(
-      enriched.chromosomes.data,
-      tibble(
-        label = chromosome_arms_diameter_1000$group %>%
-          factor(
-            levels = c("X", levels(.), "4", "Y")
-          ) %>%
-          replace(
-            which(seqnames(chic.tile.diameter_1000_chr) %in% c("4", "X", "Y")),
-            seqnames(chic.tile.diameter_1000_chr)[
-              seqnames(chic.tile.diameter_1000_chr) %in% c("4", "X", "Y")
-            ] %>%
-              as.character
-          ),
-        start = start(chic.tile.diameter_1000_chr),
-        end = end(chic.tile.diameter_1000_chr),
-        L2FC = import(BigWigFile(chic.bw.track.wide))$score,
-        # H3 track: Need to re-apply the downsampling here, similar to the
-        # "Wide L2FC" bw track that has already been written to disk.
-        input = approx_track(
-          GRanges(
-            chic.tile.diameter_40_score_chr,
-            score=chic.experiment.quantify.smooth_bw2000$score.molH3
-          ),
-          chic.tile.diameter_1000_chr
-        )$score,
-      ) %>%
-        subset(!is.na(label)),
-      format = "parquet"
-    ),
-    tar_target(
-      enriched.chromosomes,
-      ggplot(
-        enriched.chromosomes.data,
-        aes(label, L2FC, fill=substr(label, 1, 1))
-      ) +
-        geom_violin() +
-        geom_boxplot(outlier.shape = NA, fill = "transparent") +
-        scale_fill_hue(h.start = 75, c = 50, l = 80) +
-        coord_cartesian(NULL, c(-1.2, 1.2)) +
-        labs(
-          x = "Chromosome"
-        ) +
-        theme(aspect.ratio = 1/2, legend.position = "none")
-    ),
-    tar_file(
-      fig.enriched.chromosomes,
-      save_figures(
-        paste0("figure/", celltype),
-        ".pdf",
-        tribble(
-          ~rowname, ~figure, ~width, ~height,
-          paste0("Enriched-Chromosome-Regions-", mark),
-          enriched.chromosomes,
-          5.5,
-          3.5
-        )
-      )
-    )
-  ),
-  # SummarizedExperiment which is once per mark. Grabbing a particular track and
-  # a particular bowtie reference (chr).
-  tar_map(
-    tibble(
-      chic.mark.data,
-      chic.experiment.granges_Germline = rlang::syms(
-        str_glue("chic.experiment.granges_{mark}_Germline_CN_chr")
-      ),
-      chic.experiment.granges_Somatic = rlang::syms(
-        str_glue("chic.experiment.granges_{mark}_Somatic_CN_chr")
-      ),
-      chic.experiment.granges.offset_Germline = rlang::syms(
-        str_glue("chic.experiment.granges.offset_{mark}_Germline_CN_chr")
-      ),
-      chic.experiment.granges.offset_Somatic = rlang::syms(
-        str_glue("chic.experiment.granges.offset_{mark}_Somatic_CN_chr")
-      ),
-      chic.experiment.granges.model.frame_Germline = rlang::syms(
-        str_glue("chic.experiment.granges.model.frame_{mark}_Germline_CN_chr")
-      ),
-      chic.experiment.granges.model.frame_Somatic = rlang::syms(
-        str_glue("chic.experiment.granges.model.frame_{mark}_Somatic_CN_chr")
-      ),
-    ),
-    names = mark,
-    # Grab counts grouped by chromosome_arms; vars to regress; and size factors.
-    tar_target(
-      enriched.chromosomes.compare,
-      enriched_chromosomes_build_summarized_experiment(
-        cbind(
-          elementMetadata(chic.experiment.granges_Germline),
-          elementMetadata(chic.experiment.granges_Somatic)
-        ),
-        chromosome_arms_diameter_40,
-        bind_rows(
-          list(
-            GSC=chic.experiment.granges.model.frame_Germline,
-            CySC=chic.experiment.granges.model.frame_Somatic
-          ),
-          .id="celltype"
-        ),
-        chic.experiment.granges.offset_Germline,
-        chic.experiment.granges.offset_Somatic
-      )
-    ),
-    # Model matrix with our contrasts for the batch effect. We have set up one
-    # contrast for all of the GSC & CySC batches to be precisely the GSC-CySC
-    # cell type difference. So when creating a model matrix which is singular,
-    # we remove the column which we created manually which is redundant.
-    tar_target(
-      enriched.chromosomes.compare.model.matrix,
-      model.matrix(
-        ~ molecule * celltype + rep,
-        colData(enriched.chromosomes.compare)
-      ) %>%
-        subset(select = -repCelltype)
-    ),
-    # Fit GLM, reduced model, and test, yielding p-value, for celltype - L2FC
-    # interaction coefficient.
-    tar_target(
-      enriched.chromosomes.compare.test,
-      enriched.chromosomes.compare %>%
-        glm_gp(
-          enriched.chromosomes.compare.model.matrix,
-          size_factors = .$sf
-        ) %>%
-        test_de(
-          replace(
-            rep(0, ncol(.$Beta)),
-            ncol(.$Beta),
-            1
-          )
-        )
-    )
-  ),
-  tar_target(
-    enriched.chromosomes.compare.signif,
-    enriched_chromosomes_compare_signif(
-      list(
-        H3K4 = enriched.chromosomes.compare.test_H3K4,
-        H3K27 = enriched.chromosomes.compare.test_H3K27,
-        H3K9 = enriched.chromosomes.compare.test_H3K9
-      )
-    )
-  ),
-  tar_file(
-    fig.report.enriched.chromosomes,
-    save_figures(
-      "figure/Both-Cell-Types",
-      ".pdf",
-      tribble(
-        ~rowname, ~figure, ~width, ~height,
-        "Enriched-Chromosome-Regions",
-        report_chic_l2fe(
-          tribble(
-            ~celltype, ~mark, ~track,
-            "Germline", "H3K4me3", chic.experiment.quantify_H3K4_Germline_peakcalling.broad_chr,
-            "Germline", "H3K27me3", chic.experiment.quantify_H3K27_Germline_peakcalling.broad_chr,
-            "Germline", "H3K9me3", chic.experiment.quantify_H3K9_Germline_peakcalling.broad_chr,
-            "Somatic", "H3K4me3", chic.experiment.quantify_H3K4_Somatic_peakcalling.broad_chr,
-            "Somatic", "H3K27me3", chic.experiment.quantify_H3K27_Somatic_peakcalling.broad_chr,
-            "Somatic", "H3K9me3", chic.experiment.quantify_H3K9_Somatic_peakcalling.broad_chr,
-          ),
-          chromosome_pericetromere_label
-        ),
-        8.5, 11,
-      )
-    ),
-    packages = tar_option_get("packages") %>% c("egg", "grid", "gtable")
   )
 )
 
