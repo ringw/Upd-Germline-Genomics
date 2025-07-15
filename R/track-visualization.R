@@ -1,8 +1,8 @@
 # Line-plotting of a feature on chr X/2/3/4/Y. ----
 plot_track <- function(
     track,
-    positive_color = "#e0eff9",
-    negative_color = "#f7f9e7",
+    positive_color = "#eaeaeb",
+    negative_color = "#eaeaeb",
     name = "Timing",
     limits = c(-1, 1),
     breaks = c(-1, 0, 1),
@@ -26,7 +26,7 @@ plot_track <- function(
         pull(keep) %>%
         which()
     )
-  plot_chr <- function(chr.) ggplot(subset(df, chr == chr.), aes(pos, value)) +
+  plot_chr <- function(chr., wnd) ggplot(subset(df, chr == chr.), aes(pos, value)) +
     annotate(
       "rect",
       xmin=-Inf, xmax=Inf,
@@ -39,11 +39,25 @@ plot_track <- function(
       ymin=Inf, ymax=mean(limits),
       fill=positive_color
     ) +
+    annotate(
+      "rect",
+      xmin=if (is.na(wnd[1])) -1 else wnd[1], xmax=if (is.na(wnd[1])) -1 else wnd[2],
+      ymin=-Inf, ymax=Inf,
+      fill=(pericentromere_color <- "#96e5e6")
+    ) +
+    annotate(
+      "segment",
+      x=-Inf, xend=Inf,
+      y=0, yend=0,
+      color="#494949",
+      linetype = "dashed",
+      linewidth = 0.5 * 25.4 / 72
+    ) +
     geom_line(linewidth = 0.25) +
     scale_x_continuous(
       name = NULL,
-      breaks = c(1, 1000000 * seq(2, 100, by=2)),
-      minor_breaks = 1000000 * seq(1, 101, by=2),
+      breaks = 1000000 * seq(1, 101, by=2),
+      minor_breaks = NULL,
       labels = NULL
     ) +
     scale_y_continuous(
@@ -68,57 +82,64 @@ plot_track <- function(
     gr$widths[9] <- margin_right
     gr <- gr
   }
+  axis_labels <- theme(
+    axis.text.x = element_text(color = "black"),
+    axis.text.y = element_text(color = "black"),
+    axis.ticks.x = element_line(color = "black"),
+    axis.ticks.y = element_line(color = "black"),
+  )
   # Contents width will be 5.25 in. Two-column (chromosome arms) layout will be
   # handled by the two arms having precisely 2 * default margins (5.5 pt) in
   # between the columns, and no other middle content (axis title, axis text).
   chrX <- (
-    plot_chr("X") +
-      labs(title = "Chromosome X")
+    plot_chr("X", c(NA, NA)) +
+      labs(title = "Chromosome X") +
+      axis_labels
   ) %>%
     ggplot_build_panel_absolute(
-      unit(0.35, "in"), unit(4.5, "in"), unit(0.55, "in") + unit(11, "points")
+      unit(0.35, "in"), unit(4.5, "in"), unit(0.55, "in") + unit(5.5, "points")
+    )
+  left_arm <- axis_labels +
+    theme(plot.margin = margin(5.5, 0, 5.5, 5.5))
+  right_arm <- axis_labels +
+    theme(
+      axis.text.x = element_blank(),
+      axis.text.y = element_blank(),
+      axis.ticks.y = element_blank(),
+      axis.title = element_blank(),
+      plot.margin = margin(5.5, 5.5, 5.5, 0),
     )
   chr2 <- cbind(
-    (plot_chr("2L") + labs(title = "Chromosome 2")) %>%
-      ggplot_build_panel_absolute(unit(0.35, "in"), unit(2.5, "in")),
-    (
-      plot_chr("2R") +
-        theme(
-          axis.title = element_blank(),
-          axis.text = element_blank()
-        )
-    ) %>%
+    (plot_chr("2L", c(22192401, 23513712)) + labs(title = "Chromosome 2") + left_arm) %>%
+      ggplot_build_panel_absolute(unit(0.35, "in"), unit(2.5, "in"), unit(0, "in")),
+    (plot_chr("2R", c(1, 5651400)) + right_arm) %>%
       ggplot_build_panel_absolute(
         unit(0.35, "in"), unit(2.5, "in"), unit(0.05, "in")
       )
   )
   chr3 <- cbind(
-    (plot_chr("3L") + labs(title = "Chromosome 3")) %>%
-      ggplot_build_panel_absolute(unit(0.35, "in"), unit(2.5, "in")),
-    (
-      plot_chr("3R") +
-        theme(
-          axis.title = element_blank(),
-          axis.text = element_blank()
-        )
-    ) %>%
+    (plot_chr("3L", c(23154101, 28110227)) + labs(title = "Chromosome 3") + left_arm) %>%
+      ggplot_build_panel_absolute(unit(0.35, "in"), unit(2.5, "in"), unit(0, "in")),
+    (plot_chr("3R", c(1, 4229200)) + right_arm) %>%
       ggplot_build_panel_absolute(
         unit(0.35, "in"), unit(2.5, "in"), unit(0.05, "in")
       )
   )
   chr4 <- (
-    plot_chr("4") +
-      labs(title = "Chromosome 4")
+    plot_chr("4", c(NA, NA)) +
+      labs(title = "Chromosome 4") +
+      axis_labels
   ) %>%
     ggplot_build_panel_absolute(
-      unit(0.35, "in"), unit(2, "in"), unit(3.05, "in") + unit(11, "points")
+      unit(0.35, "in"), unit(2, "in"), unit(3.05, "in") + unit(5.5, "points")
     )
   chrY <- (
-    plot_chr("Y") +
-      labs(title = "Chromosome Y")
+    plot_chr("Y", c(NA, NA)) +
+      labs(title = "Chromosome Y") +
+      axis_labels
   ) %>%
     ggplot_build_panel_absolute(
-      unit(0.35, "in"), unit(2, "in"), unit(3.05, "in") + unit(11, "points")
+      unit(0.35, "in"), unit(2, "in"), unit(3.05, "in") + unit(5.5, "points")
     )
   mylayout <- gtable(
     widths = unit(1, 'null'), heights = unit(rep(0.75, 5), 'in')
