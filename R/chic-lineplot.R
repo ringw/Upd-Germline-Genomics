@@ -117,6 +117,76 @@ chic_plot_average_profiles_facet_grid <- function(
   )
 }
 
+chic_plot_average_profiles_facet_grid2 <- function(
+  facet_data, legend_title, quartile_colors, linewidth=c(0.33, 0.6, 0.75, 1),
+  faceter = facet_grid(rows = vars(mark), cols = vars(facet)),
+  x_intercept_red = NA,
+  chic_average_profile_limits = get("chic_average_profile_limits", envir=globalenv()),
+  chic_average_breaks = get("chic_average_breaks", envir=globalenv())
+) {
+  break_labels <- tibble(
+    pos = seq(head(levels(facet_data$pos), 1), tail(levels(facet_data$pos), 1)),
+    label = levels(facet_data$pos)
+  )
+  # Get the facet factor levels to use from a global. However, if these are not
+  # the factor levels being used, then just convert the data to factor and use
+  # alphabetical order instead.
+  mark_names <- str_glue("{chic.mark.data$mark}me3")
+  if (any(mark_names %in% facet_data$mark))
+    mark <- factor(mark_names, mark_names, ordered=TRUE)
+  else
+    mark <- factor(unique(facet_data$mark))
+  facet_data$pos.continuous <- break_labels$pos[match(facet_data$pos, break_labels$label)]
+  facet_data %>% ggplot(
+    aes(x=pos.continuous, y=value, color=genes, linewidth=genes, group=genes)
+  ) +
+  geom_point(
+    data = tibble(
+      pos.continuous = 0,
+      mark = rep(mark, each=2),
+      value = c(1/2, 4, 1/2, 4, 1/2, 2.0001),
+      genes = levels(facet_data$genes)[1],
+    ),
+    color = "transparent",
+    fill = "transparent"
+  ) +
+  geom_line(
+    data = tribble(~pos.continuous, ~value, -Inf, x_intercept_red, Inf, x_intercept_red) %>%
+      cross_join(
+        tibble(
+          genes = NA,
+          mark = mark
+        )
+      ) %>%
+      cross_join(
+        tibble(
+          facet = factor(levels(facet_data$facet), levels(facet_data$facet), ordered=TRUE)
+        )
+      ),
+    color = "darkred",
+    linewidth = 0.25
+  ) + geom_line() + faceter + scale_color_manual(
+    values = quartile_colors,
+    guide = guide_legend(title = legend_title)
+  ) + scale_linewidth_manual(
+    values = linewidth,
+    guide = guide_legend(title = legend_title)
+  ) + scale_x_continuous(
+    labels = \(n) break_labels$label[match(n, break_labels$pos)],
+    expand = c(0, 0)
+  ) + scale_y_continuous(
+    trans = "log",
+    labels = \(v) round(log(v) / log(2), 1),
+    breaks = chic_average_breaks,
+    minor_breaks = chic_average_minor_breaks,
+    expand = c(0, 0)
+  ) + labs(
+    x = "bp (from TSS)", y = "log2(mean(mark/input))"
+  ) + theme(
+    aspect.ratio = 1
+  )
+}
+
 # H3 plot. The absolute panel size here is an arbitrary number, from the RNAseq
 # Quartile plot being 4 inches high, because we didn't set more specific
 # absolute units on the plot.

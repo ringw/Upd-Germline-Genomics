@@ -1169,7 +1169,7 @@ targets.repli <- list(
         tribble(
           ~rowname, ~figure, ~width, ~height,
           "Repli-Skew-Chrs",
-          plot_track(repli.timing, repli_early_late_background$E, repli_early_late_background$L),
+          plot_track(repli.timing),
           5.75,
           4
         )
@@ -1216,7 +1216,7 @@ targets.repli <- list(
         tribble(
           ~name, ~figure, ~width, ~height,
           "CHIC-TSS-AllMarks-Repli-Timing-Quartile",
-          chic_plot_average_profiles_facet_grid(
+          chic_plot_average_profiles_facet_grid2(
             mutate(
               repli_quartile_data_TSS,
               genes = repli %>%
@@ -1243,9 +1243,8 @@ targets.repli <- list(
             "Timing",
             unlist(rev(repli_level_colors), use.names = FALSE),
             c(0.4, 0.62, 0.73, 0.85),
-            facet_wrap(vars(mark))
-          ) +
-            coord_cartesian(NULL, chic_average_profile_limits, ex=F),
+            facet_wrap(vars(mark), scales = "free")
+          ),
           10, 3.25,
           "CHIC-TSS-AllMarks-Repli-Timing-Quartile-RNAseq-Active",
           chic_plot_average_profiles_facet_grid(
