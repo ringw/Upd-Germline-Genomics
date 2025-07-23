@@ -1701,22 +1701,6 @@ targets.chic.lineplot <- list(
       format = "parquet"
     ),
     tar_target(
-      sc_extended_data,
-      tibble(
-        gene_list = names(cpm_gene_lists_extended)[1],
-        mapply(
-          chic_heatmap_facet_genes,
-          named_tss_data,
-          list(tibble(gene = cpm_gene_lists_extended[[1]])),
-          SIMPLIFY=F
-        ) %>%
-          bind_rows(.id = "mark") %>%
-          mutate(mark = factor(mark, str_glue("{chic.mark.data$mark}me3")))
-      ),
-      pattern = map(cpm_gene_lists_extended),
-      format = "parquet"
-    ),
-    tar_target(
       sc_h3k4_data,
       mapply(
         chic_heatmap_facet_genes,
@@ -1794,42 +1778,6 @@ targets.chic.lineplot <- list(
     tibble(
       chic.heatmap.tss.nucleosome_H3K27_Somatic_CN_chr %>%
         chic_heatmap_facet_genes(subset(facet_genes_Somatic_TSS, select=c(facet,activity,gene))),
-      mark = ""
-    ),
-    format = "parquet"
-  ),
-  tar_target(
-    sc_chr_nucleosome_data.ExclusiveGermlineGenes_Germline_TSS,
-    tibble(
-      chic.heatmap.tss.nucleosome_H3K27_Germline_CN_chr %>%
-        chic_heatmap_facet_genes(
-          facet_genes_Germline_TSS %>%
-            subset(
-              gene %in% c(
-                cpm_gene_lists_extended$ExclusiveGermlineGenes,
-                cpm_gene_lists_extended$OffGenes
-              ),
-              select=c(facet,activity,gene)
-            )
-        ),
-      mark = ""
-    ),
-    format = "parquet"
-  ),
-  tar_target(
-    sc_chr_nucleosome_data.ExclusiveSomaticGenes_Somatic_TSS,
-    tibble(
-      chic.heatmap.tss.nucleosome_H3K27_Somatic_CN_chr %>%
-        chic_heatmap_facet_genes(
-          facet_genes_Somatic_TSS %>%
-            subset(
-              gene %in% c(
-                cpm_gene_lists_extended$ExclusiveSomaticGenes,
-                cpm_gene_lists_extended$OffGenes
-              ),
-              select=c(facet,activity,gene)
-            )
-        ),
       mark = ""
     ),
     format = "parquet"

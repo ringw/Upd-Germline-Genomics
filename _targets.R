@@ -212,37 +212,6 @@ list(
     "https://github.com/hbc/tinyatlas/raw/add6f25/cell_cycle/Drosophila_melanogaster.csv",
     "cell_cycle_drosophila.csv"
   ),
-  # TODO: Delete gene criteria
-  tar_target(
-    cpm_gene_lists,
-    apply(
-      Upd_cpm[, c("germline", "somatic")],
-      2,
-      \(v) (v >= 5) %>% which %>% names,
-      simplify=FALSE
-    )
-  ),
-  tar_target(
-    cpm_gene_lists_extended,
-    cpm_gene_lists %>%
-      with(
-        list(
-          AllGermlineGenes = germline,
-          AllSomaticGenes = somatic,
-          ExclusiveGermlineGenes = setdiff(germline, somatic),
-          ExclusiveSomaticGenes = setdiff(somatic, germline),
-          NonExclusiveGermlineAndSomaticGenes = intersect(germline, somatic),
-          AllGermlineOrSomaticGenes = union(germline, somatic),
-          OffGenes = rownames(read.csv(assay.data.sc, row.names=1)) %>% setdiff(germline) %>% setdiff(somatic)
-        )
-    )
-  ),
-  tar_target(
-    cpm_gene_venn,
-    plot_gene_lists(
-      cpm_gene_lists
-    )
-  ),
   tar_map(
     tibble(extension = c(".pdf", ".png")),
     tar_target(
@@ -252,7 +221,6 @@ list(
         tribble(
           ~name, ~figure, ~width, ~height,
           "RNAseq-Validation-Elbow", supplemental_elbow_figure, 3, 2.5,
-          "RNAseq-CPM-Gene-List-Venn-Area-Blank", cpm_gene_venn, 3.6, 2.7,
           "RNAseq-UMAP-Genotype",
           Upd_sc %>%
             AddMetaData(recode(Upd_sc$batch, nos.1="nos", nos.2="nos", tj.1="tj", tj.2="tj"), "genotype") %>%
@@ -365,7 +333,7 @@ list(
   tar_file(align_repli_lightfiltering, "scripts/align_repli_lightfiltering.sh"),
   tar_file(align_repli, "scripts/align_repli.sh"),
 
-  # Description: Heatmaps of ChIC vs sorted genes.
+  # Description: Heatmaps of ChIC vs sorted genes. ####
   tar_map(
     tibble(
       chic.experiments,
@@ -496,91 +464,6 @@ list(
   ),
 
   tar_map(
-    tibble(
-      chic.fpkm.data,
-      sc_extended_data_TSS = rlang::syms(
-        str_glue("sc_extended_data_{name}_TSS")
-      ),
-      sc_extended_data_Paneled = rlang::syms(
-        str_glue("sc_extended_data_{name}_Paneled")
-      )
-    ),
-    names = name,
-    tar_target(
-      name = fpkm.chic.plots,
-      tibble(
-        experiment = name,
-        gene_list = names(cpm_gene_lists_extended),
-        tss_plot = list(
-          sc_extended_data_TSS %>%
-            subset(gene_list %in% c(names(cpm_gene_lists_extended), "OffGenes")) %>%
-            mutate(
-              genes = gene_list %>%
-                list %>%
-                append(setNames(c(names(cpm_gene_lists_extended), "OffGenes"), c("on", "off"))) %>%
-                do.call(fct_recode, .) %>%
-                fct_relevel("off", "on")
-            ) %>%
-            arrange(genes) %>%
-            chic_plot_average_profiles_facet_grid(
-              "",
-              chic_line_track_colors[[tolower(name)]] %>%
-                c(muted(., c=20, l=80), .),
-              c(0.33, 0.66),
-              facet_wrap(vars(mark), scales = "free")
-            ) +
-              geom_blank(
-                aes(x=0, y=value, color=NULL, linewidth=NULL, group=NULL),
-                chic_lineplot_limit_data_TSS
-              )
-        ),
-        paneled_plot = list(
-          sc_extended_data_Paneled %>%
-            subset(gene_list %in% c(names(cpm_gene_lists_extended), "OffGenes")) %>%
-            mutate(
-              genes = gene_list %>%
-                list %>%
-                append(setNames(c(names(cpm_gene_lists_extended), "OffGenes"), c("on", "off"))) %>%
-                do.call(fct_recode, .) %>%
-                fct_relevel("off", "on")
-            ) %>%
-            arrange(genes) %>%
-            chic_plot_paneled_profiles_facet_grid(
-              "",
-              chic_line_track_colors[[tolower(name)]] %>%
-                c(muted(., c=20, l=80), .),
-              c(0.5, 1),
-              facet_wrap(vars(mark))
-            )
-        )
-      ),
-      pattern = map(cpm_gene_lists_extended)
-    ),
-    tar_file(
-      name = fig.fpkm.chic,
-      save_figures(
-        paste0("figure/", name),
-        ".pdf",
-        fpkm.chic.plots %>%
-          filter(gene_list != "OffGenes") %>%
-          rowwise %>%
-          reframe(
-            experiment,
-            gene_list,
-            prefix = c("CHIC-TSS-", "CHIC-"),
-            width = c(8, 12),
-            figure = list(tss_plot, paneled_plot)
-          ) %>%
-          reframe(
-            filename = paste0(prefix, "AllMarks-RNAseq-CPM-", gene_list),
-            figure,
-            width,
-            height = 4
-          )
-      )
-    )
-  ),
-  tar_map(
     mutate(
       chic.fpkm.data,
       sc_chr_quartile_data_TSS = rlang::syms(str_glue("sc_chr_quartile_data_{name}_TSS")),
@@ -637,124 +520,6 @@ list(
     ),
     packages = tar_option_get("packages") %>% c("grid", "gtable")
   ),
-  tar_map(
-    tribble(
-      ~celltype, ~sc_chr_nucleosome_data_TSS, ~granges,
-      "Germline", rlang::sym("sc_chr_nucleosome_data_Germline_TSS"), rlang::sym("chic.experiment.quantify_H3K4_Germline_CN_chr"),
-      "Somatic", rlang::sym("sc_chr_nucleosome_data_Somatic_TSS"), rlang::sym("chic.experiment.quantify_H3K4_Somatic_CN_chr")
-    ),
-    names = celltype,
-    tar_file(
-      fig.fpkm.chic.facet.nucleosome,
-      save_figures(
-        str_glue("figure/", celltype),
-        ".pdf",
-        tibble(
-          rowname="CHIC-TSS-Chr-Nucleosome-Occupancy-RNAseq",
-          figure=list(
-            chic_plot_average_profiles_facet_grid(
-              dplyr::rename(sc_chr_nucleosome_data_TSS, genes=activity),
-              "",
-              rep(chic_line_track_colors[[tolower(celltype)]], 2),
-              faceter = facet_wrap(vars(facet)),
-              x_intercept = NA
-            ) +
-              coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
-              labs(
-                y = "Median Autosome Monosome-TSS L2FC"
-              ) + guides(linewidth = guide_none(), color = guide_none())
-          ),
-          width=6,
-          height=6
-        )
-      )
-    )
-  ),
-  tar_target(
-    fig.fpkm.chic.facet.nucleosome.ExclusiveGermlineGenes_Germline,
-    save_figures(
-      "figure/Germline",
-      ".pdf",
-      tibble(
-        rowname="CHIC-TSS-ExclusiveGermlineGenes-Chr-Nucleosome-Occupancy-RNAseq",
-        figure=list(
-          chic_plot_average_profiles_facet_grid(
-            dplyr::rename(sc_chr_nucleosome_data.ExclusiveGermlineGenes_Germline_TSS, genes=activity),
-            "",
-            rep(chic_line_track_colors$germline, 2),
-            faceter = facet_wrap(vars(facet)),
-            x_intercept = NA
-          ) +
-            coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
-            labs(
-              y = "Median Autosome Monosome-TSS L2FC"
-            ) +
-            guides(linewidth = guide_none(), color = guide_none())
-        ),
-        width=6,
-        height=6
-      )
-    )
-  ),
-  tar_target(
-    fig.fpkm.chic.facet.nucleosome.ExclusiveSomaticGenes_Somatic,
-    save_figures(
-      "figure/Somatic",
-      ".pdf",
-      tibble(
-        rowname="CHIC-TSS-ExclusiveSomaticGenes-Chr-Nucleosome-Occupancy-RNAseq",
-        figure=list(
-          chic_plot_average_profiles_facet_grid(
-            dplyr::rename(sc_chr_nucleosome_data.ExclusiveSomaticGenes_Somatic_TSS, genes=activity),
-            "",
-            rep(chic_line_track_colors$somatic, 2),
-            faceter = facet_wrap(vars(facet)),
-            x_intercept = NA
-          ) +
-            coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
-            labs(
-              y = "Median Autosome Monosome-TSS L2FC"
-            ) + guides(linewidth = guide_none(), color = guide_none())
-        ),
-        width=6,
-        height=6
-      )
-    )
-  ),
-  tar_target(
-    fig.fpkm.chic.facet.nucleosome.both,
-    save_figures(
-      "figure/Both-Cell-Types",
-      ".pdf",
-      tibble(
-        rowname="CHIC-TSS-Chr-Nucleosome-Occupancy-RNAseq",
-        figure=list(
-          (
-            chic_plot_average_profiles_facet_grid(
-              list(Germline=sc_chr_nucleosome_data_Germline_TSS, Somatic=sc_chr_nucleosome_data_Somatic_TSS) %>%
-                bind_rows(.id = "name") %>%
-                arrange(desc(row_number())) %>%
-                mutate(genes=interaction(activity, ordered(name)), facet=facet %>% ordered(c("X","2","3","4"))),
-              "",
-              c(muted(chic_line_track_colors$germline, l=70), chic_line_track_colors$germline, muted(chic_line_track_colors$somatic, l=70), chic_line_track_colors$somatic),
-              linewidth = c(0.33, 0.66, 0.33, 0.66),
-              faceter = facet_wrap(vars(facet), ncol=4),
-              x_intercept = NA
-            ) +
-              coord_cartesian(NULL, chic_average_profile_limits, ex=F) +
-              labs(
-                y = "Median Autosome Monosome-TSS L2FC"
-              ) + theme(
-                aspect.ratio = 1
-              )
-          ) %>%
-            replace_legend(germline_somatic_line_plot_legend)
-        ),
-        width=10,
-        height=3
-      )
-    )
-  ),
 
   tar_target(
     germline_somatic_line_plot_legend,
@@ -791,72 +556,8 @@ list(
       )
     )
   ),
-  tar_file(
-    fig.fpkm.chic.both.genelists,
-    save_figures(
-      "figure/Both-Cell-Types",
-      ".pdf",
-      tibble(
-        fpkm.chic.plots_Germline %>% rename_with(\(n) paste0(n, "_Germline")),
-        fpkm.chic.plots_Somatic %>% rename_with(\(n) paste0(n, "_Somatic"))
-      ) %>%
-        filter(gene_list_Germline != "OffGenes") %>%
-        rowwise %>%
-        reframe(
-          gene_list = gene_list_Germline,
-          tss_plot_data = bind_rows(list(Germline=tss_plot_Germline$data, Somatic=tss_plot_Somatic$data), .id="name") %>%
-            mutate(genes = interaction(genes, name) %>% factor(c("off.Germline", "on.Germline", "off.Somatic", "on.Somatic"), ordered=T)) %>%
-            arrange(name == "Germline") %>%
-            list,
-          paneled_plot_data = bind_rows(list(Germline=paneled_plot_Germline$data, Somatic=paneled_plot_Somatic$data), .id="name") %>%
-            mutate(genes = interaction(genes, name) %>% factor(c("off.Germline", "on.Germline", "off.Somatic", "on.Somatic"), ordered=T)) %>%
-            arrange(name == "Germline") %>%
-            list
-        ) %>%
-        rowwise %>%
-        reframe(
-          rowname = str_glue("CHIC-{c('TSS-','')}AllMarks-RNAseq-CPM-{gene_list}") %>% as.character,
-          figure = list(
-            (
-              chic_plot_average_profiles_facet_grid(
-                tss_plot_data,
-                "",
-                sapply(
-                  chic_line_track_colors,
-                  \(col) col %>%
-                  c(muted(., c=20, l=80), .)
-                ) %>%
-                  as.character,
-                c(0.33, 0.66, 0.33, 0.66),
-                facet_wrap(vars(mark), scales="free")
-              ) +
-                geom_blank(
-                  aes(x=0, y=value, color=NULL, linewidth=NULL, group=NULL),
-                  chic_lineplot_limit_data_TSS
-                )
-            ) %>%
-              replace_legend(germline_somatic_line_plot_legend),
-            chic_plot_paneled_profiles_facet_grid(
-              paneled_plot_data,
-              "",
-              sapply(
-                chic_line_track_colors,
-                \(col) col %>%
-                c(muted(., c=20, l=80), .)
-              ) %>%
-                as.character,
-              c(0.33, 0.66, 0.33, 0.66),
-              facet_wrap(vars(mark))
-            ) %>%
-              `+`(coord_cartesian(NULL, chic_average_profile_limits, ex=F)) %>%
-              replace_legend(germline_somatic_line_plot_legend)
-          ),
-          width = c(9, 15),
-          height = 4
-        )
-    )
-  ),
 
+  # Plots of ChIC profiles. ####
   tar_map(
     tibble(
       chic.fpkm.data,

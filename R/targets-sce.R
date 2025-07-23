@@ -154,29 +154,6 @@ targets.sce <- list(
               )
           ),
           4, 4,
-          "RNAseq-Quantification-Quarters-CPM-Criteria",
-          ggarrange(
-            plotlist = {
-              cpm_gene_lists_extended[
-                c("NonExclusiveGermlineAndSomaticGenes", "ExclusiveSomaticGenes", "ExclusiveGermlineGenes", "OffGenes")
-              ] %>%
-                sapply(
-                  \(lst) fpkm_third_density(
-                    log(Upd_cpm[lst, ]) / log(10),
-                    ylim = c(-2.75, 4.5),
-                    inter_cutoffs = rep(list(rep(Inf, 2)), 2)
-                  ) + scale_y_continuous(
-                    breaks = seq(-2, 4)
-                  ) + theme(
-                    aspect.ratio = 1.34
-                  ),
-                  simplify=F
-                )
-            },
-            nrow = 2,
-            ncol = 2
-          ),
-          8, 8,
           "RNAseq-Quantification-Quarters-Percentage",
           gene_group_bar_plot(
             quartile.factor_Germline, quartile.factor_Somatic, Upd_cpm
