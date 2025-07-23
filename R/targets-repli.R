@@ -292,27 +292,6 @@ targets.repli <- list(
           qlogis()
       )
     ),
-    # As an alternative to the Beta quantiles regression, we will fit the %
-    # enrichment of each fraction using DM likelihood with no Beta function.
-    # Simple maximum a posteriori estimator with df = 4.
-    tar_target(
-      repli.dm,
-      sapply(
-        split(
-          seq(nrow(repli.experiment)),
-          rowData(repli.experiment)$seqnames
-        ),
-        \(inds) future_lapply(
-          seq_along(inds),
-          dm_regression_gaussian_plate,
-          exper = repli.experiment[inds, ],
-          wts = repli.sliding.weights
-        ),
-        simplify = FALSE
-      ) %>%
-        unlist(rec = FALSE),
-      packages = c(tar_option_get("packages"), "extraDistr", "future.apply", "mvtnorm", "pracma")
-    ),
     tar_target(
       repli.posterior.xform.centering,
       c(
@@ -1228,40 +1207,6 @@ targets.repli <- list(
           10, 3.25,
         )
       )
-    ),
-    tar_file(
-      fig.repli.dm.barchart,
-      save_figures(
-        paste0("figure/", celltype),
-        ".pdf",
-        tribble(
-          ~rowname, ~figure, ~width, ~height,
-          "Repli-Fraction-Bars-Chrs",
-          dm_barplot(
-            repli.dm,
-            chromosome_arms_diameter_1000
-          ) %>%
-            set_panel_size(
-              w = unit(3.25, "in"),
-              h = unit(1.35, "in")
-            ),
-          4,
-          2,
-          "Repli-Fraction-Bars-Chromosome-Arms",
-          dm_barplot(
-            repli.dm,
-            chromosome_arms_diameter_1000,
-            chromosome_arms_diameter_1000$group
-          ) %>%
-            set_panel_size(
-              w = unit(3.25, "in"),
-              h = unit(1.35 * 8/7, "in")
-            ),
-          4,
-          2,
-        )
-      ),
-      packages = tar_option_get("packages") %>% c("egg")
     )
   ),
 
@@ -1324,20 +1269,12 @@ targets.repli <- list(
     format = "parquet"
   ),
   tar_file(
-    fig.repli.timing.byfeature,
+    fig.repli.violin,
     save_figures(
       "figure/Both-Cell-Types",
       ".pdf",
       tribble(
         ~rowname, ~figure, ~width, ~height,
-        "Repli-Chromosome-Arm-Violin",
-        plot_repli_timing_byfeature(repli.timing.byfeature),
-        6,
-        3,
-        "Repli-Chromosome-Arm-TSS-Violin",
-        plot_repli_timing_byfeature(repli.timing.byfeature, tss_only = TRUE, box_ci = TRUE),
-        6,
-        3,
         "Repli-Chromosome-Violin",
         ggplot(
           # Reverse (top to bottom) feature. Reverse again celltype!
