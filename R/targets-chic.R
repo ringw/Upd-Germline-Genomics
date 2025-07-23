@@ -1636,42 +1636,6 @@ targets.chic.h3 <- list(
       )
     )
   ),
-  # Figure of nucleosome spacing estimate track.
-  tar_file(
-    fig.chic.nucleosome.est,
-    save_figures(
-      "figure/Both-Cell-Types",
-      ".pdf",
-      tribble(
-        ~rowname, ~figure, ~width, ~height,
-        "Nucleosome-Repeat-Length-Periodicity",
-        plot_track_2score(
-          GRanges(
-            seqnames(nucleosome.repeat.length_Germline),
-            ranges(nucleosome.repeat.length_Germline),
-            score_1 = nucleosome.repeat.length_Germline$score %>%
-              replace(
-                nucleosome.repeat.length_Germline$n == 1 &
-                  !as.logical(seqnames(nucleosome.repeat.length_Germline) %in% c("4", "Y")),
-                NA
-              ),
-            score_2 = nucleosome.repeat.length_Somatic$score %>%
-              replace(
-                nucleosome.repeat.length_Somatic$n == 1 &
-                  !as.logical(seqnames(nucleosome.repeat.length_Somatic) %in% c("4", "Y")),
-                NA
-              )
-          ),
-          name = "bp",
-          limits = c(140, 220),
-          breaks = c(140, 180, 220)
-        ),
-        5.75,
-        4
-      )
-    ),
-    packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
-  ),
   # Binning of chic H3 fragments by length and by mapq.
   tar_target(
     chic.nucleosome.fragment.stats.cut.bounds,
@@ -2613,134 +2577,6 @@ targets.chic.lineplot <- list(
   )
 )
 
-# Nucleosome Repeat Length (autocorrelation) of H3 ----
-targets.chic.h3.nuctools <- list(
-  # Nucleosome repeat length analysis.
-  tar_map(
-    tibble(
-      cross_join(
-        subset(
-          chic.samples,
-          group == "H3K27" &
-            molecule == "H3",
-          select = c(sample, driver)
-        ),
-        tibble(chr = names(chr.lengths))
-      ),
-      celltype = c(nos="Germline", tj="Somatic")[driver],
-      bulk_reads = rlang::syms(
-        str_glue("bulk_reads_{chr}_chic.bam_{sample}_chr")
-      ),
-      bulk_reads_idxstats = rlang::syms(
-        "bulk_reads_idxstats_chic.bam_GC3768007_S7_L001_chr"
-      )
-    ),
-    names = celltype | sample | chr,
-    tar_target(
-      nucleosome.repeat.length.chr,
-      bulk_reads %>%
-        subset(mapq >= 20) %>%
-        paired_end_reads_to_granges() %>%
-        GRanges(
-          seqlengths = pull(bulk_reads_idxstats, rlength, rname)
-        ) %>%
-        sliding_nucleosome_qc_for_histogram_usability() %>%
-        sliding_nucleosome_repeat_length_analysis(
-          width = 2.5 * 1000 * 1000,
-          step = 0.5 * 1000 * 1000
-        )
-    )
-  ),
-  tar_target(
-    nucleosome.repeat.length.list_Germline,
-    list(
-      c(
-        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_2L,
-        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_2R,
-        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_3L,
-        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_3R,
-        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_4,
-        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_X,
-        nucleosome.repeat.length.chr_Germline_GC3768007_S7_L001_Y
-      ),
-      c(
-        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_2L,
-        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_2R,
-        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_3L,
-        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_3R,
-        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_4,
-        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_X,
-        nucleosome.repeat.length.chr_Germline_GC3768009_S9_L001_Y
-      ),
-      c(
-        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_2L,
-        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_2R,
-        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_3L,
-        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_3R,
-        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_4,
-        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_X,
-        nucleosome.repeat.length.chr_Germline_GC76045515_S5_L001_Y
-      )
-    )
-  ),
-  tar_target(
-    nucleosome.repeat.length_Germline,
-    nucleosome.repeat.length.list_Germline %>%
-      nucleosome_repeat_length_calling()
-  ),
-  tar_target(
-    nucleosome.repeat.length.peaks_Germline,
-    nucleosome.repeat.length.list_Germline %>%
-      nucleosome_repeat_length_peak_analysis() %>%
-      GenomicRanges::resize(500000, fix="center") %>%
-      GenomicRanges::reduce()
-  ),
-  tar_target(
-    nucleosome.repeat.length.list_Somatic,
-    list(
-      c(
-        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_2L,
-        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_2R,
-        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_3L,
-        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_3R,
-        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_4,
-        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_X,
-        nucleosome.repeat.length.chr_Somatic_GC3768010_S10_L001_Y
-      ),
-      c(
-        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_2L,
-        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_2R,
-        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_3L,
-        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_3R,
-        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_4,
-        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_X,
-        nucleosome.repeat.length.chr_Somatic_GC3768013_S13_L001_Y
-      ),
-      c(
-        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_2L,
-        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_2R,
-        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_3L,
-        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_3R,
-        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_4,
-        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_X,
-        nucleosome.repeat.length.chr_Somatic_GC3768014_S14_L001_Y
-      )
-    )
-  ),
-  tar_target(
-    nucleosome.repeat.length_Somatic,
-    nucleosome.repeat.length.list_Somatic %>%
-      nucleosome_repeat_length_calling()
-  ),
-  tar_target(
-    nucleosome.repeat.length.peaks_Somatic,
-    nucleosome.repeat.length.list_Somatic %>%
-      nucleosome_repeat_length_peak_analysis() %>%
-      GenomicRanges::resize(500000, fix="center") %>%
-      GenomicRanges::reduce()
-  )
-)
-
 # Dimension Reduction ----
 targets.chic.pca <- list(
   tar_target_raw(
@@ -2838,6 +2674,5 @@ targets.chic <- list(
   targets.chic.h3,
   targets.chic.peakcalling,
   targets.chic.lineplot,
-  targets.chic.h3.nuctools,
   targets.chic.pca
 )

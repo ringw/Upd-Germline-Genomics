@@ -352,108 +352,6 @@ targets.sce <- list(
       format = "file"
     )
   ),
-
-  # Dendrogram for supp. gene expression.
-  tar_target(
-    Upd_cells_dendrogram_raw,
-    sc_cells_dendrogram(Upd_sc)
-  ),
-  tar_target(
-    Upd_cells_dendrogram,
-    sc_sort_cells_dendrogram(Upd_sc, Upd_cells_dendrogram_raw),
-    packages = tar_option_get("packages") %>% c("dendextend")
-  ),
-  tar_target(
-    Upd_genes_dendrogram_raw,
-    sc_genes_dendrogram(Upd_sc, gene_ = rowAnys(Upd_cpm > 50)[rownames(Upd_sc[["RNA"]])])
-  ),
-  tar_target(
-    Upd_genes_dendrogram,
-    sc_sort_genes_dendrogram(Upd_cpm, Upd_genes_dendrogram_raw),
-    packages = tar_option_get("packages") %>% c("dendextend")
-  ),
-  tar_target(
-    Upd_genes_dendrogram_cpm_raw,
-    Upd_cpm %>%
-      subset(rowAlls((. > 0) %>% replace_na(FALSE))) %>%
-      log %>%
-      `%*%`(
-        diag(
-          table(
-            read.csv(metadata, row.names=1)$ident
-          )[colnames(.)]
-        )
-      ) %>%
-      dist %>%
-      hclust(method = "average") %>%
-      as.dendrogram,
-    packages = tar_option_get("packages") %>% c("tidyr")
-  ),
-  tar_target(
-    Upd_genes_dendrogram_cpm,
-    sc_sort_genes_dendrogram(Upd_cpm, Upd_genes_dendrogram_cpm_raw),
-    packages = tar_option_get("packages") %>% c("dendextend")
-  ),
-  tar_file(
-    Upd_genes_heatmap,
-    save_figures(
-      "figure/Integrated-scRNAseq",
-      ".pdf",
-      tibble(
-        "Heatmap-With-Clusters",
-        figure = plot_single_cell_heatmap(
-          Upd_sc, Upd_genes_dendrogram, Upd_cells_dendrogram
-        ) %>%
-          list,
-        width=8,
-        height=6
-      )
-    ),
-    packages = tar_option_get("packages") %>% c("dendextend", "ggdendro")
-  ),
-  tar_target(
-    Upd_genes_newcut, cut(Upd_genes_dendrogram, 158)
-  ),
-  tar_target(
-    Upd_genes_newcut_minor_breaks,
-    c(1, cumsum(sapply(Upd_genes_newcut$lower, \(dd) length(labels(dd)))))
-  ),
-  tar_target(
-    Upd_genes_newcut_breaks,
-    (
-      Upd_genes_newcut_minor_breaks[-length(Upd_genes_newcut_minor_breaks)]
-      + Upd_genes_newcut_minor_breaks[-1]
-    ) / 2
-  ),
-  tar_file(
-    Upd_genes_logCPM_heatmap,
-    save_figures(
-      "figure/Integrated-scRNAseq",
-      ".pdf",
-      tibble(
-        c("Heatmap-logCPM", "Heatmap-logCPM-Annotated"),
-        figure = list(
-          plot_logcpm_heatmap(
-            Upd_cpm, Upd_genes_dendrogram
-          )
-          + theme(aspect.ratio = 4/3),
-          plot_logcpm_heatmap(
-            Upd_cpm, Upd_genes_dendrogram, genes_cut=158
-          )
-          + theme(aspect.ratio = 4/3)
-          + scale_y_continuous(
-            pos = "right",
-            breaks = sort(c(Upd_genes_newcut_minor_breaks, Upd_genes_newcut_breaks)),
-            labels = as.character(rbind("", head(LETTERS, length(Upd_genes_newcut_breaks))) %>% c(""))
-          )
-        ),
-        width=5,
-        height=4
-      )
-    ),
-    packages = tar_option_get("packages") %>%
-      c("dendextend", "ggdendro", "tidyr")
-  ),
   tar_file(
     Upd_volcano,
     save_figures(
@@ -539,14 +437,6 @@ targets.sce <- list(
       )
     ),
     packages = tar_option_get("packages") %>% c("cowplot", "grid", "gtable")
-  ),
-  tar_file(
-    Upd_genes_heatmap_excel,
-    publish_heatmap_named_cuts(
-      Upd_genes_newcut$lower %>% setNames(head(LETTERS, length(.))),
-      assay.data.sc,
-      "scRNA-seq-Regression/Dendrogram-Gene-Names.xlsx"
-    )
   ),
   tar_map(
     tibble(extension = c(".pdf", ".png")),
@@ -660,14 +550,6 @@ targets.sce <- list(
       SIMPLIFY=FALSE
     ),
     packages = tar_option_get("packages") %>% c("scDblFinder", "scuttle")
-  ),
-  tar_target(
-    sd02_xlsx,
-    publish_sd02(
-      unintegrated_clusters_report,
-      "scRNA-seq-Regression/SD02-scRNA-seq-Cell-Level.xlsx"
-    ),
-    packages = tar_option_get("packages") %>% union("openxlsx")
   ),
   tar_file(
     fig.g1.l2fc,

@@ -167,20 +167,13 @@ list(
     extract_upd_metadata_to_csv(Upd_sc, Upd_sc_size_factors, "scRNA-seq-Metadata.csv"),
     format='file'
   ),
+  # GLM fitting: Prior step required to determine the nuisance parameter and
+  # apply the apeglm model for SupplementalTable2.
   tar_target(
     Upd_glm,
     fit_glm(Upd_exons, Upd_model_matrix, metadata),
   ),
-  tar_target(
-    Upd_glm_g1,
-    fit_glm(
-      CreateSeuratObject(Upd_exons) %>%
-        `[`(, names(Upd_phase)[Upd_phase == "G1"]) %>%
-        GetAssay("RNA"),
-      Upd_model_matrix[names(Upd_phase)[Upd_phase == "G1"], ],
-      metadata
-    )
-  ),
+  # Fit glmGamPoi to the 33/33/33 G1/S/G2M data for the supplement.
   tar_target(
     Upd_glm_standardize_phase,
     fit_glm(
@@ -191,16 +184,7 @@ list(
       metadata
     )
   ),
-  tar_target(
-    Upd_glm_standardize_phase_reduce_complexity,
-    fit_glm(
-      CreateSeuratObject(Upd_exons) %>%
-        `[`(, Upd_cells_by_phase) %>%
-        GetAssay("RNA"),
-      Upd_model_matrix[Upd_cells_by_phase, 1:8],
-      metadata
-    )
-  ),
+  # SupplementalTable2 data.
   tar_target(
     Upd_regression_somatic,
     # prior_var was determined by fitting Upd_glm with ident + batch and without
@@ -213,14 +197,7 @@ list(
     apeglm_coef_table_sample(Upd_glm, shrinkage_cutoff = 0, prior_var = 0.8935249),
     cue = tar_cue("never")
   ),
-  tar_target(
-    Upd_regression_somatic_g1,
-    with_options(
-      list(future.globals.maxSize = 5 * 1024^3),
-      apeglm_coef_timebound(Upd_glm_g1, prior_var = 0.8055104)
-    ),
-    packages = tar_option_get("packages") %>% c("future.apply", "R.utils")
-  ),
+  # Fit apeglm to the 33/33/33 G1/S/G2M data for the supplement.
   tar_target(
     Upd_regression_somatic_standardize_phase,
     with_options(
@@ -235,16 +212,7 @@ list(
     "https://github.com/hbc/tinyatlas/raw/add6f25/cell_cycle/Drosophila_melanogaster.csv",
     "cell_cycle_drosophila.csv"
   ),
-  tar_target(
-    cell_cycle_scoring_excel,
-    tibble(
-      filename = "scRNA-seq-Regression/Cell-Cycle-Scoring.xlsx",
-      do_write = write_Upd_sc_cell_cycle_phases(Upd_sc, cell_cycle_drosophila, assay.data.sc) %>%
-        write_excel_tables_list_percentages(filename)
-    ) %>%
-      pull(filename),
-    format = "file"
-  ),
+  # TODO: Delete gene criteria
   tar_target(
     cpm_gene_lists,
     apply(

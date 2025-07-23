@@ -481,36 +481,6 @@ gene_group_bar_plot <- function(
     )
 }
 
-write_Upd_sc_cell_cycle_phases = function(Upd_sc, cell_cycle_drosophila, metafeatures) {
-  Upd_sc = Upd_sc %>% NormalizeData
-  cell_cycle = load_cell_cycle_score_drosophila(cell_cycle_drosophila, metafeatures)
-  Upd_sc = Upd_sc %>% CellCycleScoring(s. = cell_cycle$S, g2m. = cell_cycle$`G2/M`)
-  Upd_sc$Phase <- Upd_sc$Phase %>% factor(c("G1", "S", "G2M"))
-  append(
-    list(
-      total = table(Idents(Upd_sc), Upd_sc$Phase) %>%
-        `/`(rowSums(.)) %>%
-        round(3)
-    ),
-    sapply(
-      c("nos.1", "nos.2", "tj.1", "tj.2"),
-      \(n) table(
-        Idents(Upd_sc)[Upd_sc$batch == n],
-        Upd_sc$Phase[Upd_sc$batch == n]
-      ) %>% `/`(rowSums(.)) %>% round(3),
-      simplify = F
-    ) %>%
-      # Prettify the sce.data batch names.
-      setNames(str_extract(sce.data$tenx_path, "/([^/]+)/", group=1))
-  ) %>%
-    sapply(
-      # table to data frame of the table's entries
-      \(t) as.data.frame(matrix(t, nrow=nrow(t), ncol=ncol(t), dimnames=dimnames(t))) %>%
-        rownames_to_column("cluster"),
-      simplify = FALSE
-    )
-}
-
 plot_genes_on_chrs <- function(
   regression_table,
   coef,
