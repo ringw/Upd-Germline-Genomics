@@ -302,8 +302,6 @@ list(
       Upd_regression_somatic,
       Upd_cpm,
       assay.data.sc,
-      list(nos.1=batch_umap_nos.1, nos.2=batch_umap_nos.2, tj.1=batch_umap_tj.1, tj.2=batch_umap_tj.2) %>%
-        bind_rows(.id = "batch"),
       'scRNA-seq-Regression/SupplementalTable1_2_outputs.xlsx'
     ),
     format='file'

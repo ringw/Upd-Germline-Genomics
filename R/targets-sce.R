@@ -18,12 +18,6 @@ targets.sce <- list(
       read_seurat_sctransform(
         tenx_file, batch, sce.present.features, assay.data.sc
       )
-    ),
-    # Plot every batch, for validation.
-    tar_target(
-      batch_umap,
-      run_umap_on_batch(obj, metadata),
-      packages = c(tar_option_get("packages"), "tidyr")
     )
   ),
   # Call clusters in the biological replicate. The purpose of this indep
@@ -466,43 +460,6 @@ targets.sce <- list(
       )
     ),
     pattern = map(go_gene_sets)
-  ),
-
-  # Unintegrated clusters - SD02. Which clusters (from sce.R RenameIdents) are
-  # removed as doublets? This is justified based on expressing all of the GSC &
-  # CySC markers including H3-GFP.
-  tar_target(
-    unintegrated_marker_genes,
-    c("nos", "vas", "tj", "Egfr", "lncRNA:roX2", "Mst77F", "Act57B")
-  ),
-  tar_target(
-    unintegrated_clusters_doublets,
-    tribble(
-      ~ obj, ~ cluster, ~ label,
-      "nos.1", "3", "doublet",
-      "nos.2", "8", "doublet",
-      "nos.2", "9", "doublet",
-      "tj.1", "2", "doublet",
-      "tj.2", "1", "doublet"
-    )
-  ),
-  tar_target(
-    unintegrated_clusters_report,
-    mapply(
-      unintegrated_report_cluster_expression,
-      list(
-        `nos-Upd_H3-GFP_Rep1`=seurat_qc_nos.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F),
-        `nos-Upd_H3-GFP_Rep2`=seurat_qc_nos.2 %>% FindNeighbors(dims=1:9, verb=F) %>% FindClusters(res = 0.5, verb=F),
-        `tj-Upd_H3-GFP_Rep1`=seurat_qc_tj.1 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.15, verb=F),
-        `tj-Upd_H3-GFP_Rep2`=seurat_qc_tj.2 %>% FindNeighbors(dims=1:8, verb=F) %>% FindClusters(res = 0.1, verb=F)
-      ),
-      unintegrated_clusters_doublets$cluster %>%
-        split(factor(unintegrated_clusters_doublets$obj, c("nos.1", "nos.2", "tj.1", "tj.2"))),
-      list(unintegrated_marker_genes),
-      list(read.csv(metadata, row.names=1)),
-      SIMPLIFY=FALSE
-    ),
-    packages = tar_option_get("packages") %>% c("scDblFinder", "scuttle")
   ),
   tar_file(
     fig.g1.l2fc,

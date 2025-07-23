@@ -141,38 +141,6 @@ cbind_pseudobulk_decontaminated <- function(
     )
 }
 
-create_decontx_assay_fbgn_objects <- function(decontx_objects, Upd_sc_metadata, assay_data) {
-  Upd_sc_metadata <- Upd_sc_metadata %>% read.csv(row.names = 1)
-  assay_data <- assay_data %>% read.csv(row.names = 1)
-  # Just need to subset the RNA assay features (from assay_data) because we
-  # didn't check for the "GX" tag for genes such as H3-GFP.
-  genes_df <- rownames_to_column(assay_data) %>%
-    subset(
-      flybase %in% rownames(decontx_objects[[1]]$decontXcounts),
-      select=c(rowname, flybase)
-    )
-  counts <- do.call(
-    cbind,
-    sapply(
-      decontx_objects,
-      \(l) l$decontXcounts[genes_df$flybase, ],
-      simplify=F
-    )
-  )[, rownames(Upd_sc_metadata)]
-  rownames(counts) <- genes_df$rowname
-  assay_obj <- CreateAssay5Object(
-    counts = counts,
-    min.cells = 5,
-    key = "decontx_"
-  )
-  assay_obj@misc$decontX <- sapply(
-    decontx_objects,
-    \(obj) obj[-match("decontXcounts", names(obj))],
-    simplify=F
-  )
-  assay_obj %>% NormalizeData
-}
-
 seurat_decontx_using_batches <- function(Upd_sc, assay="RNA") {
   dcx <- decontX(GetAssayData(Upd_sc, assay=assay, layer="counts"), batch=Upd_sc$batch)
   Upd_sc[["DECONTX"]] <- CreateAssay5Object(

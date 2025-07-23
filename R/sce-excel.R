@@ -11,7 +11,6 @@ publish_excel_results <- function(
   Upd_regression_somatic,
   Upd_cpm,
   metafeatures,
-  batch_data,
   target_path
 ) {
   wb = createWorkbook()

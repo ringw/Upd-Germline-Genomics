@@ -1,3 +1,5 @@
+# F-Seq Kernel Density implementation in R ----
+
 ceil_discrete_log <- function(n) {
   for (i in 1:31) {
     if (bitops::bitShiftL(1, i) >= n) return(i)

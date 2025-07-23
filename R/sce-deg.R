@@ -565,38 +565,3 @@ table_to_tpm <- function(quant_table) {
     `*`(1000 * 1000 / rowSums(., na.rm=T)) %>%
     t
 }
-
-reference_sort_by_fpkm_table <- function(
-    fpkm_table,
-    cluster_name,
-    meta_path,
-    output_path) {
-  fpkm_table <- fpkm_table %>% subset(rowAlls(is.finite(fpkm_table)))
-
-  features = read.csv(meta_path, row.names=1) %>% rownames_to_column %>% subset(
-    !duplicated(flybase) & !is.na(flybase)
-  ) %>%
-    inner_join(fpkm_table %>% as.data.frame %>% rownames_to_column, "rowname")
-  colnames(features) <- colnames(features) %>%
-    replace(. == cluster_name, "fpkm")
-
-  bed = features %>% subset(
-    fpkm > 0,
-    select=c(chr,start,end,flybase,fpkm,strand)
-  )
-  bed = bed %>% arrange(desc(fpkm))
-  write.table(bed, output_path, row.names=F, col.names=F, quote=F, sep='\t')
-  output_path
-}
-
-# Read the bed file (no col names) as produced by reference_sort_by_fpkm_table.
-# Note that we are only going to analyze the chromosomes given by
-# names(chr.lengths).
-load_flybase_bed <- function(bed_path) {
-  read.table(
-    bed_path, col.names = c("chr","start","end","flybase","fpkm","strand"),
-    quote = "",
-    sep = "\t"
-  ) %>%
-    subset(chr %in% names(chr.lengths))
-}
