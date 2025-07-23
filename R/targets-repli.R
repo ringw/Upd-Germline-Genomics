@@ -801,68 +801,6 @@ targets.repli <- list(
     )
   ),
 
-  # Static Replication calling
-  tar_target(
-    repli.static.timing.table,
-    tibble(
-      i = seq(2, length(repli.prior.distribution$X), by=2),
-      Angle = seq(0, pi/2, length.out=length(repli.prior.distribution$X))[i],
-      Timing = 1 - 2 * sin(Angle)/(sin(Angle)+cos(Angle)),
-      D_Timing_D_Angle = 1/(1 + sin(2*Angle)),
-      Logit = qlogistanh(Timing),
-    )
-  ),
-  tar_target(
-    repli.static.timing.lut,
-    lut <- build_static_timing_lookup_table(
-      repli.static.timing.table$Logit,
-      c("Germline", "Somatic", "Kc167", "S2")
-    )
-  ),
-  tar_target(
-    repli.static.timing.prob,
-    {
-    future::plan(future::multicore, workers=4)
-    list(
-      # Germline = repli.posterior_Germline_chr %>% head(75 * sum(seqnames(chic.tile.diameter_1000_chr) == "2L")),
-      # Somatic = repli.posterior_Somatic_chr %>% head(75 * sum(seqnames(chic.tile.diameter_1000_chr) == "2L")),
-      # Kc167 = repli.posterior_Kc167_chr %>% head(75 * sum(seqnames(chic.tile.diameter_1000_chr) == "2L")),
-      # S2 = repli.posterior_S2_chr %>% head(75 * sum(seqnames(chic.tile.diameter_1000_chr) == "2L"))
-      Germline = repli.posterior_Germline_chr,
-      Somatic = repli.posterior_Somatic_chr,
-      Kc167 = repli.posterior_Kc167_chr,
-      S2 = repli.posterior_S2_chr
-    ) %>%
-      analyze_repli_static_model_probability(
-        repli.static.timing.table,
-        repli.static.timing.lut
-      )
-    },
-    packages = tar_option_get("packages") %>% c("future.apply")
-  ),
-  tar_target(
-    repli.static.timing.peaks,
-    repli_post_test_nested_peak_calling(
-      GRanges(
-        chic.tile.diameter_1000_chr,
-        # Probability: Un-Normalized Truncated Prior times Likelihood is
-        # integrated in the numerator, regular prior is the denominator.
-        score = repli.static.timing.prob,
-        # Bayes Factor: This corresponds to correcting the Truncated Prior
-        # in the numerator to integrate to 1 (making it a probability
-        # distribution). The un-normalized Truncated Prior integral has to be
-        # divided by the integral of the prior, this integral is itself
-        # normalized using the D_Timing_D_Angle values (not truncated).
-        Bayes_Factor = repli.static.timing.prob /
-          (
-            matrix(repli.static.timing.table$D_Timing_D_Angle[repli.static.timing.lut], nrow=nrow(repli.static.timing.lut)) %>% rowProds %>% sum %>%
-              `/`(sum(repli.static.timing.table$D_Timing_D_Angle)^4)
-          )
-      ) %>%
-        subset(Bayes_Factor >= 5)
-    )
-  ),
-  
   # Diff RT Germline - Somatic locations for further investigation - not published
   tar_file(
     repliseq_bed,
