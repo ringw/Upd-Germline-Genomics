@@ -6,31 +6,11 @@ excel_tables = list(
   mono='TableStyleMedium1'
 )
 
-calculate_pct_all_cells <- function(
-  metadata,
-  assay.meta.data,
-  tenx_list
-) {
-  stats <- tibble(gene = assay.meta.data$X, n_present = 0)
-  n_cells <- 0
-  for (n in names(tenx_list)) {
-    mat <- Read10X(tenx_list[[n]])
-    patt <- paste0(n, "_")
-    cells <- metadata$X %>%
-      subset(str_starts(., patt)) %>%
-      str_replace(patt, "")
-    mat <- mat[, cells]
-    stats$n_present <- stats$n_present + rowSums(mat != 0)
-    n_cells <- n_cells + length(cells)
-  }
-  pcts <- deframe(stats) / n_cells
-}
-
+# Write abundance table (SupplementalTable1) and regression (SupplementalTable2) table
 publish_excel_results <- function(
   Upd_regression_somatic,
-  Upd_cpm_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
-  Upd_isoform_exonic_length,
-  gene_pct_all_cells, metafeatures, gtf_path,
+  Upd_cpm,
+  metafeatures,
   batch_data,
   target_path
 ) {
@@ -42,14 +22,7 @@ publish_excel_results <- function(
     'Gene Quantification',
     metafeatures$flybase,
     Upd_cpm,
-    gene_pct_all_cells,
     excel_tables$mono
-  )
-
-  write_quant_stats(
-    wb, "Gene Quantification Summary", Upd_cpm_transcripts, Upd_cpm,
-    Upd_tpm_do_not_use_for_quantification, Upd_isoform_exonic_length,
-    Upd_regression_somatic, gtf_path, metafeatures
   )
 
   baseMeanCPM <- exp(Upd_regression_somatic$map[, "(Intercept)"]) %>% `*`(
@@ -61,15 +34,12 @@ publish_excel_results <- function(
     pull(flybase, rowname)
   write_regression_table(wb, 'GSC&CySC Regression', 'log(CySC/GSC)', baseMeanCPM, Upd_regression_somatic, 2, flybase, excel_tables$cyan)
 
-  write_batch_idents(wb, "Cluster&Batch Statistics", batch_data)
-
   dir.create('scRNA-seq-Regression', showW=F)
   saveWorkbook(wb, target_path, overwrite = T)
   target_path
 }
 
-write_abundance_table <- function(
-    wb, title, flybase, Upd_cpm, gene_pct_all_cells, table_style) {
+write_abundance_table <- function(wb, title, flybase, Upd_cpm, table_style) {
   rename = c(germline='GSC', somatic="CySC", spermatocyte="tid", somaticprecursor="SP", muscle="muscle")
   data = data.frame(
     symbol = rownames(Upd_cpm),
@@ -80,144 +50,12 @@ write_abundance_table <- function(
     name = rename[n]
     data[str_glue("CPM_{name}")] <- Upd_cpm[,n]
   }
-  data = data %>%
-    left_join(
-      enframe(
-        gene_pct_all_cells,
-        "symbol",
-        "pctAllCells"
-      ),
-      by = "symbol"
-    )
-  data$pctAllCells <- data$pctAllCells %>% replace(is.na(.), 0)
-  class(data$pctAllCells) <- "percentage"
   addWorksheet(wb, title)
   writeDataTable(wb, title,
                  data,
                  startCol = 1, startRow = 1,
                  withFilter = T,
                  tableStyle = table_style)
-}
-
-write_quant_stats <- function(
-  wb, title, Upd_cpm_transcripts, Upd_cpm,
-  Upd_tpm_do_not_use_for_quantification, Upd_isoform_exonic_length,
-  Upd_regression_somatic, gtf_path, metafeatures
-) {
-  addWorksheet(wb, title)
-
-  n_genes <- tribble(
-    ~ cluster, ~ CPM, ~ L2FC,
-    "GSC",
-    sum((Upd_cpm[, "germline"] > 0) %>% replace(is.na(.), FALSE)),
-    sum(is.finite(Upd_regression_somatic$map[, 2])),
-    "CySC",
-    sum((Upd_cpm[, "somatic"] > 0) %>% replace(is.na(.), FALSE)),
-    sum(is.finite(Upd_regression_somatic$map[, 2]))
-  )
-
-  writeData(wb, title, paste0("# Genes Quantified by Method (Genes in Reference: ", nrow(Upd_cpm), ")"), colNames = F, startRow = 1, startCol = 1)
-  writeDataTable(wb, title,
-                 n_genes, withFilter = FALSE,
-                 startCol = 1, startRow = 2)
-
-  start_row <- 6
-  group_names <- c(germline="GSC", somatic="CySC")
-  Upd_cpm_transcripts$gene_id <- Upd_cpm_transcripts$gene_id %>% factor
-
-  analyze_transcripts <- (as.matrix(Upd_cpm_transcripts[,-1]) > 0) %>%
-    rowAlls(useNames=T) %>%
-    which %>%
-    names
-  gene_id_transcripts <- Upd_cpm_transcripts[analyze_transcripts, "gene_id"] %>%
-    droplevels
-  exons <- log(Upd_cpm_transcripts[analyze_transcripts, "exon_length"])
-  for (n in names(group_names)) {
-    writeData(
-      wb,
-      title,
-      matrix(
-        c(
-          str_glue("{group_names[n]}: CPM or TPM for Isoform Calling (avoid isoform corr. with exon_length)"),
-          "Beta (coef. for exon_length) similar to Pearson's R is shown."
-        ),
-        ncol = 1
-      ),
-      colNames = F,
-      startRow = start_row, startCol = 1
-    )
-    start_row <- start_row + 2
-    logCPM <- log(Upd_cpm_transcripts[analyze_transcripts, n])
-    logTPM <- log(Upd_cpm_transcripts[analyze_transcripts, n]) - exons
-    # Fit slope and intercept to isoform length and CPM:
-    # germline ~ gene_id + exon_length
-    lme.cpm <- lmer(logCPM ~ exons + (1 | gene_id_transcripts))
-    lme.tpm <- lmer(logTPM ~ exons + (1 | gene_id_transcripts))
-    # Calculate Beta (standardize the exons coefficient) which is similar to a
-    # Pearson correlation estimate between log(exon_length) and log(CPM).
-    beta <- data.frame(
-      CPM=coef(lme.cpm)[[1]][1, "exons"] * sd(exons) / sd(logCPM),
-      TPM=coef(lme.tpm)[[1]][1, "exons"] * sd(exons) / sd(logTPM)
-    )
-    colnames(beta) <- str_glue(
-      "log({group_names[n]}_{colnames(beta)}) ~ gene + log(exon_length)"
-    )
-    writeDataTable(
-      wb,
-      title,
-      beta,
-      startRow = start_row, startCol = 1
-    )
-    start_row <- start_row + 3
-  }
-
-  group_names <- c(germline="GSC", somatic="CySC")
-  analyze_genes <- rownames(Upd_tpm_do_not_use_for_quantification) %>%
-    setdiff(rownames(Upd_tpm_do_not_use_for_quantification) %>% subset(is.na(Upd_tpm_do_not_use_for_quantification[, "germline"]))) %>%
-    setdiff(rownames(Upd_tpm_do_not_use_for_quantification) %>% subset(is.na(Upd_tpm_do_not_use_for_quantification[, "somatic"]))) %>%
-    setdiff(names(which(rowAnys(Upd_tpm_do_not_use_for_quantification == 0, na.rm=T, useNames=T)))) %>%
-    setdiff(names(which(rowAnys(is.na(Upd_isoform_exonic_length), useNames=T)))) %>%
-    setdiff(names(which(rowAnys((Upd_isoform_exonic_length == 0), na.rm=T, useNames=T)))) %>%
-    intersect(rownames(Upd_regression_somatic$map) %>% subset(is.finite(Upd_regression_somatic$map[, 2])))
-  gtf <- read.table(
-    gtf_path,
-    sep = '\t',
-    col.names = c('chr', 'source', 'type', 'start', 'end', 'sc', 'strand', 'fr', 'annotation'),
-    header = F,
-    quote = ''
-  ) %>% subset(grepl('RNA', type)) # include "transcript" types in the reference
-  gtf$tx <- gtf$annotation %>% str_extract(
-    'transcript_id "([^"]+)"',
-    group = 1
-  )
-  gtf$length = abs(gtf$end - gtf$start) + 1
-
-  for (n in c("germline", "somatic")) {
-    writeData(
-      wb,
-      title,
-      paste0(group_names[n], ": Gene CPM or TPM (exon-length-normalized) to avoid corr. with Exon Length"),
-      colNames = F,
-      startRow = start_row, startCol = 1
-    )
-    start_row <- start_row + 1
-    CPM <- Upd_cpm[analyze_genes, n]
-    TPM <- Upd_tpm_do_not_use_for_quantification[analyze_genes, n]
-    lengths <- Upd_isoform_exonic_length[analyze_genes, n]
-
-    analysis <- data.frame(
-      `cor(log(CPM), log(exon_length))` = cor(log(CPM), log(lengths)),
-      `cor(log(TPM), log(exon_length))` = cor(log(TPM), log(lengths)),
-      check.names = FALSE
-    )
-    writeDataTable(
-      wb,
-      title,
-      analysis,
-      startRow = start_row, startCol = 1
-    )
-    start_row <- start_row + 3
-  }
 }
 
 write_regression_table <- function(
@@ -258,120 +96,4 @@ write_regression_table <- function(
                  startCol = 1, startRow = 2,
                  withFilter = T,
                  tableStyle = table_style)
-}
-
-write_batch_idents <- function(wb, title, batch_data) {
-  addWorksheet(wb, title)
-  # Add percent style for 5 of the columns.
-  addStyle(wb, title, createStyle(numFmt = "0%"), rows = 1:100, cols = 2:6, gridExpand=TRUE)
-  batch_data$batch <- batch_data$batch %>% factor(sce.data$batch)
-  batch_data$ident <- batch_data$ident %>% factor(c(sce.clusters$cluster, "doublet"))
-  tbl <- with(batch_data, table(batch, ident)) %>%
-    matrix(nrow = nrow(.), dimnames = dimnames(.)) %>%
-    as.data.frame
-  ncells <- with(
-    tbl,
-    germline + somatic + spermatocyte + somaticprecursor + muscle
-  )
-  nice_experiment_name <- str_extract(sce.data$tenx_path, "/([^/]+)/", group=1)
-  data_table <- tibble(
-    Sample = nice_experiment_name,
-    Germline = tbl$germline / ncells,
-    Somatic = tbl$somatic / ncells,
-    `Germline Differentiated` = tbl$spermatocyte / ncells,
-    `Somatic Differentiated` = tbl$somaticprecursor / ncells,
-    Muscle = tbl$muscle / ncells,
-    Cells = ncells,
-    `Doublets (Removed)` = tbl$doublet
-  )
-  data_table[2:6] <- data_table[2:6] %>% round(4)
-  writeDataTable(
-    wb,
-    title,
-    data_table,
-    startCol = 1, startRow = 1
-  )
-}
-
-write_excel_tables_list_percentages <- function(lst, output_path) {
-  wb <- createWorkbook()
-  for (n in names(lst)) {
-    addWorksheet(wb, n)
-    addStyle(wb, n, createStyle(numFmt = "0%"), rows = seq(1+nrow(lst[[n]])), cols = seq(ncol(lst[[n]])), gridExpand=TRUE)
-    writeDataTable(
-      wb,
-      n,
-      lst[[n]]
-    )
-  }
-  saveWorkbook(wb, output_path, overwrite = TRUE)
-}
-
-publish_heatmap_named_cuts <- function(named_dendros, assay_data_sc, target_path) {
-  wb = createWorkbook()
-  sheet <- "Sheet1"
-  addWorksheet(wb, sheet)
-  assay_data_sc <- assay_data_sc %>% read.csv(row.names = 1) %>% rownames_to_column
-
-  startCol <- 1
-  for (n in names(named_dendros)) {
-    writeData(wb, sheet, matrix(str_glue("Group {n}")), startCol, 1, colNames=F)
-    writeDataTable(
-      wb,
-      sheet,
-      left_join(
-        tibble(rowname = labels(named_dendros[[n]])),
-        assay_data_sc,
-        "rowname"
-      ) %>%
-        reframe(`gene name` = rowname, flybase),
-      startCol,
-      2
-    )
-
-    startCol <- startCol + 3
-  }
-
-  dir.create(dirname(target_path), showW=F, rec=T)
-  saveWorkbook(wb, target_path, overwrite=T)
-  target_path
-}
-
-publish_sd02 <- function(
-  unintegrated_clusters_report,
-  target_path
-) {
-  wb = createWorkbook()
-
-  # Sheet 1 - cluster-level info pre-QC.
-  title <- "Initial Clustering QC"
-  addWorksheet(wb, title)
-  clustersRow <- 1
-  for (n in names(unintegrated_clusters_report)) {
-    data <- unintegrated_clusters_report[[n]]
-    writeData(wb, title, matrix(n), 1, clustersRow, colNames=F)
-    writeDataTable(
-      wb, title, data, startCol = 1, startRow = clustersRow + 1, tableStyle = excel_tables$cyan)
-    addStyle(
-      wb, title, createStyle(numFmt = "0%"),
-      rows = clustersRow+1+seq(nrow(data)), cols = 7:13,
-      gridExpand=TRUE)
-    conditionalFormatting(
-      wb, title,
-      rows = clustersRow+1+seq(nrow(data)), cols = 3:5,
-      rule = "<>FALSE",
-      style = createStyle(fontColour = "white", bgFill = "#750415")
-    )
-    conditionalFormatting(
-      wb, title,
-      rows = clustersRow+1+seq(nrow(data)), cols = 7:13,
-      rule = ">=0.4",
-      style = createStyle(bgFill = "#fce46a")
-    )
-    clustersRow <- clustersRow + 1 + 1 + nrow(data) + 1
-  }
-
-  dir.create(dirname(target_path), showW=F, rec=T)
-  saveWorkbook(wb, target_path, overwrite=T)
-  target_path <- target_path
 }

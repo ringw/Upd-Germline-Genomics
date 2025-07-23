@@ -360,26 +360,17 @@ list(
       table_to_tpm
   ),
   tar_target(
-    sc_pct_all_cells,
-    calculate_pct_all_cells(
-      as_tibble(read.csv(metadata)),
-      as_tibble(read.csv(assay.data.sc)),
-      list(nos.1=tenx_file_nos.1, nos.2=tenx_file_nos.2, tj.1=tenx_file_tj.1, tj.2=tenx_file_tj.2)
-    )
-  ),
-  tar_target(
+    # Single Cell Excel supports SupplementalTable1 Quantification_Results.
     sc_excel,
     publish_excel_results(
       Upd_regression_somatic,
-      Upd_count_transcripts, Upd_cpm, Upd_tpm_do_not_use_for_quantification,
-      Upd_isoform_exonic_length,
-      sc_pct_all_cells, assay.data.sc, flybase.gtf,
+      Upd_cpm,
+      assay.data.sc,
       list(nos.1=batch_umap_nos.1, nos.2=batch_umap_nos.2, tj.1=batch_umap_tj.1, tj.2=batch_umap_tj.2) %>%
         bind_rows(.id = "batch"),
-      'scRNA-seq-Regression/Enriched-Genes.xlsx'
+      'scRNA-seq-Regression/SupplementalTable1_2_outputs.xlsx'
     ),
-    format='file',
-    packages = tar_option_get("packages") %>% c("lme4")
+    format='file'
   ),
   tar_map(
     chic.fpkm.data,
