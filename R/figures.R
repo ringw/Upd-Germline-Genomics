@@ -1,3 +1,4 @@
+# ggsave wrapper takes data frame of list of ggplot objects to write ----
 save_figures <- function(dir, extension, named_figures, dpi = 120) {
   dir.create(dir, recursive = TRUE, showW = FALSE)
   filenames <- NULL

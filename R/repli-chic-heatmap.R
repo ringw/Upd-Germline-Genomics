@@ -1,3 +1,4 @@
+# Figure 6 Repliseq and ChIC-seq binning, sorting, and heatmap workhorse ----
 approx_track <- function(score_track, fine_track) {
   stopifnot(all.equal(as.character(unique(seqnames(fine_track))), intersect(seqlevels(fine_track), unique(seqnames(fine_track)))))
   score_track <- score_track[score_track@seqnames %in% levels(fine_track@seqnames)]

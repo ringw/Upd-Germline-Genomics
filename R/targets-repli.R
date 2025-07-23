@@ -360,26 +360,6 @@ targets.repli <- list(
         GRanges(chic.tile.diameter_1000, score = .) %>%
         export(BigWigFile(str_glue("repli/Replication_Bayes_", celltype, "_", reference, ".bw"))) %>%
         as.character()
-    ),
-    tar_file(
-      repli.map.bw,
-      GRanges(
-        chic.tile.diameter_1000,
-        score = repli.posterior %>%
-          group_by(rowname) %>%
-          summarise(
-            value = mean(
-              (1 - 2*value)[rank(prob, ties="max") == length(prob)]
-            )
-          ) %>%
-          pull(value)
-      ) %>%
-        export(BigWigFile(str_glue("repli/Replication_MAP_", celltype, "_", reference, ".bw"))) %>%
-        as.character()
-    ),
-    tar_target(
-      repli.autocorrelation.beta,
-      repli.timing %>% autocorrelate_centered_granges(1001)
     )
   ),
   # From each masked reference: Apply 2L_Histone_Repeat_Unit
@@ -903,41 +883,8 @@ targets.repli <- list(
         subset(Bayes_Factor >= 5)
     )
   ),
-
-  # Replication main-figure gene-wise analysis
-  tar_target(
-    genewise,
-    detail_repli_analysis(
-      assay.data.sc,
-      flybase.sequence.ontology,
-      repli.timing_Germline_chr,
-      repli.timing_Somatic_chr,
-      repli.bayes.factor_chr,
-      Upd_cpm[, "germline"],
-      Upd_cpm[, "somatic"],
-      Upd_regression_somatic,
-      chic.gene.enrichment,
-      chromosome_pericetromere_label
-    ),
-    packages = tar_option_get("packages") %>% c("tidyr")
-  ),
-
-  # Repliseq dmel-all-chromosomes supplementary data
-  tar_file(
-    sd_repliseq,
-    publish_repli_analysis(
-      assay.data.sc,
-      repli.timing_Germline_chr,
-      repli.timing_Somatic_chr,
-      repli.bayes.factor_chr,
-      diff.replication.progression.gene,
-      Upd_cpm[, "germline"],
-      Upd_cpm[, "somatic"],
-      chromosome_pericetromere_label,
-      "Supplemental_Data/SD04_Repliseq.xlsx"
-    ),
-    packages = tar_option_get("packages") %>% c("tidyr")
-  ),
+  
+  # Diff RT Germline - Somatic locations for further investigation - not published
   tar_file(
     repliseq_bed,
     tibble(
@@ -1497,9 +1444,5 @@ targets.repli <- list(
         )
       )
     )
-  ),
-  tar_target(
-    repli.beta.prior.draws,
-    beta_prior_draws()
   )
 )

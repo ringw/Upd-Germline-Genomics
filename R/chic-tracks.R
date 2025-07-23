@@ -1,3 +1,4 @@
+# Generate Rough (40bp sharp window of fragment midpoints) as well as writing out better performing F-Seq ChIC-ChIP quantification ---
 log2 <- function(n) (log(n) / log(2))
 
 generate_chic_tracks <- function(

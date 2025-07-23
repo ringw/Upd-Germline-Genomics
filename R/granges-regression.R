@@ -1,3 +1,5 @@
+# List of GRanges to FPKM offset computation and summarized experiment assay ----
+# This is used for a list of Repliseq fragment pileups to summarized experiment
 as_bulk_summarized_experiment <- function(granges, colData, sample_name = "name") {
   # For extracting row data about the samples.
   anyGranges <- granges[[1]]
@@ -9,6 +11,7 @@ as_bulk_summarized_experiment <- function(granges, colData, sample_name = "name"
 
   # ln-offset in order to get from RPKM parameters to counts.
   omat <- matrix(1, nrow=nrow(mat), ncol=ncol(mat), dimnames=dimnames(mat))
+  # FPKM computation. Involves both the library size in the columns as well as the width of the ranges in the rows.
   offsets <- as.matrix(
     Diagonal(x = log(anyGranges@ranges@width) - log(1000))
     %*%

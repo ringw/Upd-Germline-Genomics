@@ -441,26 +441,6 @@ targets.sce <- list(
   tar_map(
     tibble(extension = c(".pdf", ".png")),
     tar_target(
-      sc_track_figure,
-      save_figures(
-        "figure/Integrated-scRNAseq", extension,
-        tribble(
-          ~name, ~figure, ~width, ~height,
-          "RNAseq-log2FC-Track",
-          plot_genes_on_chrs(Upd_regression_somatic$map, 2, assay.data.sc, do_smooth=FALSE)
-          + labs(x = NULL, y = "log2FC(CySC / GSC)"),
-          8,
-          2.5,
-          "RNAseq-log2FC-Track-LOESS",
-          plot_genes_on_chrs(Upd_regression_somatic$map, 2, assay.data.sc, do_smooth=TRUE)
-          + labs(x = NULL, y = "log2FC(CySC / GSC)"),
-          8,
-          2.5
-        )
-      ),
-      format = "file"
-    ),
-    tar_target(
       sc_plot_genes_on_chrs,
       save_figures(
         "figure/Integrated-scRNAseq", extension,
@@ -470,10 +450,6 @@ targets.sce <- list(
           plot_chr_ratio_on_clusters(Upd_sc),
           6,
           8,
-          "RNAseq-AvgFC-X-vs-AA-Demo-Batch-Variance",
-          plot_chr_ratio_on_clusters(Upd_sc) + facet_wrap(vars(batch)),
-          12,
-          16
         )
       ),
       packages = c(tar_option_get("packages"), "tidyr"),

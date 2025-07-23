@@ -1,3 +1,4 @@
+# Repliseq Regression Model ----
 repli_posterior_bar_colors <- append(
   chic_line_track_colors,
   list(
@@ -6,47 +7,61 @@ repli_posterior_bar_colors <- append(
   )
 )
 
-beta_prior_draws <- function(n = 200, shape = 4, rate = 0.5) {
-  alpha <- rgamma(n * 2, shape, rate) %>%
-    subset(. > 1) %>%
-    head(n)
-  beta <- rgamma(n * 2, shape, rate) %>%
-    subset(. > 1) %>%
-    head(n)
-  x <- seq(0, 1, by = 0.02)
-  y <- tibble(alpha, beta) %>%
-    rowwise() %>%
-    reframe(
-      name = str_glue("{alpha}@{beta}"),
-      x,
-      y = dbeta(x, alpha, beta)
-    )
-  ggplot(y, aes(x, y, group = name, color = name)) +
-    geom_line() +
-    scale_color_hue(guide = NULL) +
-    theme_cowplot() +
-    coord_cartesian(c(0, 1), c(-0.01, 7.5), expand = F)
-}
-
+# Gets SummarizedExperiment ready for Repliseq Regression.
+# This is a la creating a DESeqDataSet. For this regression, it initializes
+# metadata that will be used in the main computation workhorse.
 init_beta_dm_experiment <- function(sce) {
   # We will pretend that the SummarizedExperiment is a SingleCellExperiment
   # - having an optional colData entry named sizeFactor.
   sf <- sce$sizeFactor
+  # Initialize to counts per million.
   if (is.null(sf))
     sf <- colSums(assay(sce, "counts")) / 1000 / 1000
+  # Col data: replication_value gives some keys to the S-phase quantified FACS
+  # sorted fractions. It is most important that the levels represent FACS
+  # sorted fractions that start near the beginning of S-phase (for the first
+  # fraction) and lastly captures cells near the end of S-phase (for the last
+  # factor level). The readout of the FPKM expected value for the entry in the
+  # Repliseq expression matrix will depend on the factor level, counting out
+  # uniformly spaced quantiles of timing. This is described in the likelihood
+  # function for the vector of fragment counts.
   num_fractions <- length(levels(sce$replication_value))
+  # Defines uniformly spaced quantiles of timing, these are needed for the
+  # likelihood function.
   sce@metadata$beta_regression_cuts <- seq(
     0, 1, length.out=1+num_fractions
   )
+  # An offset that is multiplied with the FPKM expected value to produce the
+  # expected entry of fragment count in the FPKM data.
   # Zero is not allowed in extraDistr Dirichlet! (For an entry which is observed
   # to always be zero). Infinitesimal value works well, and is so small that it
   # does not influence the optimization process.
+  # The size factors matrix must be rectangular (infinitesimal in case of a
+  # missing logical spot for one biological replicate x one sorted fraction HTS
+  # sample). This size factors matrix is multiplied by a regression expected
+  # value FPKM which is a row vector (the same factor for every row of the
+  # rectangular Repliseq observations).
   beta_regression_size_factors <- matrix(
     1e-40,
     nrow = length(levels(sce$rep)),
     ncol = num_fractions,
     dimnames = list(levels(sce$rep), levels(sce$replication_value))
   )
+  # Linear operator. The row corresponds to an observation (column) in the assay
+  # (e.g. Replicate 1 Early, Replicate 1 Early-Mid, ...). The column indices of
+  # beta_regression_feed_y count out the entries in a rectangular Repliseq
+  # observations matrix (the likelihood function is vector-valued and we handle
+  # replicates of the HTS experiment). The column indices count out in
+  # column-major order, so the first column encodes whether there is a
+  # Replicate 1 Early observation, then the second column encodes whether there
+  # is a Replicate 2 Early observation, then the third column (in case of 2
+  # replicates) Replicate 1 Early-Mid observation. 
+  # No observation (as part of the experimental design) is fine (missing data
+  # which always appears as zero in one entry of the rectangular set of Repliseq
+  # observed fragment counts). In that case, we manipulate
+  # beta_regression_size_factors to drive the regression expected value for that
+  # missing HTS sample to be infinitesimally small. Then it is fine that we
+  # always observe zero fragments in that particular sample.
   beta_regression_feed_y <- matrix(
     0,
     nrow = ncol(sce),
@@ -72,10 +87,18 @@ init_beta_dm_experiment <- function(sce) {
   sce
 }
 
-# Pulls the "Y" matrix of DM-distributed data (tuples of sample counts). As we
-# are interested in a rolling view of "Y", then "i" is a numeric vector of the
-# features in the SummarizedExperiment to extract.
+# Our "plate" of observations enhances the biological replicates by also
+# treating non-overlapping consecutive genomic windows (index in the experiment
+# rows given by vector "i") as replicates observing the nascent DNA density in
+# the region containing all of the windows. Thus, we produce a larger
+# rectangular matrix of Repliseq observations than what we would see from the
+# above metadata of the SummarizedExperiment.
 beta_dm_pull_expr_plate <- function(exper, i)
+  # Readout of the assay comes by taking the transpose of the
+  # beta_regression_feed_y (as every column of beta_regression_feed_y encodes
+  # one entry of the Repliseq observations, the cross product is taking the
+  # transpose of beta_regression_feed_y and using matrix multiplication with the
+  # counts on the right).
   crossprod(
     exper@metadata[["beta_regression_feed_y"]],
     t(assay(exper, "counts")[i,, drop=F])
@@ -104,6 +127,30 @@ beta_dm_pull_expr_plate <- function(exper, i)
       )
     )
 
+# Repliseq Dirichlet-Multinomial likelihood function. The likelihood is
+# vector-valued (the observation is one row of the observation matrix Y). The
+# Dirichlet-Multinomial distribution is conditioned on the vector sum (which is
+# taken to be unvarying compared to the observed total fragment count, as a
+# simplification). Crucially, the uniform cuts to regression timing are tested
+# against the Beta distribution (parameterized as a "weighted coin toss"
+# experiment by the parameters "heads" and "tails"). This defines a bar chart of
+# percentage density of nascent DNA in the Repliseq fractions that has a mode RT
+# sorted cell fraction for greatest density of fragments, and which should be
+# unimodal (and the density declines dramatically on either side). This
+# concentration around the mode is parameterized by `heads+tails`. The
+# distribution is overdispersed, like DESeq2 and other Negative Binomial
+# regression, so we need not only the 2 parameters that give the exact expected
+# nascent DNA density in each sorted fraction, but also the overdispersion
+# `theta`. Dividing the Beta function distribution of density in the
+# fractions by `theta` produces overdispersion similar to what is modeled by
+# Negative Binomial regression (by dividing the Negative Binomial parameter by
+# `theta`). If we drive the Dirichlet-Multinomial parameters very large by using
+# small `theta`, then we approximate a Multinomial distribution. For large
+# `theta`, the small concentration parameter to the Dirichlet-Multinomial
+# distribution results in very overdispersed predictions. Thus, the likelihood
+# is highly comparable in character to the Negative Binomial regression
+# likelihood, but is for vectors of sorted cell samples DNA libraries from one
+# biological sample.
 beta_dm_plain_likelihood_fn <- function(
   Y, beta_regression_cuts, beta_regression_size_factors,
   wts, heads, tails, theta
@@ -145,6 +192,7 @@ beta_dm_plain_likelihood_fn <- function(
   )
 }
 
+# TODO comment this
 beta_dm_prior_heads_tails_fn <- function(heads, tails) {
   prior <- dnorm(
     sqrt((heads - 1)^2 + (tails - 1)^2),

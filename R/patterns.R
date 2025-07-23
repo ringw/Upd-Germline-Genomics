@@ -1,3 +1,6 @@
+# Data frame to help with Targets build targets ----
+# Bowtie refs: Pattern of 2 bowtie2 references with or without masking sequences of interest.
+# The pipeline is to be run with each bowtie2 reference
 bowtie.refs <- tribble(
   ~name, ~bowtie, ~refs,
   "chr",
