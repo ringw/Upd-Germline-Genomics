@@ -6,6 +6,7 @@ plot_track <- function(
     name = "Timing",
     limits = c(-1, 1),
     breaks = c(-1, 0, 1),
+    color = "black",
     plot_grid = TRUE) {
   df <- tibble(
     chr = as.factor(seqnames(track)),
@@ -45,15 +46,14 @@ plot_track <- function(
       ymin=-Inf, ymax=Inf,
       fill=(pericentromere_color <- "#96e5e6")
     ) +
+    geom_line(linewidth = 25.4 / 72, color = color) +
     annotate(
       "segment",
       x=-Inf, xend=Inf,
       y=0, yend=0,
-      color="#494949",
-      linetype = "dashed",
+      color="#333333",
       linewidth = 0.5 * 25.4 / 72
     ) +
-    geom_line(linewidth = 0.25) +
     scale_x_continuous(
       name = NULL,
       breaks = 1000000 * seq(1, 101, by=2),
@@ -85,7 +85,7 @@ plot_track <- function(
   axis_labels <- theme(
     axis.text.x = element_text(color = "black"),
     axis.text.y = element_text(color = "black"),
-    axis.ticks.x = element_line(color = "black"),
+    axis.ticks.x = element_line(color = "#333333"),
     axis.ticks.y = element_line(color = "black"),
   )
   # Contents width will be 5.25 in. Two-column (chromosome arms) layout will be

@@ -904,7 +904,8 @@ targets.chic.tracks <- list(
             import(BigWigFile(chic.bw.track.wide)),
             name = "L2FC",
             limits = c(-1, 1),
-            breaks = c(-1, 0, 1)
+            breaks = c(-1, 0, 1),
+            color = classification_colors_fig4[[tolower(celltype)]]
           ),
           5.75,
           4
