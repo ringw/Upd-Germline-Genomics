@@ -61,6 +61,38 @@ Ubuntu 20.04.6 LTS
 
 R 4.3.3
 
-Seurat 5.0.3 (source: [CRAN tar.gz](https://cran.r-project.org/src/contrib/Archive/Seurat/Seurat_5.0.3.tar.gz))
+anndata 0.7.5.6
 
-SeuratObject 5.0.1 (source: cran2deb4ubuntu 5.0.1-1cran1.2004.0)
+apeglm 1.24.0
+
+arrow 15.0.1
+
+decontX 1.0.0
+
+dplyr 1.1.4
+
+extraDistr 1.10.0
+
+glmGamPoi 1.14.3
+
+limma 3.56.2
+
+Matrix 1.6-3
+
+mvtnorm 1.2-4
+
+openxlsx 4.2.5.2
+
+pracma 2.4.4
+
+rtracklayer 1.62.0
+
+scran 1.30.2
+
+scuttle 1.12.0
+
+Seurat 5.0.3
+
+SeuratObject 5.0.1
+
+tibble 3.2.1
