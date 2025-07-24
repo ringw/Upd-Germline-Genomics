@@ -192,7 +192,13 @@ beta_dm_plain_likelihood_fn <- function(
   )
 }
 
-# TODO comment this
+# Slightly out of date prior on the "heads" and "tails" Beta parameters (this
+# pre-dates a recharacterization of the parameters into Logistic regression, one
+# Logistic-distributed Logistic link function timing variable, and only one
+# truncated normal-distributed concentration parameter. To get a comparable
+# prior while feeding parameters into the pbeta() quantiles directly, we placed
+# a truncated normal prior on "heads" (alpha) and "tails" (beta) parameters of
+# the Beta distribution.
 beta_dm_prior_heads_tails_fn <- function(heads, tails) {
   prior <- dnorm(
     sqrt((heads - 1)^2 + (tails - 1)^2),
@@ -204,7 +210,10 @@ beta_dm_prior_heads_tails_fn <- function(heads, tails) {
 }
 
 # The prior on "heads" and "tails" as a separable filter of "X" (angle) and "Y"
-# (heads + tails).
+# (heads + tails). This helps move towards a concentration parameter Y which is
+# truncated normal-distributed, and a timing score X which (as we have chosen to
+# apply the Logistic link function to the Logistic variable) is now just a
+# uniform distribution.
 beta_dm_prior_filter <- function(repli.polar.coordinates) {
   angle <- repli.polar.coordinates$X
   rho <- repli.polar.coordinates$Y
